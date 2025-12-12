@@ -1,26 +1,70 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Finacle-Inspired Enterprise Palette */
+  --background: 240 20% 98%; /* Very Light Blue-Grey */
+  --foreground: 215 28% 17%; /* Dark Corporate Text */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --primary: 216 90% 30%; /* Deep Banking Navy (#07448c) */
+  --primary-foreground: 0 0% 100%;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222 47% 11%;
+
+  --accent: 38 92% 50%; /* Warning/Action Orange */
+
+  --border: 214 32% 85%; /* Sharper Borders */
+
+  /* Banking Specifics */
+  --header-bg: #003366; /* Classic Bank Header */
+  --sidebar-bg: #ffffff;
+  --sidebar-active: #e6f0ff; /* Light Blue Selection */
+  --sidebar-border: #cbd5e1;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #f1f5f9; /* Classic Enterprise Background */
+  color: #1e293b;
+  font-family: "Segoe UI", system-ui, sans-serif; /* Standard Windows/Enterprise Font */
+  font-size: 14px; /* Slightly smaller for data density */
+}
+
+/* Enterprise Inputs */
+input,
+select,
+textarea {
+  background-color: white;
+  border: 1px solid #94a3b8; /* Stronger borders */
+  border-radius: 4px; /* Boxier look */
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #0f172a;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+  outline: none;
+}
+
+/* Banking Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  background-color: #e2e8f0;
+  color: #334155;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #cbd5e1;
+}
+td {
+  border-bottom: 1px solid #e2e8f0;
 }

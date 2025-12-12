@@ -8,65 +8,79 @@ export default function RegisterPage() {
   const [state, action, isPending] = useActionState(register, undefined);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <form
-        action={action}
-        className="w-full max-w-md bg-white p-8 rounded-lg shadow-md"
-      >
-        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
-          Create Account
-        </h2>
-        {state?.error && (
-          <div className="bg-red-100 text-red-600  rounded mb-4 text-sm">
-            {state.error}
-          </div>
-        )}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1 text-black">
-            Full Name
-          </label>
-          <input
-            type="text"
-            name="name"
-            className="w-full border p-2 rounded border-t-green-500 text-black"
-            placeholder="Optional"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1 text-black">
-            Username
-          </label>
-          <input
-            type="text"
-            name="username"
-            required
-            className="w-full p-2 rounded border-t-red-400   border text-black"
-          />
-        </div>
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-1 text-black">
-            Password
-          </label>
-          <input
-            type="password"
-            name="password"
-            required
-            className="w-full  p-2  rounded border-t-red-400   border text-black"
-          />
-        </div>
-        <button
-          disabled={isPending}
-          className="w-full bg-green-600 text-white h-10 rounded hover:bg-green-700 disabled: opacity-50 "
-        >
-          {isPending ? "Creating..." : "Register"}
-        </button>
-        <p className="mt-4 text-center text-sm text-cyan-800">
-          Have an account?
-          <Link href="/login" className="text-red-800 ">
-            Login
-          </Link>
+    <div className="bg-white rounded-2xl shadow-xl border border-slate-300 overflow-hidden">
+      <div className="bg-slate-900 p-8 text-center">
+        <h1 className="text-2xl font-bold text-white mb-2">Create Account</h1>
+        <p className="text-slate-300 text-sm">
+          Join to start managing your finances
         </p>
-      </form>
+      </div>
+
+      <div className="p-8">
+        <form action={action} className="space-y-4">
+          {state?.error && (
+            <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200 font-bold text-center">
+              {state.error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-bold text-slate-900 mb-1.5">
+              Full Name
+            </label>
+            <input
+              name="name"
+              type="text"
+              required
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-black font-medium focus:ring-2 focus:ring-blue-600 outline-none"
+              placeholder="John Doe"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-900 mb-1.5">
+              Username
+            </label>
+            <input
+              name="username"
+              type="text"
+              required
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-black font-medium focus:ring-2 focus:ring-blue-600 outline-none"
+              placeholder="johndoe"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-900 mb-1.5">
+              Password
+            </label>
+            <input
+              name="password"
+              type="password"
+              required
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-black font-medium focus:ring-2 focus:ring-blue-600 outline-none"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button
+            disabled={isPending}
+            className="w-full bg-slate-900 hover:bg-black text-white font-bold py-3.5 rounded-lg transition-all mt-4 shadow-md"
+          >
+            {isPending ? "Creating Account..." : "Register"}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm text-slate-600 font-medium">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="text-blue-600 font-bold hover:underline"
+          >
+            Sign In
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

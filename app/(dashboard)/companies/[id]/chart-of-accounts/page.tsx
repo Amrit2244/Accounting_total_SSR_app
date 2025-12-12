@@ -1,147 +1,157 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { ArrowLeft, Building2 } from "lucide-react";
 
-// Ensure we define params as a Promise for Next.js 15+ compatibility
 export default async function ChartOfAccountsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // 1. Resolve params
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // 2. Fetch Data
-  // We fetch groups recursively (Top Level -> Sub Groups)
-  // We also include the ledgers inside them
   const groups = await prisma.accountGroup.findMany({
     where: { companyId },
     include: {
-      ledgers: true,
-      children: { include: { ledgers: true } }, // Fetch 1 level deep
+      // 1. Fetch Ledgers
+      ledgers: {
+        include: {
+          // 2. Fetch Entries ONLY if Voucher is APPROVED
+          entries: {
+            where: {
+              voucher: { status: "APPROVED" }, // ✅ CORE BANKING LOGIC
+            },
+          },
+        },
+      },
+      children: {
+        include: {
+          ledgers: {
+            include: {
+              entries: {
+                where: { voucher: { status: "APPROVED" } }, // ✅ REPEAT LOGIC FOR SUBGROUPS
+              },
+            },
+          },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });
 
-  // 3. Filter only Top-Level groups (Parent is null)
   const rootGroups = groups.filter((g) => g.parentId === null);
 
   return (
-    <div className="max-w-4xl mx-auto mt-6">
-      {/* HEADER SECTION */}
-      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+    <div className="flex flex-col h-full bg-slate-100">
+      {/* Header */}
+      <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0">
         <div>
-          <h1 className="text-2xl font-extrabold text-black">
-            Chart of Accounts
+          <h1 className="text-lg font-bold flex items-center gap-2">
+            <Building2 size={18} /> GENERAL LEDGER SUMMARY
           </h1>
-          <Link
-            href={`/`}
-            className="text-blue-700 font-medium hover:underline text-sm"
-          >
-            ← Back to Dashboard
-          </Link>
+          <p className="text-[11px] text-blue-200 uppercase tracking-wider">
+            Balances reflect verified transactions only
+          </p>
         </div>
-
-        {/* CREATE LEDGER BUTTON */}
         <Link
-          href={`/companies/${companyId}/ledgers/create`}
-          className="bg-black text-white px-5 py-2.5 rounded-lg font-bold hover:bg-gray-800 transition shadow-sm text-sm flex items-center gap-2"
+          href={`/`}
+          className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"
         >
-          <span>+</span> Create Ledger
+          <ArrowLeft size={12} /> BACK
         </Link>
       </div>
 
-      {/* LIST SECTION */}
-      <div className="bg-white shadow-md rounded-lg p-6 border border-gray-300">
-        <ul className="space-y-4">
-          {rootGroups.map((group) => (
-            <li
-              key={group.id}
-              className="border-b border-gray-200 pb-3 last:border-0 last:pb-0"
-            >
-              {/* Parent Group Name */}
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-extrabold text-lg text-black">
-                  {group.name}
-                </span>
-                <span className="text-xs font-bold bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-300 uppercase">
-                  {group.nature}
-                </span>
-              </div>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-5xl mx-auto bg-white border border-gray-300 shadow-sm min-h-[600px]">
+          {/* Table Header */}
+          <div className="grid grid-cols-12 bg-gray-100 border-b border-gray-300 text-[11px] font-bold text-[#003366] uppercase py-2 px-4">
+            <div className="col-span-8">Particulars</div>
+            <div className="col-span-4 text-right">Closing Balance (INR)</div>
+          </div>
 
-              {/* 1. Ledgers directly under this Main Group */}
-              {group.ledgers.length > 0 && (
-                <div className="ml-4 pl-4 border-l-2 border-blue-200 my-2 space-y-1">
-                  {group.ledgers.map((l) => (
+          <div className="divide-y divide-gray-200">
+            {rootGroups.map((group) => (
+              <div key={group.id}>
+                {/* Group Header */}
+                <div className="bg-slate-50 py-2 px-4 flex justify-between items-center border-b border-gray-200">
+                  <span className="font-bold text-sm text-slate-800 uppercase">
+                    {group.name}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 bg-white border border-gray-200 px-1.5 rounded">
+                    {group.nature}
+                  </span>
+                </div>
+
+                {/* 1. Main Group Ledgers */}
+                {group.ledgers.map((l) => {
+                  // Calculate Balance: Opening + (Dr - Cr) from APPROVED entries
+                  const dr = l.entries
+                    .filter((e) => e.amount > 0)
+                    .reduce((sum, e) => sum + e.amount, 0);
+                  const cr = l.entries
+                    .filter((e) => e.amount < 0)
+                    .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+                  const net = l.openingBalance + (dr - cr);
+
+                  return (
                     <div
                       key={l.id}
-                      className="flex justify-between items-center text-sm group hover:bg-gray-50 p-1 rounded"
+                      className="grid grid-cols-12 py-2 px-8 hover:bg-yellow-50 transition-colors text-xs border-b border-gray-100"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
-                        <span className="font-semibold text-gray-800">
-                          {l.name}
-                        </span>
+                      <div className="col-span-8 font-medium text-slate-700 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                        {l.name}
                       </div>
-                      <span className="font-mono font-medium text-gray-600">
-                        {l.openingBalance.toFixed(2)}{" "}
-                        {l.openingBalance >= 0 ? "Dr" : "Cr"}
-                      </span>
+                      <div className="col-span-4 text-right font-mono font-bold text-slate-900">
+                        {Math.abs(net).toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                        })}{" "}
+                        {net >= 0 ? "Dr" : "Cr"}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
 
-              {/* 2. Sub-Groups (e.g. Cash-in-hand under Current Assets) */}
-              {group.children.length > 0 && (
-                <ul className="ml-4 mt-3 space-y-3">
-                  {group.children.map((child) => (
-                    <li
-                      key={child.id}
-                      className="bg-gray-50 rounded p-3 border border-gray-200"
-                    >
-                      <div className="font-bold text-gray-900 mb-2 border-b border-gray-200 pb-1">
-                        {child.name}
-                      </div>
+                {/* 2. Sub-Groups */}
+                {group.children.map((child) => (
+                  <div key={child.id}>
+                    <div className="py-1.5 px-8 font-bold text-slate-600 text-xs italic bg-slate-50/50">
+                      ↳ {child.name}
+                    </div>
+                    {child.ledgers.map((l) => {
+                      const dr = l.entries
+                        .filter((e) => e.amount > 0)
+                        .reduce((sum, e) => sum + e.amount, 0);
+                      const cr = l.entries
+                        .filter((e) => e.amount < 0)
+                        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+                      const net = l.openingBalance + (dr - cr);
 
-                      {/* Ledgers under Sub-Group */}
-                      {child.ledgers.length > 0 ? (
-                        <div className="space-y-1">
-                          {child.ledgers.map((l) => (
-                            <div
-                              key={l.id}
-                              className="flex justify-between items-center text-sm pl-2"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 bg-green-600 rounded-full"></span>
-                                <span className="text-gray-700 font-medium">
-                                  {l.name}
-                                </span>
-                              </div>
-                              <span className="font-mono text-gray-500 text-xs">
-                                {l.openingBalance.toFixed(2)}
-                              </span>
-                            </div>
-                          ))}
+                      return (
+                        <div
+                          key={l.id}
+                          className="grid grid-cols-12 py-2 px-12 hover:bg-yellow-50 transition-colors text-xs border-b border-gray-100"
+                        >
+                          <div className="col-span-8 text-slate-600 flex items-center gap-2">
+                            <div className="w-1 h-1 bg-slate-400 rounded-full"></div>
+                            {l.name}
+                          </div>
+                          <div className="col-span-4 text-right font-mono text-slate-700">
+                            {Math.abs(net).toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                            })}{" "}
+                            {net >= 0 ? "Dr" : "Cr"}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-xs text-gray-400 italic pl-2">
-                          No ledgers yet
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        {rootGroups.length === 0 && (
-          <div className="text-center py-10 text-gray-500">
-            No groups found. Something might be wrong with the company setup.
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -8,60 +8,68 @@ export default function LoginPage() {
   const [state, action, isPending] = useActionState(login, undefined);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <form
-        action={action}
-        className="w-full max-w-md bg-white p-8 rounded-lg shadow-md"
-      >
-        <h2 className="text-2xl font-extrabold mb-6 text-center text-gray-800">
-          Login
-        </h2>
+    <div className="bg-white rounded-2xl shadow-xl border border-slate-300 overflow-hidden">
+      {/* Header Section */}
+      <div className="bg-slate-900 p-8 text-center">
+        <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+        <p className="text-slate-300 text-sm">
+          Sign in to your accounting dashboard
+        </p>
+      </div>
 
-        {state?.error && (
-          <div className="bg-red-100 text-red-600 p-3 rounded mb-4 text-sm">
-            {state.error}
-          </div>
-        )}
+      {/* Form Section */}
+      <div className="p-8">
+        <form action={action} className="space-y-5">
+          {state?.error && (
+            <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200 font-bold text-center">
+              {state.error}
+            </div>
+          )}
 
-        <div className="mb-4">
-          {/* ✅ FIX: Wrap input inside label to fix SonarLint warning */}
-          <label className="block text-sm  mb-1 text-black font-semibold">
-            Username
+          <div>
+            <label className="block text-sm font-bold text-slate-900 mb-1.5">
+              Username
+            </label>
             <input
               name="username"
               type="text"
               required
-              className="w-full border p-2 rounded mt-1"
+              className="w-full px-4 py-3 rounded-lg border border-slate-300 bg-white text-black font-medium focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+              placeholder="Enter your username"
             />
-          </label>
-        </div>
+          </div>
 
-        <div className="mb-6">
-          <label className="block text-sm font-semibold mb-1 text-black">
-            Password
+          <div>
+            <label className="block text-sm font-bold text-slate-900 mb-1.5">
+              Password
+            </label>
             <input
               name="password"
               type="password"
               required
-              className="w-full border p-2 rounded mt-1"
+              className="w-full px-4 py-3 rounded-lg border border-slate-300 bg-white text-black font-medium focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+              placeholder="••••••••"
             />
-          </label>
-        </div>
+          </div>
 
-        <button
-          disabled={isPending}
-          className="w-full bg-cyan-600 text-white py-2 rounded hover:bg-green-700 disabled:opacity-50"
-        >
-          {isPending ? "Logging in..." : "Login"}
-        </button>
+          <button
+            disabled={isPending}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-lg transition-all shadow-md hover:shadow-lg mt-2"
+          >
+            {isPending ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
 
-        <p className="mt-4 text-center text-sm text-red-800 font-semibold ">
-          No account?{" "}
-          <Link href="/register" className="text-teal-600 font-semibold">
-            Register
+        <div className="mt-6 text-center text-sm text-slate-600 font-medium">
+          Don't have an account?{" "}
+          <Link
+            href="/register"
+            className="text-blue-600 font-bold hover:underline"
+          >
+            Create one
           </Link>
-        </p>
-      </form>
+        </div>
+      </div>
     </div>
   );
 }
