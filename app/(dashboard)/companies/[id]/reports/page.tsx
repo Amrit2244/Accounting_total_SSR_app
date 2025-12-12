@@ -1,20 +1,12 @@
 import Link from "next/link";
-import {
-  FileText,
-  Book,
-  PieChart,
-  Package,
-  ArrowRight,
-  TrendingUp,
-} from "lucide-react";
+import { Book, PieChart, Package, ArrowRight, TrendingUp } from "lucide-react";
 
 export default async function ReportsPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  readonly params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
   const reports = [
     {
       name: "Ledger Statement",
