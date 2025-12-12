@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. USER MANAGEMENT (Roles for Maker-Checker)
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String   
+  name      String
+  role      String   @default("MAKER") // MAKER (Entry), CHECKER (Approver), ADMIN (Both)
+  createdAt DateTime @default(now())
+
+  // Relations to track who did what
+  createdVouchers Voucher[] @relation("CreatedBy")
+  verifiedVouchers Voucher[] @relation("VerifiedBy")
+}
+
+// 2. COMPANY DATA
+model Company {
+  id             Int      @id @default(autoincrement())
+  name           String   
+  address        String?  @db.Text
+  state          String?
+  pincode        String?
+  email          String?
+  gstin          String?
+  
+  // Settings
+  currencySymbol String   @default("₹")
+  financialYearFrom DateTime
+  booksBeginFrom    DateTime
+
+  // Relations
+  accountGroups  AccountGroup[]
+  ledgers        Ledger[]
+  vouchers       Voucher[]
+  units          Unit[]
+  stockGroups    StockGroup[]
+  stockItems     StockItem[]
+  sequences      VoucherSequence[]
+  
+  createdAt      DateTime @default(now())
+}
+
+// 3. AUTO-NUMBERING (Tracks last No for each type)
+model VoucherSequence {
+  id          Int    @id @default(autoincrement())
+  companyId   Int
+  company     Company @relation(fields: [companyId], references: [id])
+  voucherType String  // SALES, PAYMENT, RECEIPT...
+  lastNo      Int     @default(0)
+
+  @@unique([companyId, voucherType])
+}
+
+// 4. ACCOUNTING MASTERS
+model AccountGroup {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nature    String   // ASSET, LIABILITY, INCOME, EXPENSE
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id])
+  ledgers   Ledger[]
+  parentId  Int?
+  parent    AccountGroup? @relation("GroupHierarchy", fields: [parentId], references: [id])
+  children  AccountGroup[] @relation("GroupHierarchy")
+
+  @@unique([name, companyId])
+}
+
+model Ledger {
+  id             Int            @id @default(autoincrement())
+  name           String
+  openingBalance Float          @default(0.0) 
+  groupId        Int
+  group          AccountGroup   @relation(fields: [groupId], references: [id])
+  companyId      Int
+  company        Company        @relation(fields: [companyId], references: [id])
+  entries        VoucherEntry[]
+  
+  tallyName      String?         // Helper to identify Cash/Bank for validation rules
+
+  @@unique([name, companyId])
+}
+
+// 5. INVENTORY MASTERS
+model Unit {
+  id        Int         @id @default(autoincrement())
+  name      String      // e.g. "Numbers"
+  symbol    String      // e.g. "Nos"
+  companyId Int
+  company   Company     @relation(fields: [companyId], references: [id])
+  items     StockItem[]
+  @@unique([symbol, companyId])
+}
+
+model StockGroup {
+  id        Int         @id @default(autoincrement())
+  name      String
+  companyId Int
+  company   Company     @relation(fields: [companyId], references: [id])
+  items     StockItem[]
+  parentId  Int?
+  parent    StockGroup? @relation("StockHierarchy", fields: [parentId], references: [id])
+  children  StockGroup[] @relation("StockHierarchy")
+  @@unique([name, companyId])
+}
+
+model StockItem {
+  id              Int      @id @default(autoincrement())
+  name            String
+  partNumber      String?
+  groupId         Int?
+  group           StockGroup? @relation(fields: [groupId], references: [id])
+  unitId          Int?
+  unit            Unit?       @relation(fields: [unitId], references: [id])
+  companyId       Int
+  company         Company     @relation(fields: [companyId], references: [id])
+  
+  inventoryEntries InventoryEntry[]
+
+  @@unique([name, companyId])
+}
+
+// 6. VOUCHER (The Core Transaction)
+model Voucher {
+  id            Int            @id @default(autoincrement())
+  voucherNo     String         // Auto-generated (e.g. "1", "2")
+  date          DateTime
+  type          String         // CONTRA, PAYMENT, RECEIPT, JOURNAL, SALES, PURCHASE
+  narration     String?
+  companyId     Int
+  company       Company        @relation(fields: [companyId], references: [id])
+  
+  // Maker-Checker Logic
+  status        String         @default("PENDING") // PENDING, APPROVED, REJECTED
+  
+  createdById   Int
+  createdBy     User           @relation("CreatedBy", fields: [createdById], references: [id])
+  
+  verifiedById  Int?
+  verifiedBy    User?          @relation("VerifiedBy", fields: [verifiedById], references: [id])
+
+  entries       VoucherEntry[]
+  inventory     InventoryEntry[]
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model VoucherEntry {
+  id        Int      @id @default(autoincrement())
+  amount    Float    // Positive = Debit, Negative = Credit
+  voucherId Int
+  voucher   Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  ledgerId  Int
+  ledger    Ledger   @relation(fields: [ledgerId], references: [id])
+}
+
+model InventoryEntry {
+  id        Int       @id @default(autoincrement())
+  quantity  Float     // In/Out
+  rate      Float
+  amount    Float     
+  voucherId Int
+  voucher   Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  itemId    Int
+  item      StockItem @relation(fields: [itemId], references: [id])
+}
