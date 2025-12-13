@@ -85,6 +85,8 @@ model Ledger {
   entries        VoucherEntry[]
   
   tallyName      String?         // Helper to identify Cash/Bank for validation rules
+  state           String?         // e.g. "Maharashtra" (For Place of Supply)
+  gstin           String?         // e.g. "27ABCDE1234F1Z5"
 
   @@unique([name, companyId])
 }
@@ -124,7 +126,7 @@ model StockItem {
   company         Company     @relation(fields: [companyId], references: [id])
   
   inventoryEntries InventoryEntry[]
-
+  gstRate         Float           @default(0) // 0, 5, 12, 18, 28
   @@unique([name, companyId])
 }
 
@@ -162,6 +164,8 @@ model VoucherEntry {
   voucher   Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   ledgerId  Int
   ledger    Ledger   @relation(fields: [ledgerId], references: [id])
+  // ✅ BRS FIELD
+  bankDate  DateTime? // The date this actually hit the bank statement
 }
 
 model InventoryEntry {

@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Package, Plus, Edit } from "lucide-react";
+import { ArrowLeft, Book, Plus, Edit } from "lucide-react"; // Added Edit Icon
 import DeleteButton from "@/components/DeleteButton";
-import { deleteStockItem } from "@/app/actions/masters"; // Ensure path is 'masters' (plural)
+import { deleteLedger } from "@/app/actions/masters"; // Ensure this matches your file name (master.ts vs masters.ts)
 
-export default async function InventoryListPage({
+export default async function LedgerListPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -12,19 +12,17 @@ export default async function InventoryListPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // Fetch Items
-  const items = await prisma.stockItem.findMany({
+  const ledgers = await prisma.ledger.findMany({
     where: { companyId },
-    include: { unit: true, group: true },
+    include: { group: true },
     orderBy: { name: "asc" },
   });
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-[#003366] flex items-center gap-2">
-          <Package size={24} /> STOCK ITEMS
+          <Book size={24} /> LEDGER MASTERS
         </h1>
         <Link
           href={`/companies/${companyId}`}
@@ -34,63 +32,57 @@ export default async function InventoryListPage({
         </Link>
       </div>
 
-      {/* TABLE CONTAINER */}
       <div className="bg-white border border-gray-300 shadow-sm rounded-lg overflow-hidden">
-        {/* TABLE HEADER / TOOLBAR */}
         <div className="bg-gray-100 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
           <span className="text-xs font-bold text-gray-600 uppercase">
-            Item List
+            Account List
           </span>
           <Link
-            href={`/companies/${companyId}/inventory/create`}
+            href={`/companies/${companyId}/ledgers/create`}
             className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
           >
-            <Plus size={14} /> Create New Item
+            <Plus size={14} /> Create New Ledger
           </Link>
         </div>
-
-        {/* TABLE */}
         <table className="w-full text-sm text-left">
           <thead className="bg-[#003366] text-white text-xs uppercase font-bold">
             <tr>
-              <th className="p-3 pl-6">Item Name</th>
-              <th className="p-3">Group</th>
-              <th className="p-3 text-center">Unit</th>
-              <th className="p-3 text-right">Tax Rate</th>
+              <th className="p-3 pl-6">Ledger Name</th>
+              <th className="p-3">Under Group</th>
+              <th className="p-3 text-right">Op Balance</th>
               <th className="p-3 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {items.map((i) => (
-              <tr key={i.id} className="hover:bg-blue-50">
-                <td className="p-3 pl-6 font-bold text-gray-800">{i.name}</td>
-                <td className="p-3 text-gray-600">{i.group?.name || "-"}</td>
-                <td className="p-3 text-center text-gray-500">
-                  {i.unit?.symbol || "-"}
+            {ledgers.map((l) => (
+              <tr key={l.id} className="hover:bg-blue-50">
+                <td className="p-3 pl-6 font-bold text-gray-800">{l.name}</td>
+                <td className="p-3 text-gray-600">{l.group.name}</td>
+                <td className="p-3 text-right font-mono">
+                  {l.openingBalance.toFixed(2)}
                 </td>
-                <td className="p-3 text-right font-mono">{i.gstRate}%</td>
                 <td className="p-3 text-center flex justify-center gap-3">
-                  {/* EDIT BUTTON */}
+                  {/* ✅ EDIT BUTTON */}
                   <Link
-                    href={`/companies/${companyId}/inventory/${i.id}/edit`}
-                    className="text-orange-400 hover:text-orange-600 p-2 hover:bg-orange-50 rounded transition-colors"
+                    href={`/companies/${companyId}/ledgers/${l.id}/edit`}
+                    className="text-blue-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded transition-colors"
                   >
                     <Edit size={16} />
                   </Link>
 
-                  {/* DELETE BUTTON */}
+                  {/* ✅ DELETE BUTTON */}
                   <DeleteButton
-                    id={i.id}
+                    id={l.id}
                     companyId={companyId}
-                    action={deleteStockItem}
+                    action={deleteLedger}
                   />
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {ledgers.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-6 text-center text-gray-400">
-                  No stock items found.
+                <td colSpan={4} className="p-6 text-center text-gray-400">
+                  No ledgers found.
                 </td>
               </tr>
             )}
