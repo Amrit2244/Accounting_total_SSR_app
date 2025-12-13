@@ -58,7 +58,7 @@ table {
 }
 th {
   background-color: #e2e8f0;
-  color: #c60958;
+  color: #003366; /* Fixed color to match your theme */
   font-weight: 700;
   text-transform: uppercase;
   font-size: 11px;
@@ -67,4 +67,57 @@ th {
 }
 td {
   border-bottom: 1px solid #e2e8f0;
+}
+
+/* ========================================= */
+/* NUCLEAR PRINT STYLES (THE FIX)           */
+/* ========================================= */
+@media print {
+  /* 1. HIDE EVERYTHING by default */
+  /* This ensures sidebars, navs, and gray backgrounds are GONE */
+  body * {
+    visibility: hidden;
+  }
+
+  /* 2. REVEAL ONLY THE REPORT */
+  /* We only show the element with id="printable-area" and its children */
+  #printable-area,
+  #printable-area * {
+    visibility: visible;
+  }
+
+  /* 3. POSITIONING */
+  /* Move the report to the absolute top-left of the paper */
+  #printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px; /* Optional padding for the paper edge */
+    background-color: white !important;
+  }
+
+  /* 4. FORCE COLORS */
+  /* Ensures blue headers and gray rows print in color */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 5. HIDE UI EXPLICITLY */
+  /* Extra safety to ensure buttons inside the report area don't show */
+  .no-print,
+  button,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+
+  /* 6. RESET PAGE STYLES */
+  @page {
+    size: auto;
+    margin: 0mm;
+  }
 }

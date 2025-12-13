@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import LedgerControls from "./controls"; // Import the client component
+import Link from "next/link";
+import { ArrowLeft, Calendar, FileText } from "lucide-react";
+import ReportActionButtons from "@/components/ReportActionButtons";
+import LedgerSearchFilter from "@/components/LedgerSearchFilter";
 
 export default async function LedgerReportPage({
   params,
@@ -12,180 +15,259 @@ export default async function LedgerReportPage({
   const { ledgerId, from, to } = await searchParams;
   const companyId = parseInt(id);
 
-  // Default Dates
   const today = new Date();
-  const defaultFrom = from || `${today.getFullYear()}-04-01`;
-  const defaultTo = to || `${today.getFullYear() + 1}-03-31`;
+  const currentYear =
+    today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  const defaultFrom = from || `${currentYear}-04-01`;
+  const defaultTo = to || today.toISOString().split("T")[0];
 
-  // Fetch Ledgers for Dropdown
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
-    select: { id: true, name: true }, // Select minimal data
     orderBy: { name: "asc" },
+    select: { id: true, name: true },
   });
 
-  // --- REPORT LOGIC (Server Side) ---
-  let entries: any[] = [];
+  let reportData = null;
   let openingBalance = 0;
   let closingBalance = 0;
-  let selectedLedgerName = "";
+  let periodTotalDr = 0;
+  let periodTotalCr = 0;
+  let entries: any[] = [];
 
   if (ledgerId) {
     const lid = parseInt(ledgerId);
+    const fromISO = new Date(`${defaultFrom}T00:00:00.000Z`);
+    const toISO = new Date(`${defaultTo}T23:59:59.999Z`);
+
     const ledger = await prisma.ledger.findUnique({ where: { id: lid } });
-    selectedLedgerName = ledger?.name || "";
 
-    // 1. Calculate Opening Balance
-    const preEntries = await prisma.voucherEntry.findMany({
-      where: {
-        ledgerId: lid,
-        voucher: {
-          companyId,
-          status: "APPROVED",
-          date: { lt: new Date(defaultFrom) },
+    if (ledger) {
+      // ✅ FIX 1: OPENING BALANCE - APPROVED ONLY
+      const prevEntries = await prisma.voucherEntry.findMany({
+        where: {
+          ledgerId: lid,
+          voucher: {
+            date: { lt: fromISO },
+            status: "APPROVED", // <--- STRICT FILTER
+          },
         },
-      },
-    });
-    const preSum = preEntries.reduce((acc, curr) => acc + curr.amount, 0);
-    openingBalance = (ledger?.openingBalance || 0) + preSum;
+      });
+      const prevDr = prevEntries
+        .filter((e) => e.amount > 0)
+        .reduce((sum, e) => sum + e.amount, 0);
+      const prevCr = prevEntries
+        .filter((e) => e.amount < 0)
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+      openingBalance = (ledger.openingBalance || 0) + (prevDr - prevCr);
 
-    // 2. Fetch Transactions
-    entries = await prisma.voucherEntry.findMany({
-      where: {
-        ledgerId: lid,
-        voucher: {
-          companyId,
-          status: "APPROVED",
-          date: { gte: new Date(defaultFrom), lte: new Date(defaultTo) },
+      // ✅ FIX 2: CURRENT ENTRIES - APPROVED ONLY
+      entries = await prisma.voucherEntry.findMany({
+        where: {
+          ledgerId: lid,
+          voucher: {
+            date: { gte: fromISO, lte: toISO },
+            status: "APPROVED", // <--- STRICT FILTER
+          },
         },
-      },
-      include: { voucher: true },
-      orderBy: { voucher: { date: "asc" } },
-    });
+        include: { voucher: true },
+        orderBy: { voucher: { date: "asc" } },
+      });
+
+      // 3. Totals
+      periodTotalDr = entries
+        .filter((e) => e.amount > 0)
+        .reduce((sum, e) => sum + e.amount, 0);
+      periodTotalCr = entries
+        .filter((e) => e.amount < 0)
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+      closingBalance = openingBalance + (periodTotalDr - periodTotalCr);
+
+      reportData = ledger;
+    }
   }
 
-  // Calculate Running Balance
-  let runningBal = openingBalance;
-  const rows = entries.map((e) => {
-    runningBal += e.amount;
-    return { ...e, balance: runningBal };
-  });
-  closingBalance = runningBal;
+  const fmt = (n: number) =>
+    n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+  let runningBalance = openingBalance;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)]">
-      {/* 1. CONTROL PANEL (Client Component) */}
-      <div className="bg-white p-4 border border-gray-300 shadow-sm mb-4">
-        <LedgerControls
-          companyId={companyId}
-          ledgers={ledgers}
-          defaultLedgerId={ledgerId}
-          defaultFrom={defaultFrom}
-          defaultTo={defaultTo}
-        />
+    <div className="max-w-5xl mx-auto p-6 bg-white min-h-screen">
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-4 no-print">
+        <div>
+          <h1 className="text-2xl font-bold text-[#003366] flex items-center gap-2">
+            <FileText size={24} /> LEDGER STATEMENT
+          </h1>
+        </div>
+        <div className="flex gap-3">
+          <ReportActionButtons />
+          <Link
+            href={`/companies/${companyId}`}
+            className="bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 px-4 py-2 rounded text-xs font-bold flex items-center gap-2 transition-colors"
+          >
+            <ArrowLeft size={16} /> Back
+          </Link>
+        </div>
       </div>
 
-      {/* 2. REPORT AREA (Server Rendered) */}
-      {ledgerId ? (
-        <div className="bg-white border border-gray-300 flex-1 overflow-auto shadow-sm">
-          <div className="bg-[#e6f0ff] p-4 text-center border-b border-gray-300">
-            <h2 className="text-xl font-extrabold text-[#003366] uppercase">
-              {selectedLedgerName}
+      {/* FILTER */}
+      <LedgerSearchFilter
+        ledgers={ledgers}
+        defaultLedgerId={ledgerId}
+        defaultFrom={defaultFrom}
+        defaultTo={defaultTo}
+      />
+
+      {/* REPORT */}
+      {reportData ? (
+        <div id="printable-area" className="bg-white">
+          <div className="mb-6 text-center border-b pb-4">
+            <h2 className="text-2xl font-bold uppercase text-slate-900">
+              {reportData.name}
             </h2>
-            <p className="text-xs text-gray-600 font-bold mt-1">
-              Period: {new Date(defaultFrom).toLocaleDateString()} to{" "}
-              {new Date(defaultTo).toLocaleDateString()}
+            <p className="text-sm text-gray-600 mt-1">
+              Statement Period:{" "}
+              <span className="font-bold">
+                {new Date(defaultFrom).toLocaleDateString()}
+              </span>{" "}
+              to{" "}
+              <span className="font-bold">
+                {new Date(defaultTo).toLocaleDateString()}
+              </span>
             </p>
           </div>
 
-          <table className="w-full text-left text-xs">
-            <thead className="bg-gray-100 border-b-2 border-gray-300 text-gray-700 uppercase font-bold sticky top-0 z-10">
+          <div className="grid grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 border border-slate-200 rounded print:bg-transparent print:border-black">
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase">
+                Opening Balance
+              </p>
+              <p className="text-lg font-mono font-bold text-slate-700">
+                {fmt(Math.abs(openingBalance))}{" "}
+                {openingBalance >= 0 ? "Dr" : "Cr"}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-bold text-gray-500 uppercase">
+                Current Closing Balance
+              </p>
+              <p className="text-xl font-mono font-black text-[#003366] print:text-black">
+                {fmt(Math.abs(closingBalance))}{" "}
+                {closingBalance >= 0 ? "Dr" : "Cr"}
+              </p>
+            </div>
+          </div>
+
+          <table className="w-full text-sm text-left border border-slate-300 print:border-black">
+            <thead className="bg-[#003366] text-white text-xs uppercase font-bold print:bg-transparent print:text-black print:border-b-2 print:border-black">
               <tr>
-                <th className="p-3 w-32 border-r border-gray-200">Date</th>
-                <th className="p-3 w-32 border-r border-gray-200">Vch No</th>
-                <th className="p-3 border-r border-gray-200">
-                  Narration / Type
+                <th className="p-2 border-r border-slate-500 print:border-black">
+                  Date
                 </th>
-                <th className="p-3 text-right w-32 border-r border-gray-200">
+                <th className="p-2 border-r border-slate-500 print:border-black">
+                  Particulars
+                </th>
+                <th className="p-2 border-r border-slate-500 print:border-black">
+                  Vch Type
+                </th>
+                <th className="p-2 border-r border-slate-500 print:border-black text-right">
                   Debit
                 </th>
-                <th className="p-3 text-right w-32 border-r border-gray-200">
+                <th className="p-2 border-r border-slate-500 print:border-black text-right">
                   Credit
                 </th>
-                <th className="p-3 text-right w-40">Balance</th>
+                <th className="p-2 text-right">Balance</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 text-gray-800">
-              {/* OPENING BALANCE */}
-              <tr className="bg-yellow-50 font-bold">
-                <td
-                  colSpan={3}
-                  className="p-3 text-right text-gray-600 italic border-r border-gray-200"
-                >
-                  Opening Balance:
+            <tbody className="divide-y divide-slate-200 text-slate-800 print:divide-black">
+              <tr className="bg-yellow-50 font-bold print:bg-transparent">
+                <td className="p-2 border-r print:border-black" colSpan={3}>
+                  Opening Balance
                 </td>
-                <td className="p-3 text-right border-r border-gray-200"></td>
-                <td className="p-3 text-right border-r border-gray-200"></td>
-                <td className="p-3 text-right font-mono text-black">
-                  {Math.abs(openingBalance).toFixed(2)}{" "}
+                <td className="p-2 text-right border-r print:border-black font-mono">
+                  {openingBalance > 0 ? fmt(openingBalance) : ""}
+                </td>
+                <td className="p-2 text-right border-r print:border-black font-mono">
+                  {openingBalance < 0 ? fmt(Math.abs(openingBalance)) : ""}
+                </td>
+                <td className="p-2 text-right font-mono">
+                  {fmt(Math.abs(openingBalance))}{" "}
                   {openingBalance >= 0 ? "Dr" : "Cr"}
                 </td>
               </tr>
 
-              {/* TRANSACTIONS */}
-              {rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  <td className="p-3 font-medium border-r border-gray-100">
-                    {new Date(row.voucher.date).toLocaleDateString()}
-                  </td>
-                  <td className="p-3 text-[#003366] font-bold border-r border-gray-100">
-                    {row.voucher.type} #{row.voucher.voucherNo}
-                  </td>
-                  <td className="p-3 text-gray-600 border-r border-gray-100">
-                    {row.voucher.narration || "-"}
-                  </td>
-                  <td className="p-3 text-right font-mono border-r border-gray-100">
-                    {row.amount > 0 ? row.amount.toFixed(2) : ""}
-                  </td>
-                  <td className="p-3 text-right font-mono border-r border-gray-100">
-                    {row.amount < 0 ? Math.abs(row.amount).toFixed(2) : ""}
-                  </td>
-                  <td className="p-3 text-right font-mono font-bold">
-                    {Math.abs(row.balance).toFixed(2)}{" "}
-                    {row.balance >= 0 ? "Dr" : "Cr"}
-                  </td>
-                </tr>
-              ))}
+              {entries.map((entry) => {
+                runningBalance += entry.amount;
+                return (
+                  <tr
+                    key={entry.id}
+                    className="print:border-b print:border-gray-300"
+                  >
+                    <td className="p-2 border-r border-gray-200 print:border-black whitespace-nowrap">
+                      {entry.voucher.date.toLocaleDateString()}
+                    </td>
+                    <td className="p-2 border-r border-gray-200 print:border-black font-medium">
+                      {entry.voucher.narration || "As per details"}
+                    </td>
+                    <td className="p-2 border-r border-gray-200 print:border-black text-xs uppercase">
+                      {entry.voucher.type} #{entry.voucher.voucherNo}
+                    </td>
+                    <td className="p-2 border-r border-gray-200 print:border-black text-right font-mono text-slate-700 print:text-black">
+                      {entry.amount > 0 ? fmt(entry.amount) : ""}
+                    </td>
+                    <td className="p-2 border-r border-gray-200 print:border-black text-right font-mono text-slate-700 print:text-black">
+                      {entry.amount < 0 ? fmt(Math.abs(entry.amount)) : ""}
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold text-slate-900 print:text-black">
+                      {fmt(Math.abs(runningBalance))}{" "}
+                      {runningBalance >= 0 ? "Dr" : "Cr"}
+                    </td>
+                  </tr>
+                );
+              })}
 
-              {rows.length === 0 && (
+              {entries.length === 0 && (
                 <tr>
                   <td
                     colSpan={6}
-                    className="p-6 text-center text-gray-400 italic"
+                    className="p-8 text-center text-gray-400 italic"
                   >
-                    No transactions in this period.
+                    No approved transactions found.
                   </td>
                 </tr>
               )}
-            </tbody>
-            <tfoot className="bg-[#8f9f83] text-white font-bold sticky bottom-0">
-              <tr>
-                <td colSpan={3} className="p-3 text-right">
-                  Closing Balance:
+
+              <tr className="bg-[#e6f0ff] font-bold border-t-2 border-[#003366] print:bg-transparent print:border-black">
+                <td className="p-2 text-right" colSpan={3}>
+                  Totals / Closing
                 </td>
-                <td className="p-3 text-right"></td>
-                <td className="p-3 text-right"></td>
-                <td className="p-3 text-right font-mono text-yellow-300 text-sm">
-                  {Math.abs(closingBalance).toFixed(2)}{" "}
+                <td className="p-2 text-right border-r border-blue-200 print:border-black font-mono">
+                  {fmt(
+                    (openingBalance > 0 ? openingBalance : 0) + periodTotalDr
+                  )}
+                </td>
+                <td className="p-2 text-right border-r border-blue-200 print:border-black font-mono">
+                  {fmt(
+                    (openingBalance < 0 ? Math.abs(openingBalance) : 0) +
+                      periodTotalCr
+                  )}
+                </td>
+                <td className="p-2 text-right font-mono text-lg">
+                  {fmt(Math.abs(closingBalance))}{" "}
                   {closingBalance >= 0 ? "Dr" : "Cr"}
                 </td>
               </tr>
-            </tfoot>
+            </tbody>
           </table>
+
+          <div className="hidden print:block mt-8 pt-8 border-t border-gray-300 text-center text-xs text-gray-500">
+            Generated by Accounting App on {new Date().toLocaleString()}
+          </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-gray-400 italic bg-gray-50 border border-gray-200 rounded">
-          Select a Ledger from the dropdown to view its statement.
+        <div className="text-center py-20 bg-slate-50 border-2 border-dashed border-gray-200 rounded-lg text-gray-400">
+          <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+          <p className="font-bold">No Account Selected</p>
         </div>
       )}
     </div>

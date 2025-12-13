@@ -1,44 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { verifyVoucherAction } from "@/app/actions/voucher";
-import { ShieldCheck, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { verifyVoucher } from "@/app/actions/voucher";
+import { CheckCircle } from "lucide-react";
 
 export default function VerifyActionBtn({ voucherId }: { voucherId: number }) {
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
-  const handleVerify = async () => {
-    const confirm = window.confirm(
-      "Are you sure you want to AUTHORIZE this transaction?"
-    );
-    if (!confirm) return;
+  const handleVerify = () => {
+    if (!confirm("Are you sure you want to verify and post this transaction?"))
+      return;
 
-    setLoading(true);
-    const res = await verifyVoucherAction(voucherId);
-
-    if (res.error) {
-      alert(res.error);
-      setLoading(false);
-    } else {
-      alert("Transaction Verified Successfully!");
-      router.refresh(); // Update UI
-    }
+    startTransition(async () => {
+      const res = await verifyVoucher(voucherId);
+      if (res.error) {
+        alert(res.error);
+      } else {
+        window.location.reload();
+      }
+    });
   };
 
   return (
     <button
       onClick={handleVerify}
-      disabled={loading}
-      className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded font-bold text-lg shadow-lg flex items-center gap-3 transition-transform hover:-translate-y-1"
+      disabled={isPending}
+      className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded shadow-lg font-bold text-xs flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50"
     >
-      {loading ? (
-        <Loader2 className="animate-spin" />
+      {isPending ? (
+        "Processing..."
       ) : (
-        <ShieldCheck size={24} />
+        <>
+          <CheckCircle size={16} /> AUTHORIZE & POST
+        </>
       )}
-      {loading ? "AUTHORIZING..." : "VERIFY & POST"}
     </button>
   );
 }

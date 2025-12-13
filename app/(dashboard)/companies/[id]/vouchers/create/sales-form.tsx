@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useMemo } from "react"; // Added useMemo
+import { useState, useActionState, useMemo } from "react";
 import { createVoucher } from "@/app/actions/voucher";
 import {
   Plus,
@@ -10,7 +10,8 @@ import {
   CheckCircle,
   Copy,
   Package,
-} from "lucide-react";
+  Printer,
+} from "lucide-react"; // ✅ Added Printer
 import Link from "next/link";
 
 type Ledger = {
@@ -39,13 +40,10 @@ export default function SalesPurchaseForm({
     { itemId: "", qty: "", rate: "", amount: 0 },
   ]);
 
-  // --- 💡 CORE LOGIC: FILTER DROPDOWNS ---
-
-  // 1. Filter Party Ledgers
+  // Filter Party Ledgers
   const partyLedgers = useMemo(() => {
     return ledgers.filter((l) => {
       const g = l.group.name.toLowerCase();
-      // Allow Debtors, Creditors, Cash, Bank
       return (
         g.includes("debtor") ||
         g.includes("creditor") ||
@@ -55,7 +53,7 @@ export default function SalesPurchaseForm({
     });
   }, [ledgers]);
 
-  // 2. Filter Account Ledgers (Sales / Purchase)
+  // Filter Account Ledgers
   const accountLedgers = useMemo(() => {
     return ledgers.filter((l) => {
       const g = l.group.name.toLowerCase();
@@ -66,7 +64,7 @@ export default function SalesPurchaseForm({
     });
   }, [ledgers, type]);
 
-  // ... (Standard Form Logic - Updates, Adds, Removes, Totals) ...
+  // Form Logic
   const updateRow = (index: number, field: string, value: string) => {
     const newRows = [...rows];
     /* @ts-ignore */ newRows[index][field] = value;
@@ -86,7 +84,7 @@ export default function SalesPurchaseForm({
   };
   const totalAmount = rows.reduce((sum, r) => sum + r.amount, 0);
 
-  // ... (Success State - Same as before) ...
+  // --- SUCCESS SCREEN ---
   if (state?.success && state?.code) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center p-8 bg-green-50/50 border-2 border-dashed border-green-200 rounded-2xl">
@@ -114,6 +112,17 @@ export default function SalesPurchaseForm({
           </div>
         </div>
         <div className="mt-10 flex gap-4">
+          {/* ✅ PRINT BUTTON */}
+          {state.id && (
+            <Link
+              href={`/companies/${companyId}/vouchers/${state.id}/print`}
+              target="_blank"
+              className="bg-slate-800 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-black transition-colors flex items-center gap-2"
+            >
+              <Printer size={18} /> Print Invoice
+            </Link>
+          )}
+
           <button
             onClick={() => window.location.reload()}
             className="bg-[#003366] text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-900 transition-colors"
@@ -160,7 +169,6 @@ export default function SalesPurchaseForm({
           />
         </div>
         <div>
-          {/* ✅ FILTERED PARTY LIST */}
           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
             Party A/c Name
           </label>
@@ -179,7 +187,6 @@ export default function SalesPurchaseForm({
           </select>
         </div>
         <div>
-          {/* ✅ FILTERED ACCOUNT LIST */}
           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
             {type} Ledger
           </label>

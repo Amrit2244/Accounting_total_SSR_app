@@ -1,145 +1,151 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import {
+  Building2,
+  Plus,
+  ArrowRight,
+  LogOut,
+  User as UserIcon,
+  Shield,
+} from "lucide-react";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
-import Link from "next/link";
-import { Plus, LogOut, Building2, Briefcase } from "lucide-react";
-import { logout } from "@/app/actions/auth";
+import { logout } from "@/app/actions/auth"; // ✅ Imports from your existing auth file
 
+// Ensure this matches the secret used in your @/lib/session file
 const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
-async function getSessionUser() {
+export default async function DashboardHome() {
+  // 1. GET LOGGED IN USER
   const cookieStore = await cookies();
   const session = cookieStore.get("session")?.value;
-  if (!session) return null;
-  try {
-    const { payload } = await jwtVerify(session, encodedKey);
-    if (payload.userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: parseInt(payload.userId as string) },
-        select: { name: true, username: true, role: true },
-      });
-      return {
-        name: user?.name || "Unknown",
-        username: user?.username,
-        role: user?.role,
-      };
-    }
-  } catch (error) {
-    return null;
-  }
-  return null;
-}
+  let currentUser = null;
 
-export default async function BankingGateway() {
-  const user = await getSessionUser();
+  if (session) {
+    try {
+      // Verify token and extract User ID
+      const { payload } = await jwtVerify(session, encodedKey);
+
+      // Handle ID whether it's stored as 'userId' or 'sub'
+      const userIdStr = (payload.userId || payload.sub) as string;
+      const userId = parseInt(userIdStr);
+
+      if (!isNaN(userId)) {
+        currentUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true, username: true, role: true },
+        });
+      }
+    } catch (e) {
+      console.log("Session verification failed or expired");
+    }
+  }
+
+  // 2. FETCH COMPANIES
   const companies = await prisma.company.findMany({
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { vouchers: true } } },
   });
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* 1. BANKING TOP BAR */}
-      <header className="bg-[#003366] text-white h-12 flex items-center justify-between px-4 shadow-md shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="bg-white/10 p-1 rounded">
-            <Building2 size={18} />
+    <div className="max-w-5xl mx-auto py-8 px-4">
+      {/* --- TOP BAR: USER INFO & LOGOUT --- */}
+      {currentUser && (
+        <div className="flex flex-col sm:flex-row justify-end items-center mb-8 gap-4 sm:gap-6 border-b border-gray-100 pb-4">
+          {/* User Badge */}
+          <div className="flex items-center gap-3 bg-blue-50 px-4 py-2 rounded-full border border-blue-100">
+            <div className="w-8 h-8 bg-[#003366] rounded-full flex items-center justify-center text-white">
+              <UserIcon size={16} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[#003366] leading-none">
+                {currentUser.name || currentUser.username}
+              </p>
+              <div className="flex items-center gap-1">
+                <Shield size={10} className="text-blue-400" />
+                <p className="text-[10px] text-blue-500 uppercase font-bold tracking-wider">
+                  {currentUser.role || "User"}
+                </p>
+              </div>
+            </div>
           </div>
-          <span className="font-bold tracking-wide text-sm">
-            FINACLE CORE <span className="text-blue-300">| GATEWAY</span>
-          </span>
-        </div>
 
-        <div className="flex items-center gap-6 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-blue-200">User:</span>
-            <span className="font-bold uppercase">
-              {user?.name} ({user?.role})
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-blue-200">Last Login:</span>
-            <span className="font-mono">12-DEC-2025 18:30:00</span>
-          </div>
+          {/* Logout Button (Uses your existing Server Action) */}
           <form action={logout}>
-            <button className="bg-red-700 hover:bg-red-600 px-3 py-1 rounded text-white font-bold transition-colors flex items-center gap-1">
-              <LogOut size={12} /> LOGOUT
+            <button className="flex items-center gap-2 text-xs font-bold text-red-600 hover:text-white bg-white border border-red-200 hover:bg-red-600 px-4 py-2 rounded-full transition-all shadow-sm">
+              <LogOut size={14} /> LOGOUT
             </button>
           </form>
         </div>
-      </header>
+      )}
 
-      {/* 2. SUB-HEADER (Breadcrumbs/Actions) */}
-      <div className="bg-white border-b border-gray-300 h-10 flex items-center px-4 justify-between shadow-sm">
-        <span className="text-xs font-bold text-gray-600 uppercase">
-          System / Organization Selection
-        </span>
+      {/* --- WELCOME HEADER --- */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-[#003366]">Dashboard</h1>
+          <p className="text-gray-500 mt-1">
+            Manage your organizations and financial records
+          </p>
+        </div>
         <Link
           href="/companies/create"
-          className="text-xs font-bold text-[#003366] hover:underline flex items-center gap-1"
+          className="bg-[#003366] text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-900 flex items-center gap-2 transition-transform hover:-translate-y-0.5"
         >
-          <Plus size={14} /> CREATE NEW ENTITY
+          <Plus size={18} /> New Company
         </Link>
       </div>
 
-      {/* 3. MAIN WORKSPACE */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {/* Module Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* Create Card (Styled as a Module) */}
+      {/* --- COMPANY GRID --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {companies.map((company) => (
           <Link
-            href="/companies/create"
-            className="bg-gray-200 border border-gray-300 p-4 rounded flex flex-col items-center justify-center gap-2 hover:bg-gray-300 transition-colors cursor-pointer min-h-[140px] text-gray-500 hover:text-[#003366]"
+            key={company.id}
+            href={`/companies/${company.id}`}
+            className="bg-white p-6 border border-gray-200 rounded-xl shadow-sm hover:shadow-lg transition-all hover:border-[#003366] group relative overflow-hidden"
           >
-            <Plus size={32} strokeWidth={1.5} />
-            <span className="font-bold text-sm">ADD ORGANIZATION</span>
+            <div className="flex justify-between items-start mb-4">
+              <div className="p-3 bg-blue-50 text-[#003366] rounded-lg group-hover:bg-[#003366] group-hover:text-white transition-colors">
+                <Building2 size={24} />
+              </div>
+              <ArrowRight className="text-gray-300 group-hover:text-[#003366] transition-colors" />
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-800 group-hover:text-[#003366] transition-colors">
+              {company.name}
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {company.state || "Location N/A"} • {company.gstin || "No Tax ID"}
+            </p>
+
+            <div className="mt-6 pt-4 border-t border-gray-100 flex gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+              <span>
+                FY: {new Date(company.financialYearFrom).getFullYear()} -{" "}
+                {new Date(company.financialYearFrom).getFullYear() + 1}
+              </span>
+            </div>
           </Link>
+        ))}
 
-          {/* Entity Cards */}
-          {companies.map((company) => (
+        {/* Empty State */}
+        {companies.length === 0 && (
+          <div className="col-span-1 md:col-span-2 text-center py-16 px-6 bg-slate-50 border-2 border-dashed border-gray-300 rounded-xl">
+            <Building2 size={48} className="mx-auto text-gray-300 mb-4" />
+            <h3 className="text-lg font-bold text-gray-600">
+              No Companies Yet
+            </h3>
+            <p className="text-gray-400 mb-6">
+              Get started by creating your first entity.
+            </p>
             <Link
-              key={company.id}
-              href={`/companies/${company.id}`}
-              className="bg-white border-t-4 border-t-[#003366] border-x border-b border-gray-300 p-4 shadow-sm hover:shadow-md transition-all min-h-[140px] flex flex-col justify-between group"
+              href="/companies/create"
+              className="text-blue-600 font-bold hover:underline"
             >
-              <div>
-                <div className="flex justify-between items-start">
-                  <h3 className="font-bold text-[#003366] text-lg leading-tight group-hover:underline">
-                    {company.name}
-                  </h3>
-                  <Briefcase size={16} className="text-gray-400" />
-                </div>
-                <div className="mt-2 text-xs text-gray-500 font-medium">
-                  <div>FY: {company.financialYearFrom.getFullYear()}</div>
-                  <div>ID: {company.id.toString().padStart(6, "0")}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-2 border-t border-gray-100 flex justify-between items-end">
-                <div>
-                  <span className="block text-[10px] text-gray-400 uppercase font-bold">
-                    Volume
-                  </span>
-                  <span className="text-sm font-bold text-gray-800">
-                    {company._count.vouchers} entries
-                  </span>
-                </div>
-                <span className="bg-[#e6f0ff] text-[#003366] px-2 py-0.5 rounded text-[10px] font-bold border border-blue-200">
-                  ACTIVE
-                </span>
-              </div>
+              Create Company &rarr;
             </Link>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
-
-      {/* 4. STATUS BAR */}
-      <footer className="bg-gray-200 border-t border-gray-300 h-6 flex items-center px-4 text-[10px] text-gray-600 justify-between shrink-0">
-        <span>System Ready.</span>
-        <span>v2.0.1 Enterprise Build</span>
-      </footer>
     </div>
   );
 }

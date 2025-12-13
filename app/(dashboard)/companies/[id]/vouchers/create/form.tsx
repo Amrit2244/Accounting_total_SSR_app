@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useMemo } from "react"; // Added useMemo
+import { useState, useActionState, useMemo } from "react";
 import { createVoucher } from "@/app/actions/voucher";
 import {
   Plus,
@@ -9,7 +9,8 @@ import {
   AlertCircle,
   CheckCircle,
   Copy,
-} from "lucide-react";
+  Printer,
+} from "lucide-react"; // ✅ Added Printer
 import Link from "next/link";
 
 type Ledger = {
@@ -20,7 +21,7 @@ type Ledger = {
 
 type Props = {
   companyId: number;
-  ledgers: Ledger[]; // Updated Type
+  ledgers: Ledger[];
   defaultType: string;
 };
 
@@ -31,13 +32,12 @@ export default function VoucherForm({
 }: Props) {
   const [state, action, isPending] = useActionState(createVoucher, undefined);
 
-  // Set initial rows based on type for convenience
   const initialRows =
     defaultType === "RECEIPT"
       ? [
           { ledgerId: "", type: "Cr", amount: "" },
           { ledgerId: "", type: "Dr", amount: "" },
-        ] // Cr usually first in Tally for Receipt, but let's stick to standard
+        ]
       : [
           { ledgerId: "", type: "Dr", amount: "" },
           { ledgerId: "", type: "Cr", amount: "" },
@@ -45,48 +45,32 @@ export default function VoucherForm({
 
   const [rows, setRows] = useState(initialRows);
 
-  // --- 💡 CORE LOGIC: FILTER DROPDOWN BASED ON VOUCHER RULES ---
+  // Filter Logic
   const getFilteredLedgers = (rowType: string) => {
-    // Helper: Check if group is Cash or Bank
     const isCashOrBank = (groupName: string) => {
       const g = groupName.toLowerCase();
       return g.includes("cash") || g.includes("bank");
     };
-
     return ledgers.filter((ledger) => {
       const group = ledger.group.name;
-
       switch (defaultType) {
         case "CONTRA":
-          // Rule: Both sides MUST be Cash or Bank
           return isCashOrBank(group);
-
         case "PAYMENT":
-          // Rule: Money is going OUT.
-          // CR (Source) MUST be Cash/Bank.
-          // DR (Destination) can be anything EXCEPT Cash/Bank (usually).
           if (rowType === "Cr") return isCashOrBank(group);
-          return true; // Allow all for Dr (Party, Expense, Asset), can block cash/bank if strict
-
+          return true;
         case "RECEIPT":
-          // Rule: Money is coming IN.
-          // DR (Destination) MUST be Cash/Bank.
-          // CR (Source) can be anything.
           if (rowType === "Dr") return isCashOrBank(group);
           return true;
-
         case "JOURNAL":
-          // Rule: Non-Cash adjustments.
-          // NO Cash or Bank allowed.
           return !isCashOrBank(group);
-
         default:
           return true;
       }
     });
   };
 
-  // ... (Success State Code - Same as before) ...
+  // --- SUCCESS SCREEN ---
   if (state?.success && state?.code) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center p-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl">
@@ -114,7 +98,19 @@ export default function VoucherForm({
             <Copy size={20} />
           </div>
         </div>
+
         <div className="mt-10 flex gap-4">
+          {/* ✅ PRINT BUTTON */}
+          {state.id && (
+            <Link
+              href={`/companies/${companyId}/vouchers/${state.id}/print`}
+              target="_blank"
+              className="bg-slate-800 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-black transition-colors flex items-center gap-2"
+            >
+              <Printer size={18} /> Print Voucher
+            </Link>
+          )}
+
           <button
             onClick={() => window.location.reload()}
             className="bg-[#003366] text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-900 transition-colors"
@@ -132,7 +128,7 @@ export default function VoucherForm({
     );
   }
 
-  // ... (Standard Functions: addRow, removeRow, updateRow, calculations) ...
+  // Form Logic
   const addRow = () =>
     setRows([...rows, { ledgerId: "", type: "Dr", amount: "" }]);
   const removeRow = (index: number) => {
@@ -205,7 +201,6 @@ export default function VoucherForm({
 
         <div className="divide-y divide-slate-200 overflow-y-auto max-h-[400px]">
           {rows.map((row, index) => {
-            // ✅ GET FILTERED OPTIONS FOR THIS SPECIFIC ROW
             const options = getFilteredLedgers(row.type);
 
             return (

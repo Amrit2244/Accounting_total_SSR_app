@@ -94,7 +94,8 @@ export async function createVoucher(prevState: any, formData: FormData) {
   const transactionCode = Math.floor(10000 + Math.random() * 90000).toString();
 
   try {
-    await prisma.$transaction(async (tx) => {
+    // We declare voucher variable outside transaction to return ID later
+    const newVoucher = await prisma.$transaction(async (tx) => {
       // A. Auto-Numbering
       let sequence = await tx.voucherSequence.findUnique({
         where: { companyId_voucherType: { companyId: cid, voucherType: type } },
@@ -202,9 +203,12 @@ export async function createVoucher(prevState: any, formData: FormData) {
           });
         }
       }
+
+      return voucher;
     });
 
-    return { success: true, code: transactionCode };
+    // ✅ RETURN ID HERE
+    return { success: true, code: transactionCode, id: newVoucher.id };
   } catch (e) {
     console.error(e);
     return { error: "Failed to save voucher. Database error." };
@@ -212,7 +216,7 @@ export async function createVoucher(prevState: any, formData: FormData) {
 }
 
 // ==========================================
-// 2. FETCH VOUCHER BY CODE (FIXED)
+// 2. FETCH VOUCHER BY CODE
 // ==========================================
 export async function getVoucherByCode(code: string, companyId: number) {
   const voucher = await prisma.voucher.findFirst({
@@ -222,7 +226,7 @@ export async function getVoucherByCode(code: string, companyId: number) {
     },
     include: {
       entries: { include: { ledger: true } },
-      inventory: true, // ✅ FIXED: Matches your Schema name 'inventory'
+      inventory: { include: { item: true } },
       createdBy: true,
     },
   });
@@ -263,7 +267,7 @@ export async function verifyVoucherAction(voucherId: number) {
 }
 
 // ==========================================
-// 4. ALIAS EXPORT (Prevents 'verifyVoucher not found' error)
+// 4. ALIAS EXPORT
 // ==========================================
 export const verifyVoucher = verifyVoucherAction;
 
@@ -280,7 +284,6 @@ export async function deleteVoucher(voucherId: number) {
     });
     if (!voucher) return { error: "Voucher not found" };
 
-    // Note: Prisma usually handles cascade delete, but we delete manually to be safe if cascade isn't set in DB
     await prisma.inventoryEntry.deleteMany({ where: { voucherId } });
     await prisma.voucherEntry.deleteMany({ where: { voucherId } });
     await prisma.voucher.delete({ where: { id: voucherId } });
