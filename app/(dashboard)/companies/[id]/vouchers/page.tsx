@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Plus, FileText, CheckCircle, Clock } from "lucide-react";
 import TransactionSearch from "@/components/TransactionSearch";
 import DeleteButton from "@/components/DeleteButton";
-import { deleteVoucher } from "@/app/actions/voucher"; // Existing action
+import { deleteVoucher } from "@/app/actions/voucher";
 
 export default async function VoucherListPage({
   params,
@@ -54,6 +54,8 @@ export default async function VoucherListPage({
         <table className="w-full text-left">
           <thead className="bg-[#e6f0ff] border-b border-gray-300 text-[11px] font-bold text-[#003366] uppercase">
             <tr>
+              {/* ✅ NEW COLUMN HEADER */}
+              <th className="px-4 py-3 border-r">Trans ID</th>
               <th className="px-4 py-3 border-r">Date</th>
               <th className="px-4 py-3 border-r">Ref No</th>
               <th className="px-4 py-3 border-r">Particulars</th>
@@ -65,6 +67,10 @@ export default async function VoucherListPage({
           <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
             {vouchers.map((v) => (
               <tr key={v.id} className="hover:bg-yellow-50 transition-colors">
+                {/* ✅ NEW COLUMN DATA */}
+                <td className="px-4 py-3 font-mono font-bold text-gray-500 border-r">
+                  {v.transactionCode}
+                </td>
                 <td className="px-4 py-3 font-medium border-r">
                   {v.date.toLocaleDateString()}
                 </td>
@@ -96,7 +102,6 @@ export default async function VoucherListPage({
                   )}
                 </td>
                 <td className="px-4 py-3 text-center flex justify-center gap-2">
-                  {/* DELETE BUTTON */}
                   <DeleteButton
                     id={v.id}
                     companyId={companyId}

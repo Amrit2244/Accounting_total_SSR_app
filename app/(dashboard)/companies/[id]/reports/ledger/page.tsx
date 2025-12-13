@@ -48,7 +48,7 @@ export default async function LedgerReportPage({
           ledgerId: lid,
           voucher: {
             date: { lt: fromISO },
-            status: "APPROVED", // <--- STRICT FILTER
+            status: "APPROVED",
           },
         },
       });
@@ -66,7 +66,7 @@ export default async function LedgerReportPage({
           ledgerId: lid,
           voucher: {
             date: { gte: fromISO, lte: toISO },
-            status: "APPROVED", // <--- STRICT FILTER
+            status: "APPROVED",
           },
         },
         include: { voucher: true },
@@ -161,6 +161,10 @@ export default async function LedgerReportPage({
           <table className="w-full text-sm text-left border border-slate-300 print:border-black">
             <thead className="bg-[#003366] text-white text-xs uppercase font-bold print:bg-transparent print:text-black print:border-b-2 print:border-black">
               <tr>
+                {/* ✅ NEW COLUMN HEADER */}
+                <th className="p-2 border-r border-slate-500 print:border-black">
+                  Trans ID
+                </th>
                 <th className="p-2 border-r border-slate-500 print:border-black">
                   Date
                 </th>
@@ -180,8 +184,10 @@ export default async function LedgerReportPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800 print:divide-black">
+              {/* OPENING BALANCE ROW */}
               <tr className="bg-yellow-50 font-bold print:bg-transparent">
-                <td className="p-2 border-r print:border-black" colSpan={3}>
+                {/* ✅ Updated colSpan from 3 to 4 to cover new column */}
+                <td className="p-2 border-r print:border-black" colSpan={4}>
                   Opening Balance
                 </td>
                 <td className="p-2 text-right border-r print:border-black font-mono">
@@ -203,6 +209,10 @@ export default async function LedgerReportPage({
                     key={entry.id}
                     className="print:border-b print:border-gray-300"
                   >
+                    {/* ✅ NEW COLUMN DATA */}
+                    <td className="p-2 border-r border-gray-200 print:border-black font-mono font-bold text-gray-500 text-xs">
+                      {entry.voucher.transactionCode}
+                    </td>
                     <td className="p-2 border-r border-gray-200 print:border-black whitespace-nowrap">
                       {entry.voucher.date.toLocaleDateString()}
                     </td>
@@ -228,8 +238,9 @@ export default async function LedgerReportPage({
 
               {entries.length === 0 && (
                 <tr>
+                  {/* ✅ Updated colSpan from 6 to 7 */}
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="p-8 text-center text-gray-400 italic"
                   >
                     No approved transactions found.
@@ -237,8 +248,10 @@ export default async function LedgerReportPage({
                 </tr>
               )}
 
+              {/* CLOSING TOTAL ROW */}
               <tr className="bg-[#e6f0ff] font-bold border-t-2 border-[#003366] print:bg-transparent print:border-black">
-                <td className="p-2 text-right" colSpan={3}>
+                {/* ✅ Updated colSpan from 3 to 4 */}
+                <td className="p-2 text-right" colSpan={4}>
                   Totals / Closing
                 </td>
                 <td className="p-2 text-right border-r border-blue-200 print:border-black font-mono">
