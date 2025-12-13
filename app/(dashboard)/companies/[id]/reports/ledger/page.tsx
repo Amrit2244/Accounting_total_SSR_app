@@ -168,7 +168,7 @@ export default async function LedgerReportPage({
                 </tr>
               )}
             </tbody>
-            <tfoot className="bg-[#003366] text-white font-bold sticky bottom-0">
+            <tfoot className="bg-[#8f9f83] text-white font-bold sticky bottom-0">
               <tr>
                 <td colSpan={3} className="p-3 text-right">
                   Closing Balance:

@@ -26,7 +26,7 @@
 
 body {
   background-color: #f1f5f9; /* Classic Enterprise Background */
-  color: #1e293b;
+  color: #003366;
   font-family: "Segoe UI", system-ui, sans-serif; /* Standard Windows/Enterprise Font */
   font-size: 14px; /* Slightly smaller for data density */
 }
@@ -40,7 +40,7 @@ textarea {
   border-radius: 4px; /* Boxier look */
   padding: 6px 12px;
   font-size: 13px;
-  color: #0f172a;
+  color: #2a0f0f;
 }
 input:focus,
 select:focus,
@@ -58,7 +58,7 @@ table {
 }
 th {
   background-color: #e2e8f0;
-  color: #334155;
+  color: #c60958;
   font-weight: 700;
   text-transform: uppercase;
   font-size: 11px;

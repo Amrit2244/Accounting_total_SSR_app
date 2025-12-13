@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft, Building2, Plus, FilePlus2 } from "lucide-react";
 
 export default async function ChartOfAccountsPage({
   params,
@@ -13,24 +13,16 @@ export default async function ChartOfAccountsPage({
   const groups = await prisma.accountGroup.findMany({
     where: { companyId },
     include: {
-      // 1. Fetch Ledgers
       ledgers: {
         include: {
-          // 2. Fetch Entries ONLY if Voucher is APPROVED
-          entries: {
-            where: {
-              voucher: { status: "APPROVED" }, // ✅ CORE BANKING LOGIC
-            },
-          },
+          entries: { where: { voucher: { status: "APPROVED" } } },
         },
       },
       children: {
         include: {
           ledgers: {
             include: {
-              entries: {
-                where: { voucher: { status: "APPROVED" } }, // ✅ REPEAT LOGIC FOR SUBGROUPS
-              },
+              entries: { where: { voucher: { status: "APPROVED" } } },
             },
           },
         },
@@ -43,37 +35,63 @@ export default async function ChartOfAccountsPage({
 
   return (
     <div className="flex flex-col h-full bg-slate-100">
-      {/* Header */}
-      <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0">
+      {/* 1. HEADER SECTION (Button is here) */}
+      <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0 sticky top-0 z-20">
         <div>
           <h1 className="text-lg font-bold flex items-center gap-2">
-            <Building2 size={18} /> GENERAL LEDGER SUMMARY
+            <Building2 size={18} /> GENERAL LEDGER
           </h1>
           <p className="text-[11px] text-blue-200 uppercase tracking-wider">
-            Balances reflect verified transactions only
+            Chart of Accounts & Balances
           </p>
         </div>
-        <Link
-          href={`/`}
-          className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"
-        >
-          <ArrowLeft size={12} /> BACK
-        </Link>
+
+        <div className="flex gap-3">
+          {/* ✅ THE CREATE BUTTON */}
+          <Link
+            href={`/companies/${companyId}/chart-of-accounts/create`}
+            className="text-xs font-bold bg-yellow-500 text-[#002244] hover:bg-yellow-400 px-5 py-2 rounded shadow-lg flex items-center gap-2 transition-all transform hover:scale-105"
+          >
+            <Plus size={16} strokeWidth={3} /> NEW LEDGER
+          </Link>
+
+          <Link
+            href={`/`}
+            className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"
+          >
+            <ArrowLeft size={12} /> BACK
+          </Link>
+        </div>
       </div>
 
-      {/* Content */}
+      {/* 2. MAIN LIST CONTENT */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-5xl mx-auto bg-white border border-gray-300 shadow-sm min-h-[600px]">
+          {/* Empty State Check */}
+          {rootGroups.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+              <FilePlus2 size={48} className="mb-4 text-gray-300" />
+              <p>No accounts found.</p>
+              <Link
+                href={`/companies/${companyId}/chart-of-accounts/create`}
+                className="text-blue-600 font-bold mt-2 hover:underline"
+              >
+                Create your first Ledger
+              </Link>
+            </div>
+          )}
+
           {/* Table Header */}
-          <div className="grid grid-cols-12 bg-gray-100 border-b border-gray-300 text-[11px] font-bold text-[#003366] uppercase py-2 px-4">
-            <div className="col-span-8">Particulars</div>
-            <div className="col-span-4 text-right">Closing Balance (INR)</div>
-          </div>
+          {rootGroups.length > 0 && (
+            <div className="grid grid-cols-12 bg-gray-100 border-b border-gray-300 text-[11px] font-bold text-[#003366] uppercase py-2 px-4 sticky top-0 z-10">
+              <div className="col-span-8">Particulars</div>
+              <div className="col-span-4 text-right">Closing Balance (INR)</div>
+            </div>
+          )}
 
           <div className="divide-y divide-gray-200">
             {rootGroups.map((group) => (
               <div key={group.id}>
-                {/* Group Header */}
                 <div className="bg-slate-50 py-2 px-4 flex justify-between items-center border-b border-gray-200">
                   <span className="font-bold text-sm text-slate-800 uppercase">
                     {group.name}
@@ -83,9 +101,8 @@ export default async function ChartOfAccountsPage({
                   </span>
                 </div>
 
-                {/* 1. Main Group Ledgers */}
+                {/* Ledgers */}
                 {group.ledgers.map((l) => {
-                  // Calculate Balance: Opening + (Dr - Cr) from APPROVED entries
                   const dr = l.entries
                     .filter((e) => e.amount > 0)
                     .reduce((sum, e) => sum + e.amount, 0);
@@ -113,10 +130,10 @@ export default async function ChartOfAccountsPage({
                   );
                 })}
 
-                {/* 2. Sub-Groups */}
+                {/* Sub-Groups (Children) */}
                 {group.children.map((child) => (
                   <div key={child.id}>
-                    <div className="py-1.5 px-8 font-bold text-slate-600 text-xs italic bg-slate-50/50">
+                    <div className="py-1.5 px-8 font-bold text-slate-600 text-xs italic bg-slate-50/50 border-b border-gray-100">
                       ↳ {child.name}
                     </div>
                     {child.ledgers.map((l) => {
@@ -127,7 +144,6 @@ export default async function ChartOfAccountsPage({
                         .filter((e) => e.amount < 0)
                         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
                       const net = l.openingBalance + (dr - cr);
-
                       return (
                         <div
                           key={l.id}

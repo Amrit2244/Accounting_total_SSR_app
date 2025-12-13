@@ -2,6 +2,15 @@ import { prisma } from "@/lib/prisma";
 import VoucherForm from "./form";
 import SalesPurchaseForm from "./sales-form";
 import Link from "next/link";
+import clsx from "clsx";
+import {
+  FileText,
+  ArrowLeftRight,
+  CreditCard,
+  Wallet,
+  ShoppingCart,
+  Truck,
+} from "lucide-react";
 
 export default async function CreateVoucherPage({
   params,
@@ -13,9 +22,63 @@ export default async function CreateVoucherPage({
   const { id } = await params;
   const { type } = await searchParams;
   const companyId = parseInt(id);
-  const selectedType = type?.toUpperCase() || "JOURNAL";
 
-  // Fetch ledgers with Group Name for filtering
+  // Default to JOURNAL if no type selected
+  const voucherType = type || "JOURNAL";
+
+  // --- 1. DEFINE VOUCHER TYPES NAVIGATION ---
+  const voucherTypes = [
+    {
+      id: "CONTRA",
+      label: "Contra",
+      icon: ArrowLeftRight,
+      color: "hover:bg-gray-100 border-gray-200 text-gray-700",
+      activeColor:
+        "bg-white border-t-4 border-t-slate-600 text-slate-800 shadow-sm",
+    },
+    {
+      id: "PAYMENT",
+      label: "Payment",
+      icon: CreditCard,
+      color: "hover:bg-orange-50 border-orange-200 text-orange-700",
+      activeColor:
+        "bg-white border-t-4 border-t-orange-500 text-orange-800 shadow-sm",
+    },
+    {
+      id: "RECEIPT",
+      label: "Receipt",
+      icon: Wallet,
+      color: "hover:bg-green-50 border-green-200 text-green-700",
+      activeColor:
+        "bg-white border-t-4 border-t-green-500 text-green-800 shadow-sm",
+    },
+    {
+      id: "JOURNAL",
+      label: "Journal",
+      icon: FileText,
+      color: "hover:bg-blue-50 border-blue-200 text-blue-700",
+      activeColor:
+        "bg-white border-t-4 border-t-blue-500 text-blue-800 shadow-sm",
+    },
+    {
+      id: "SALES",
+      label: "Sales",
+      icon: ShoppingCart,
+      color: "hover:bg-teal-50 border-teal-200 text-teal-700",
+      activeColor:
+        "bg-white border-t-4 border-t-teal-500 text-teal-800 shadow-sm",
+    },
+    {
+      id: "PURCHASE",
+      label: "Purchase",
+      icon: Truck,
+      color: "hover:bg-purple-50 border-purple-200 text-purple-700",
+      activeColor:
+        "bg-white border-t-4 border-t-purple-500 text-purple-800 shadow-sm",
+    },
+  ];
+
+  // --- 2. FETCH DATA ---
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     select: {
@@ -32,103 +95,66 @@ export default async function CreateVoucherPage({
     orderBy: { name: "asc" },
   });
 
-  const isItemInvoice = selectedType === "SALES" || selectedType === "PURCHASE";
+  const isInventory = voucherType === "SALES" || voucherType === "PURCHASE";
 
   return (
-    <div className="max-w-5xl mx-auto bg-white p-8 rounded-lg shadow-md border border-gray-400 mt-6">
-      {/* HEADER TABS */}
-      <div className="flex justify-between items-center mb-6 border-b border-gray-300 pb-4">
-        <h1 className="text-2xl font-extrabold text-black uppercase tracking-tight">
-          {isItemInvoice
-            ? `${selectedType} INVOICE`
-            : `${selectedType} VOUCHER`}
-        </h1>
+    <div className="max-w-6xl mx-auto space-y-4">
+      {/* --- TOP NAVIGATION BAR --- */}
+      <div className="grid grid-cols-6 gap-2 bg-slate-200 p-2 rounded-lg">
+        {voucherTypes.map((v) => {
+          const isActive = voucherType === v.id;
+          return (
+            <Link
+              key={v.id}
+              href={`/companies/${companyId}/vouchers/create?type=${v.id}`}
+              className={clsx(
+                "flex flex-col items-center justify-center p-3 rounded transition-all duration-200 border",
+                isActive
+                  ? v.activeColor
+                  : v.color +
+                      " bg-slate-100 border-transparent opacity-70 hover:opacity-100"
+              )}
+            >
+              <v.icon size={20} className="mb-1" />
+              <span className="text-xs font-bold uppercase">{v.label}</span>
+            </Link>
+          );
+        })}
+      </div>
 
-        <div className="flex gap-2">
-          <Link
-            href={`?type=CONTRA`}
-            className={`px-3 py-1 text-xs font-bold rounded border ${
-              selectedType === "CONTRA"
-                ? "bg-gray-600 text-white border-gray-700"
-                : "bg-gray-100 text-black border-gray-300"
-            }`}
-          >
-            Contra
-          </Link>
-          <Link
-            href={`?type=PAYMENT`}
-            className={`px-3 py-1 text-xs font-bold rounded border ${
-              selectedType === "PAYMENT"
-                ? "bg-red-600 text-white border-red-700"
-                : "bg-gray-100 text-black border-gray-300"
-            }`}
-          >
-            Payment
-          </Link>
-          <Link
-            href={`?type=RECEIPT`}
-            className={`px-3 py-1 text-xs font-bold rounded border ${
-              selectedType === "RECEIPT"
-                ? "bg-green-600 text-white border-green-700"
-                : "bg-gray-100 text-black border-gray-300"
-            }`}
-          >
-            Receipt
-          </Link>
-          <Link
-            href={`?type=JOURNAL`}
-            className={`px-3 py-1 text-xs font-bold rounded border ${
-              selectedType === "JOURNAL"
-                ? "bg-yellow-500 text-black border-yellow-600"
-                : "bg-gray-100 text-black border-gray-300"
-            }`}
-          >
-            Journal
-          </Link>
-          <span className="w-px bg-gray-300 mx-1"></span>
-          <Link
-            href={`?type=SALES`}
-            className={`px-3 py-1 text-xs font-bold rounded border ${
-              selectedType === "SALES"
-                ? "bg-green-400 text-black border-green-500"
-                : "bg-gray-100 text-black border-gray-300"
-            }`}
-          >
-            Sales
-          </Link>
-          <Link
-            href={`?type=PURCHASE`}
-            className={`px-3 py-1 text-xs font-bold rounded border ${
-              selectedType === "PURCHASE"
-                ? "bg-yellow-200 text-black border-yellow-400"
-                : "bg-gray-100 text-black border-gray-300"
-            }`}
-          >
-            Purchase
-          </Link>
+      {/* --- HEADER --- */}
+      <div className="bg-[#003366] text-white p-4 rounded-t-sm shadow-md flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            {voucherType} VOUCHER
+          </h1>
+          <p className="text-[11px] text-blue-200 uppercase tracking-widest">
+            Enter Transaction Details
+          </p>
+        </div>
+        <div className="px-3 py-1 bg-white/10 rounded text-xs font-mono font-bold">
+          FY: {new Date().getFullYear()}-
+          {(new Date().getFullYear() + 1).toString().slice(-2)}
         </div>
       </div>
 
-      {/* KEY PROP FIX: 
-         We add key={selectedType} so React completely resets the form 
-         when you switch tabs. This fixes the "type not changing" bug.
-      */}
-      {isItemInvoice ? (
-        <SalesPurchaseForm
-          key={selectedType}
-          companyId={companyId}
-          type={selectedType}
-          ledgers={ledgers}
-          items={items}
-        />
-      ) : (
-        <VoucherForm
-          key={selectedType}
-          companyId={companyId}
-          ledgers={ledgers}
-          defaultType={selectedType}
-        />
-      )}
+      {/* --- FORM CONTAINER --- */}
+      <div className="bg-white p-8 border border-gray-300 shadow-sm rounded-b-sm min-h-[500px]">
+        {isInventory ? (
+          <SalesPurchaseForm
+            companyId={companyId}
+            type={voucherType}
+            ledgers={ledgers}
+            items={items}
+          />
+        ) : (
+          <VoucherForm
+            companyId={companyId}
+            ledgers={ledgers}
+            defaultType={voucherType}
+          />
+        )}
+      </div>
     </div>
   );
 }

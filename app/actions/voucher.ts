@@ -6,7 +6,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
-import { validateVoucherRules } from "@/lib/voucher-rules";
 
 const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
@@ -45,7 +44,7 @@ async function getCurrentUserId() {
 }
 
 // ==========================================
-// 1. CREATE VOUCHER (Handles Accounting & Inventory)
+// 1. CREATE VOUCHER
 // ==========================================
 export async function createVoucher(prevState: any, formData: FormData) {
   const result = VoucherSchema.safeParse(Object.fromEntries(formData));
@@ -72,13 +71,9 @@ export async function createVoucher(prevState: any, formData: FormData) {
   const isInventoryVoucher =
     (type === "SALES" || type === "PURCHASE") && inventoryRows;
 
-  // Validate Rules (Only for standard accounting vouchers)
+  // Validation for Accounting Vouchers
   if (rows && !isInventoryVoucher) {
     const entries = JSON.parse(rows);
-    const ruleError = await validateVoucherRules(type, entries);
-    if (ruleError) return { error: ruleError };
-
-    // Math Check
     let totalDr = 0,
       totalCr = 0;
     entries.forEach((e: any) => {
@@ -94,6 +89,9 @@ export async function createVoucher(prevState: any, formData: FormData) {
       };
     }
   }
+
+  // GENERATE 5-DIGIT BANK CODE
+  const transactionCode = Math.floor(10000 + Math.random() * 90000).toString();
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -115,32 +113,22 @@ export async function createVoucher(prevState: any, formData: FormData) {
         data: { lastNo: sequence.lastNo + 1 },
       });
 
-      // B. Maker-Checker Status
-      // Default: PENDING. Only ADMIN/CHECKER can auto-approve.
-      const user = await tx.user.findUnique({ where: { id: userId } });
-      const status =
-        user?.role === "CHECKER" || user?.role === "ADMIN"
-          ? "APPROVED"
-          : "PENDING";
-      const verifierId = status === "APPROVED" ? userId : null;
-
-      // C. Create Header
+      // B. Create Voucher Header
       const voucher = await tx.voucher.create({
         data: {
           date: new Date(date),
           voucherNo: nextNo,
+          transactionCode: transactionCode,
           type: type,
           narration,
           companyId: cid,
-          status: status,
+          status: "PENDING",
           createdById: userId,
-          verifiedById: verifierId,
         },
       });
 
-      // D. Logic Branch: Inventory vs Accounting
+      // C. Inventory Logic
       if (isInventoryVoucher && inventoryRows) {
-        // --- INVENTORY LOGIC ---
         const items = JSON.parse(inventoryRows);
         let totalAmount = 0;
 
@@ -174,14 +162,14 @@ export async function createVoucher(prevState: any, formData: FormData) {
               ledgerId: partyId,
               amount: totalAmount,
             },
-          }); // Party Dr
+          });
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: accountId,
               amount: -totalAmount,
             },
-          }); // Sales Cr
+          });
         } else {
           await tx.voucherEntry.create({
             data: {
@@ -189,17 +177,17 @@ export async function createVoucher(prevState: any, formData: FormData) {
               ledgerId: partyId,
               amount: -totalAmount,
             },
-          }); // Party Cr
+          });
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: accountId,
               amount: totalAmount,
             },
-          }); // Purchase Dr
+          });
         }
       } else if (rows) {
-        // --- STANDARD ACCOUNTING LOGIC ---
+        // D. Standard Accounting Logic
         const entries = JSON.parse(rows);
         for (const entry of entries) {
           const val = parseFloat(entry.amount);
@@ -215,19 +203,36 @@ export async function createVoucher(prevState: any, formData: FormData) {
         }
       }
     });
+
+    return { success: true, code: transactionCode };
   } catch (e) {
     console.error(e);
     return { error: "Failed to save voucher. Database error." };
   }
-
-  revalidatePath(`/companies/${cid}/vouchers`);
-  redirect(`/companies/${cid}/vouchers`);
 }
 
 // ==========================================
-// 2. VERIFY VOUCHER (Called by VerifyBtn)
+// 2. FETCH VOUCHER BY CODE (FIXED)
 // ==========================================
-export async function verifyVoucher(voucherId: number) {
+export async function getVoucherByCode(code: string, companyId: number) {
+  const voucher = await prisma.voucher.findFirst({
+    where: {
+      transactionCode: code,
+      companyId: companyId,
+    },
+    include: {
+      entries: { include: { ledger: true } },
+      inventory: true, // ✅ FIXED: Matches your Schema name 'inventory'
+      createdBy: true,
+    },
+  });
+  return voucher;
+}
+
+// ==========================================
+// 3. VERIFY VOUCHER ACTION
+// ==========================================
+export async function verifyVoucherAction(voucherId: number) {
   const userId = await getCurrentUserId();
   if (!userId) return { error: "Unauthorized" };
 
@@ -238,9 +243,7 @@ export async function verifyVoucher(voucherId: number) {
 
     if (!voucher) return { error: "Voucher not found" };
 
-    // Maker-Checker Security Rule:
     if (voucher.createdById === userId) {
-      // In strict banking, you cannot verify your own entry.
       return { error: "Maker cannot act as Checker for own entry." };
     }
 
@@ -260,7 +263,12 @@ export async function verifyVoucher(voucherId: number) {
 }
 
 // ==========================================
-// 3. DELETE VOUCHER
+// 4. ALIAS EXPORT (Prevents 'verifyVoucher not found' error)
+// ==========================================
+export const verifyVoucher = verifyVoucherAction;
+
+// ==========================================
+// 5. DELETE VOUCHER
 // ==========================================
 export async function deleteVoucher(voucherId: number) {
   const userId = await getCurrentUserId();
@@ -272,19 +280,7 @@ export async function deleteVoucher(voucherId: number) {
     });
     if (!voucher) return { error: "Voucher not found" };
 
-    // Deletion Rules
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-
-    if (voucher.status === "APPROVED") {
-      if (user?.role !== "ADMIN") {
-        return { error: "Approved vouchers can only be deleted by Admin." };
-      }
-    } else {
-      if (voucher.createdById !== userId && user?.role !== "ADMIN") {
-        return { error: "You can only delete your own pending vouchers." };
-      }
-    }
-
+    // Note: Prisma usually handles cascade delete, but we delete manually to be safe if cascade isn't set in DB
     await prisma.inventoryEntry.deleteMany({ where: { voucherId } });
     await prisma.voucherEntry.deleteMany({ where: { voucherId } });
     await prisma.voucher.delete({ where: { id: voucherId } });

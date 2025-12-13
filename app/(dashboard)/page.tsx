@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import Link from "next/link";
-import { Plus, LogOut, User, Building2, Briefcase } from "lucide-react";
+import { Plus, LogOut, Building2, Briefcase } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 
 const secretKey =

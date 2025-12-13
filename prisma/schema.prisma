@@ -132,6 +132,7 @@ model StockItem {
 model Voucher {
   id            Int            @id @default(autoincrement())
   voucherNo     String         // Auto-generated (e.g. "1", "2")
+  transactionCode String? @unique  // ✅ NEW: 5 Digit Bank Code
   date          DateTime
   type          String         // CONTRA, PAYMENT, RECEIPT, JOURNAL, SALES, PURCHASE
   narration     String?
