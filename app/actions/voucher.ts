@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
@@ -28,6 +27,7 @@ const VoucherSchema = z.object({
   inventoryRows: z.string().optional(),
   partyLedgerId: z.string().optional(),
   salesPurchaseLedgerId: z.string().optional(),
+  taxLedgerId: z.string().optional(), // ✅ NEW: Tax Ledger ID
 });
 
 // --- Helper: Get Logged In User ---
@@ -62,7 +62,9 @@ export async function createVoucher(prevState: any, formData: FormData) {
     inventoryRows,
     partyLedgerId,
     salesPurchaseLedgerId,
+    taxLedgerId, // ✅ Extract Tax Ledger
   } = result.data;
+
   const cid = parseInt(companyId);
   const userId = await getCurrentUserId();
 
@@ -71,7 +73,7 @@ export async function createVoucher(prevState: any, formData: FormData) {
   const isInventoryVoucher =
     (type === "SALES" || type === "PURCHASE") && inventoryRows;
 
-  // Validation for Accounting Vouchers
+  // Validation for Standard Accounting Vouchers (Journal, Payment, etc.)
   if (rows && !isInventoryVoucher) {
     const entries = JSON.parse(rows);
     let totalDr = 0,
@@ -94,9 +96,8 @@ export async function createVoucher(prevState: any, formData: FormData) {
   const transactionCode = Math.floor(10000 + Math.random() * 90000).toString();
 
   try {
-    // We declare voucher variable outside transaction to return ID later
     const newVoucher = await prisma.$transaction(async (tx) => {
-      // A. Auto-Numbering
+      // A. Auto-Numbering Logic
       let sequence = await tx.voucherSequence.findUnique({
         where: { companyId_voucherType: { companyId: cid, voucherType: type } },
       });
@@ -128,67 +129,110 @@ export async function createVoucher(prevState: any, formData: FormData) {
         },
       });
 
-      // C. Inventory Logic
+      // C. Inventory & Tax Logic (SALES / PURCHASE)
       if (isInventoryVoucher && inventoryRows) {
         const items = JSON.parse(inventoryRows);
-        let totalAmount = 0;
+        let itemTotal = 0; // Pure Goods Value
+        let taxTotal = 0; // Tax Value
 
         for (const item of items) {
           const qty = parseFloat(item.qty);
           const rate = parseFloat(item.rate);
-          const amt = qty * rate;
-          totalAmount += amt;
 
+          // Calculate Line Amount and Tax
+          const lineAmount = qty * rate;
+          const gstRate = parseFloat(item.gst || "0"); // Get GST% from row
+          const lineTax = lineAmount * (gstRate / 100);
+
+          itemTotal += lineAmount;
+          taxTotal += lineTax;
+
+          // Save Inventory Entry
           await tx.inventoryEntry.create({
             data: {
               voucherId: voucher.id,
               itemId: parseInt(item.itemId),
               quantity: type === "SALES" ? -qty : qty,
               rate: rate,
-              amount: amt,
+              amount: lineAmount, // Store base amount in inventory
             },
           });
         }
 
-        // Auto-Post to Ledgers
+        // --- ACCOUNTING POSTING LOGIC ---
         if (!partyLedgerId || !salesPurchaseLedgerId)
           throw new Error("Missing Ledgers");
+
         const partyId = parseInt(partyLedgerId);
         const accountId = parseInt(salesPurchaseLedgerId);
 
+        // Grand Total = Item Total + Tax Total (only if tax ledger is selected)
+        const finalTax = taxLedgerId ? taxTotal : 0;
+        const grandTotal = itemTotal + finalTax;
+
         if (type === "SALES") {
+          // 1. Debit Party (Grand Total: Goods + Tax)
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: partyId,
-              amount: totalAmount,
+              amount: grandTotal,
             },
           });
+
+          // 2. Credit Sales Account (Pure Goods Value)
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: accountId,
-              amount: -totalAmount,
+              amount: -itemTotal,
             },
           });
+
+          // 3. Credit Tax Account (Tax Value) - Only if enabled
+          if (taxLedgerId) {
+            await tx.voucherEntry.create({
+              data: {
+                voucherId: voucher.id,
+                ledgerId: parseInt(taxLedgerId),
+                amount: -finalTax,
+              },
+            });
+          }
         } else {
+          // PURCHASE LOGIC
+
+          // 1. Credit Party (Grand Total)
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: partyId,
-              amount: -totalAmount,
+              amount: -grandTotal,
             },
           });
+
+          // 2. Debit Purchase Account (Pure Goods Value)
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: accountId,
-              amount: totalAmount,
+              amount: itemTotal,
             },
           });
+
+          // 3. Debit Tax Account (Tax Value) - Only if enabled
+          if (taxLedgerId) {
+            await tx.voucherEntry.create({
+              data: {
+                voucherId: voucher.id,
+                ledgerId: parseInt(taxLedgerId),
+                amount: finalTax,
+              },
+            });
+          }
         }
       } else if (rows) {
-        // D. Standard Accounting Logic
+        // D. Standard Accounting Logic (No Inventory)
         const entries = JSON.parse(rows);
         for (const entry of entries) {
           const val = parseFloat(entry.amount);
@@ -207,7 +251,6 @@ export async function createVoucher(prevState: any, formData: FormData) {
       return voucher;
     });
 
-    // ✅ RETURN ID HERE
     return { success: true, code: transactionCode, id: newVoucher.id };
   } catch (e) {
     console.error(e);
