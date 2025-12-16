@@ -46,16 +46,19 @@ export default function SalesPurchaseForm({
     { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
 
-  // --- FILTER LEDGERS ---
+  // --- FILTER LEDGERS (FIXED) ---
   const partyLedgers = useMemo(
     () =>
       ledgers.filter((l) => {
         const g = l.group.name.toLowerCase();
+        // ✅ FIX: Added logic to include your custom "Sales" group in the Party list
         return (
           g.includes("debtor") ||
           g.includes("creditor") ||
           g.includes("cash") ||
-          g.includes("bank")
+          g.includes("bank") ||
+          g === "sales" || // Exact match for group named "Sales"
+          g.includes("sale a/c") // Match if group is named "Sales A/c"
         );
       }),
     [ledgers]
@@ -79,7 +82,8 @@ export default function SalesPurchaseForm({
       ledgers.filter(
         (l) =>
           l.group.name.toLowerCase().includes("duties") ||
-          l.group.name.toLowerCase().includes("tax")
+          l.group.name.toLowerCase().includes("tax") ||
+          l.group.name.toLowerCase().includes("gst")
       ),
     [ledgers]
   );
@@ -113,6 +117,7 @@ export default function SalesPurchaseForm({
       ...rows,
       { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
     ]);
+
   const removeRow = (index: number) => {
     if (rows.length > 1) {
       const n = [...rows];
@@ -136,23 +141,10 @@ export default function SalesPurchaseForm({
           {type} Invoice Created
         </h2>
         <p className="text-slate-500 mb-8">
-          Authorization required. Share this Transaction ID with the Approver.
+          Transaction ID:{" "}
+          <span className="font-mono font-bold text-black">{state.code}</span>
         </p>
-        <div
-          className="bg-white border-2 border-[#003366] rounded-xl p-8 shadow-lg relative group cursor-pointer hover:bg-blue-50 transition-colors"
-          onClick={() => navigator.clipboard.writeText(state.code)}
-        >
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-            Transaction ID
-          </p>
-          <div className="text-6xl font-mono font-black text-[#003366] tracking-[0.2em]">
-            {state.code}
-          </div>
-          <div className="absolute top-4 right-4 text-slate-300 group-hover:text-blue-500">
-            <Copy size={20} />
-          </div>
-        </div>
-        <div className="mt-10 flex gap-4">
+        <div className="flex gap-4">
           {state.id && (
             <Link
               href={`/companies/${companyId}/vouchers/${state.id}/print`}
@@ -200,9 +192,9 @@ export default function SalesPurchaseForm({
       )}
 
       {/* ✅ HEADER SECTION */}
-      {/* Designed to be compact but clean. White background makes inputs pop. */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+        {/* ROW 1: Basic Details */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end mb-4">
           {/* 1. Date */}
           <div className="md:col-span-2">
             <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
@@ -213,12 +205,25 @@ export default function SalesPurchaseForm({
               type="date"
               defaultValue={new Date().toISOString().split("T")[0]}
               required
-              className="w-10/12 h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm"
+              className="w-full h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm"
             />
           </div>
 
-          {/* 2. Party Name */}
-          <div className="md:col-span-3">
+          {/* 2. Reference No */}
+          <div className="md:col-span-2">
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              Reference No
+            </label>
+            <input
+              name="reference"
+              type="text"
+              placeholder="e.g. INV-001"
+              className="w-full h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm"
+            />
+          </div>
+
+          {/* 3. Party Name (UPDATED FILTER) */}
+          <div className="md:col-span-4">
             <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
               Party A/c Name
             </label>
@@ -226,7 +231,7 @@ export default function SalesPurchaseForm({
               value={partyId}
               onChange={(e) => setPartyId(e.target.value)}
               required
-              className="w-10/12 h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm bg-white"
+              className="w-full h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm bg-white"
             >
               <option value="">Select Party</option>
               {partyLedgers.map((l) => (
@@ -237,18 +242,18 @@ export default function SalesPurchaseForm({
             </select>
           </div>
 
-          {/* 3. Sales/Purchase Ledger */}
-          <div className="md:col-span-3">
+          {/* 4. Sales/Purchase Ledger */}
+          <div className="md:col-span-4">
             <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-              {type} Ledger
+              {type} Account
             </label>
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
               required
-              className="w-10/12 h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm bg-white"
+              className="w-full h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition-all shadow-sm bg-white"
             >
-              <option value="">Select Account</option>
+              <option value="">Select Sales/Purchase Ledger</option>
               {accountLedgers.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
@@ -256,13 +261,15 @@ export default function SalesPurchaseForm({
               ))}
             </select>
           </div>
+        </div>
 
-          {/* 4. Tax Toggle & Ledger */}
-          <div className="md:col-span-4 flex items-end gap-3">
-            {/* Toggle Button */}
+        {/* ROW 2: Taxation Details */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          {/* Tax Toggle */}
+          <div className="md:col-span-12 flex items-center gap-4">
             <div
               onClick={() => setEnableTax(!enableTax)}
-              className={`h-8 px-3 rounded-md border cursor-pointer flex items-center gap-2 transition-all select-none ${
+              className={`h-8 px-3 rounded-md border cursor-pointer flex items-center gap-2 select-none transition-colors ${
                 enableTax
                   ? "bg-orange-50 border-orange-200 text-orange-700"
                   : "bg-slate-50 border-slate-200 text-slate-500"
@@ -270,20 +277,31 @@ export default function SalesPurchaseForm({
             >
               <Settings2 size={14} />
               <span className="text-[10px] font-bold uppercase">
-                {enableTax ? "Tax Enabled" : "Tax Disabled"}
+                {enableTax ? "Tax Enabled" : "Enable Tax"}
               </span>
             </div>
 
-            {/* Tax Dropdown (Shows only if enabled) */}
             {enableTax && (
-              <div className="flex-1 animate-in slide-in-from-left-2 duration-200">
+              <div className="flex-1 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
+                <input
+                  name="placeOfSupply"
+                  type="text"
+                  placeholder="Place of Supply"
+                  className="h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 w-1/3 outline-none"
+                />
+                <input
+                  name="partyGstin"
+                  type="text"
+                  placeholder="Party GSTIN"
+                  className="h-8 border border-slate-300 px-2 rounded-md text-xs font-semibold text-slate-700 w-1/3 outline-none uppercase"
+                />
                 <select
                   value={taxLedgerId}
                   onChange={(e) => setTaxLedgerId(e.target.value)}
-                  required
-                  className="w-full h-8 border border-orange-300 bg-orange-50/50 px-2 rounded-md text-xs font-bold text-orange-800 outline-none focus:ring-2 focus:ring-orange-100 shadow-sm"
+                  required={enableTax}
+                  className="h-8 border border-orange-300 bg-orange-50 px-2 rounded-md text-xs font-bold text-orange-800 w-1/3 outline-none"
                 >
-                  <option value="">Select Duty Ledger</option>
+                  <option value="">Select Tax Ledger</option>
                   {taxLedgers.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -298,7 +316,6 @@ export default function SalesPurchaseForm({
 
       {/* ✅ INVENTORY TABLE SECTION */}
       <div className="flex-1 bg-white border border-slate-300 rounded-lg overflow-hidden flex flex-col shadow-sm">
-        {/* Table Header */}
         <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-200 text-slate-600 p-2 text-[10px] font-bold uppercase tracking-wider">
           <div className="col-span-4 pl-2">Item Description</div>
           <div className="col-span-2 text-right">Quantity</div>
@@ -307,7 +324,6 @@ export default function SalesPurchaseForm({
           <div className="col-span-1 text-center">Action</div>
         </div>
 
-        {/* Table Body */}
         <div className="divide-y divide-slate-100 overflow-y-auto bg-white max-h-[400px]">
           {rows.map((row, index) => (
             <div
@@ -372,7 +388,6 @@ export default function SalesPurchaseForm({
           ))}
         </div>
 
-        {/* Add Row Button */}
         <button
           type="button"
           onClick={addRow}
@@ -384,7 +399,6 @@ export default function SalesPurchaseForm({
 
       {/* ✅ FOOTER SECTION */}
       <div className="mt-4 flex gap-4 items-start">
-        {/* Left: Narration */}
         <div className="flex-1">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
             Narration
@@ -397,7 +411,6 @@ export default function SalesPurchaseForm({
           ></textarea>
         </div>
 
-        {/* Right: Totals Card */}
         <div className="bg-[#003366] text-white p-4 rounded-lg shadow-lg w-72">
           <div className="flex justify-between items-center text-xs font-medium text-blue-100 mb-1">
             <span>Sub Total</span>

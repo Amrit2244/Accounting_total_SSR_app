@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { Plus, FileText, CheckCircle, Clock } from "lucide-react";
+import { Plus, FileText } from "lucide-react";
 import TransactionSearch from "@/components/TransactionSearch";
-import DeleteButton from "@/components/DeleteButton";
-import { deleteVoucher } from "@/app/actions/voucher";
+import VoucherTable from "@/components/VoucherTable";
 
 export default async function VoucherListPage({
   params,
@@ -13,17 +12,25 @@ export default async function VoucherListPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
+  // FIXED: Kept the correct query that filters by Company ID and includes details
   const vouchers = await prisma.voucher.findMany({
     where: { companyId },
-    include: { entries: { include: { ledger: true } }, createdBy: true },
+    include: {
+      entries: {
+        include: { ledger: true }, // To get Ledger Names
+      },
+      inventory: true, // To get Stock Items
+      createdBy: true,
+    },
     orderBy: { date: "desc" },
   });
 
-  const getTotal = (entries: any[]) =>
-    entries.reduce((acc, curr) => acc + (curr.amount > 0 ? curr.amount : 0), 0);
+  // REMOVED: Duplicate 'const vouchers' declaration
+  // REMOVED: Premature 'return <VoucherList...>'
 
   return (
     <div className="space-y-4">
+      {/* HEADER */}
       <div className="flex justify-between items-center bg-white p-4 border border-gray-300 shadow-sm rounded-sm">
         <div>
           <h1 className="text-lg font-bold text-[#003366] flex items-center gap-2">
@@ -50,69 +57,9 @@ export default async function VoucherListPage({
         </div>
       </div>
 
-      <div className="bg-white border border-gray-300 shadow-sm overflow-hidden rounded-sm">
-        <table className="w-full text-left">
-          <thead className="bg-[#e6f0ff] border-b border-gray-300 text-[11px] font-bold text-[#003366] uppercase">
-            <tr>
-              {/* ✅ NEW COLUMN HEADER */}
-              <th className="px-4 py-3 border-r">Trans ID</th>
-              <th className="px-4 py-3 border-r">Date</th>
-              <th className="px-4 py-3 border-r">Ref No</th>
-              <th className="px-4 py-3 border-r">Particulars</th>
-              <th className="px-4 py-3 text-right border-r">Amount</th>
-              <th className="px-4 py-3 text-center border-r">Status</th>
-              <th className="px-4 py-3 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
-            {vouchers.map((v) => (
-              <tr key={v.id} className="hover:bg-yellow-50 transition-colors">
-                {/* ✅ NEW COLUMN DATA */}
-                <td className="px-4 py-3 font-mono font-bold text-gray-500 border-r">
-                  {v.transactionCode}
-                </td>
-                <td className="px-4 py-3 font-medium border-r">
-                  {v.date.toLocaleDateString()}
-                </td>
-                <td className="px-4 py-3 font-bold text-[#003366] border-r">
-                  {v.type} #{v.voucherNo}
-                </td>
-                <td className="px-4 py-3 border-r">
-                  <div className="font-bold text-gray-900">
-                    {v.entries[0]?.ledger.name}
-                  </div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">
-                    By: {v.createdBy?.username}
-                  </div>
-                </td>
-                <td className="px-4 py-3 font-bold text-right font-mono border-r">
-                  {getTotal(v.entries).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                  })}
-                </td>
-                <td className="px-4 py-3 text-center border-r">
-                  {v.status === "APPROVED" ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 text-green-800 border border-green-200 text-[10px] font-bold">
-                      <CheckCircle size={10} /> AUTH
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-orange-100 text-orange-800 border border-orange-200 text-[10px] font-bold">
-                      <Clock size={10} /> PENDING
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-center flex justify-center gap-2">
-                  <DeleteButton
-                    id={v.id}
-                    companyId={companyId}
-                    action={deleteVoucher}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* TABLE */}
+      {/* Passing the fetched data to the Client Component */}
+      <VoucherTable vouchers={vouchers} companyId={companyId} />
     </div>
   );
 }

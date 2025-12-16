@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Package, Plus, Edit } from "lucide-react";
-import DeleteButton from "@/components/DeleteButton";
-import { deleteStockItem } from "@/app/actions/masters"; // Ensure path is 'masters' (plural)
+// 1. Added 'Scale' to imports
+import { ArrowLeft, Package, Plus, Layers, Scale } from "lucide-react";
+import InventoryTable from "@/components/InventoryTable";
 
 export default async function InventoryListPage({
   params,
@@ -26,77 +26,43 @@ export default async function InventoryListPage({
         <h1 className="text-2xl font-bold text-[#003366] flex items-center gap-2">
           <Package size={24} /> STOCK ITEMS
         </h1>
-        <Link
-          href={`/companies/${companyId}`}
-          className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1"
-        >
-          <ArrowLeft size={16} /> Back
-        </Link>
-      </div>
+        <div className="flex gap-3">
+          {/* Stock Groups Button */}
+          <Link
+            href={`/companies/${companyId}/inventory/groups`}
+            className="text-sm font-bold bg-white text-[#003366] border border-[#003366] px-4 py-2 rounded hover:bg-slate-50 flex items-center gap-2"
+          >
+            <Layers size={16} /> Stock Groups
+          </Link>
 
-      {/* TABLE CONTAINER */}
-      <div className="bg-white border border-gray-300 shadow-sm rounded-lg overflow-hidden">
-        {/* TABLE HEADER / TOOLBAR */}
-        <div className="bg-gray-100 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
-          <span className="text-xs font-bold text-gray-600 uppercase">
-            Item List
-          </span>
+          {/* NEW: Units Button */}
+          <Link
+            href={`/companies/${companyId}/inventory/units`}
+            className="text-sm font-bold bg-white text-[#003366] border border-[#003366] px-4 py-2 rounded hover:bg-slate-50 flex items-center gap-2"
+          >
+            <Scale size={16} /> Units
+          </Link>
+
+          {/* Create Item Button (Primary) */}
           <Link
             href={`/companies/${companyId}/inventory/create`}
-            className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+            className="text-sm font-bold bg-[#003366] text-white px-4 py-2 rounded hover:bg-[#002244] flex items-center gap-2"
           >
-            <Plus size={14} /> Create New Item
+            <Plus size={16} /> Create Item
+          </Link>
+
+          {/* Back Button */}
+          <Link
+            href={`/companies/${companyId}`}
+            className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1 border border-gray-300 px-4 py-2 rounded hover:bg-gray-50"
+          >
+            <ArrowLeft size={16} /> Back
           </Link>
         </div>
-
-        {/* TABLE */}
-        <table className="w-full text-sm text-left">
-          <thead className="bg-[#003366] text-white text-xs uppercase font-bold">
-            <tr>
-              <th className="p-3 pl-6">Item Name</th>
-              <th className="p-3">Group</th>
-              <th className="p-3 text-center">Unit</th>
-              <th className="p-3 text-right">Tax Rate</th>
-              <th className="p-3 text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {items.map((i) => (
-              <tr key={i.id} className="hover:bg-blue-50">
-                <td className="p-3 pl-6 font-bold text-gray-800">{i.name}</td>
-                <td className="p-3 text-gray-600">{i.group?.name || "-"}</td>
-                <td className="p-3 text-center text-gray-500">
-                  {i.unit?.symbol || "-"}
-                </td>
-                <td className="p-3 text-right font-mono">{i.gstRate}%</td>
-                <td className="p-3 text-center flex justify-center gap-3">
-                  {/* EDIT BUTTON */}
-                  <Link
-                    href={`/companies/${companyId}/inventory/${i.id}/edit`}
-                    className="text-orange-400 hover:text-orange-600 p-2 hover:bg-orange-50 rounded transition-colors"
-                  >
-                    <Edit size={16} />
-                  </Link>
-
-                  {/* DELETE BUTTON */}
-                  <DeleteButton
-                    id={i.id}
-                    companyId={companyId}
-                    action={deleteStockItem}
-                  />
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={5} className="p-6 text-center text-gray-400">
-                  No stock items found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
       </div>
+
+      {/* NEW INTERACTIVE TABLE */}
+      <InventoryTable items={items} companyId={companyId} />
     </div>
   );
 }

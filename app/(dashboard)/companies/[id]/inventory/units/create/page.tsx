@@ -1,6 +1,7 @@
-import CreateUnitForm from "./form";
+import { ArrowLeft, Scale } from "lucide-react";
+import Link from "next/link";
+import UnitForm from "./form"; // We create this next
 
-// Server Component: safely unwraps params
 export default async function CreateUnitPage({
   params,
 }: {
@@ -10,15 +11,23 @@ export default async function CreateUnitPage({
   const companyId = parseInt(id);
 
   return (
-    <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md border border-gray-400 mt-10">
-      <div className="border-b border-gray-300 pb-4 mb-6">
-        <h2 className="text-2xl font-extrabold text-black">Create Unit</h2>
-        <p className="text-sm text-gray-600">
-          Define how you measure your items
-        </p>
+    <div className="max-w-md mx-auto py-8">
+      <div className="flex items-center gap-4 mb-6">
+        <Link
+          href={`/companies/${companyId}/inventory/units`}
+          className="p-2 hover:bg-slate-100 rounded-full"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Scale className="w-6 h-6" />
+          Create Unit
+        </h1>
       </div>
 
-      <CreateUnitForm companyId={companyId} />
+      <div className="bg-white p-6 rounded-lg shadow border">
+        <UnitForm companyId={companyId} />
+      </div>
     </div>
   );
 }

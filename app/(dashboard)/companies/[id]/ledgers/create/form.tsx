@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { createLedger } from "@/app/actions/master";
+import { createLedger } from "@/app/actions/masters";
 import Link from "next/link";
 
 type Group = {

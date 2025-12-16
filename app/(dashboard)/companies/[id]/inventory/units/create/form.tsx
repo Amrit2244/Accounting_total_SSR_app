@@ -1,67 +1,87 @@
 "use client";
 
 import { useActionState } from "react";
-import { createUnit } from "@/app/actions/inventory";
-import Link from "next/link";
+import { useFormStatus } from "react-dom"; // Import this to handle loading state
+import { createUnit } from "@/app/actions/masters";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Save } from "lucide-react"; // Icon for the button
 
-export default function CreateUnitForm({ companyId }: { companyId: number }) {
-  const [state, action, isPending] = useActionState(createUnit, undefined);
+// 1. Create a helper component for the button to handle "Pending" state
+function SubmitButton() {
+  const { pending } = useFormStatus();
 
   return (
-    <form action={action} className="space-y-6">
-      {/* Pass the unwrapped ID correctly */}
+    <button
+      type="submit"
+      disabled={pending}
+      className="flex items-center justify-center gap-2 w-full bg-[#003366] hover:bg-[#002244] text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {pending ? (
+        "Saving..."
+      ) : (
+        <>
+          <Save className="w-4 h-4" /> Save Unit
+        </>
+      )}
+    </button>
+  );
+}
+
+// 2. The Main Form Component
+export default function UnitForm({ companyId }: { companyId: number }) {
+  const [state, action] = useActionState(createUnit, {
+    message: null,
+    errors: {},
+  });
+
+  return (
+    <form action={action} className="space-y-4">
       <input type="hidden" name="companyId" value={companyId} />
 
-      {state?.error && (
-        <p className="text-red-700 bg-red-100 p-2 rounded mb-4 font-bold border border-red-200">
-          {state.error}
-        </p>
-      )}
-
-      {state?.success && (
-        <p className="text-green-800 bg-green-100 p-2 rounded mb-4 font-bold border border-green-200">
-          Unit Created Successfully!
-        </p>
-      )}
-
-      <div>
-        <label className="block text-sm font-bold text-black mb-1">
-          Symbol (e.g. Nos)
-        </label>
-        <input
+      {/* Symbol Field */}
+      <div className="space-y-2">
+        <Label htmlFor="symbol">
+          Symbol <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="symbol"
           name="symbol"
+          placeholder="e.g. kg, pcs, mtr"
           required
-          placeholder="e.g. Kg, Pcs, Box"
-          className="w-full border border-gray-400 p-2 rounded text-black font-medium focus:ring-2 focus:ring-black outline-none"
         />
+        {state?.errors?.symbol && (
+          <p className="text-sm text-red-500">{state.errors.symbol[0]}</p>
+        )}
       </div>
 
-      <div>
-        <label className="block text-sm font-bold text-black mb-1">
-          Formal Name (e.g. Numbers)
-        </label>
-        <input
+      {/* Name Field */}
+      <div className="space-y-2">
+        <Label htmlFor="name">
+          Formal Name <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="name"
           name="name"
+          placeholder="e.g. Kilograms, Pieces, Meters"
           required
-          placeholder="e.g. Kilograms, Pieces"
-          className="w-full border border-gray-400 p-2 rounded text-black font-medium focus:ring-2 focus:ring-black outline-none"
         />
+        {state?.errors?.name && (
+          <p className="text-sm text-red-500">{state.errors.name[0]}</p>
+        )}
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <Link
-          href={`/companies/${companyId}/inventory`}
-          className="px-4 py-2 border border-gray-400 rounded text-black font-bold hover:bg-gray-100"
-        >
-          Back
-        </Link>
-        <button
-          disabled={isPending}
-          className="flex-1 bg-black text-white py-2 rounded font-bold hover:bg-gray-800 disabled:opacity-50"
-        >
-          {isPending ? "Saving..." : "Save Unit"}
-        </button>
+      {/* The Save Button is here */}
+      <div className="pt-4">
+        <SubmitButton />
       </div>
+
+      {/* Error Message Display */}
+      {state?.message && (
+        <div className="p-3 bg-red-100 border border-red-200 rounded text-red-600 text-sm text-center">
+          {state.message}
+        </div>
+      )}
     </form>
   );
 }
