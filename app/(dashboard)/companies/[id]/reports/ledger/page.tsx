@@ -132,7 +132,12 @@ export default async function LedgerReportPage({
               defaultTo={defaultTo}
             />
             <div className="h-8 w-px bg-slate-200 ml-2" />
-            <ReportActionButtons />
+            {/* Update this component call to pass the variables */}
+            <ReportActionButtons
+              ledgerName={reportData?.name}
+              entries={entries}
+              openingBalance={openingBalance}
+            />
           </div>
         </div>
       </div>

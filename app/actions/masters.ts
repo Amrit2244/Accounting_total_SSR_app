@@ -57,7 +57,7 @@ const LedgerSchema = z.object({
   address: z
     .string()
     .optional()
-    .transform((v) => (v === "" ? null : v)), // Added address
+    .transform((v) => (v === "" ? null : v)),
 });
 
 const UpdateLedgerSchema = z.object({
@@ -151,7 +151,6 @@ export async function createLedger(prevState: State, formData: FormData) {
     gstin,
     address,
   } = validatedFields.data;
-
   let finalBalance =
     balanceType === "Cr" ? -Math.abs(openingBalance) : Math.abs(openingBalance);
 
@@ -165,13 +164,12 @@ export async function createLedger(prevState: State, formData: FormData) {
         tallyName,
         state,
         gstin,
-        address, // Saving the Text field
+        address,
       },
     });
     revalidatePath(`/companies/${companyId}/ledgers`);
     return { success: true, message: "Ledger created successfully" };
   } catch (error) {
-    console.error(error);
     return { message: "Database Error.", success: false };
   }
 }
@@ -366,6 +364,29 @@ export async function updateVoucher(prevState: State, formData: FormData) {
   }
 }
 
+export async function updateStockItem(prevState: State, formData: FormData) {
+  const validatedFields = StockItemSchema.safeParse(
+    Object.fromEntries(formData)
+  );
+  if (!validatedFields.success)
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      success: false,
+    };
+
+  const { id } = Object.fromEntries(formData) as any;
+  try {
+    await prisma.stockItem.update({
+      where: { id: parseInt(id) },
+      data: validatedFields.data,
+    });
+    revalidatePath(`/companies/${validatedFields.data.companyId}/inventory`);
+    return { success: true, message: "Item updated successfully" };
+  } catch (error) {
+    return { message: "Database Error.", success: false };
+  }
+}
+
 // ==========================================
 // 4. Delete & Bulk Actions
 // ==========================================
@@ -375,26 +396,18 @@ export async function deleteBulkLedgers(ids: number[], companyId: number) {
     const hasTransactions = await prisma.voucherEntry.findFirst({
       where: { ledgerId: { in: ids } },
     });
-
-    if (hasTransactions) {
+    if (hasTransactions)
       return {
         success: false,
-        message:
-          "Cannot delete ledgers that have transaction history. Delete associated vouchers first.",
+        message: "Cannot delete ledgers with transaction history.",
       };
-    }
 
     await prisma.ledger.deleteMany({
-      where: {
-        id: { in: ids },
-        companyId: companyId,
-      },
+      where: { id: { in: ids }, companyId: companyId },
     });
-
     revalidatePath(`/companies/${companyId}/ledgers`);
     return { success: true, message: "Selected ledgers deleted." };
   } catch (error) {
-    console.error(error);
     return { success: false, message: "Failed to delete ledgers." };
   }
 }
@@ -438,25 +451,12 @@ export async function deleteBulkStockItems(ids: number[]) {
   }
 }
 
-export async function updateStockItem(prevState: State, formData: FormData) {
-  const validatedFields = StockItemSchema.safeParse(
-    Object.fromEntries(formData)
-  );
-  if (!validatedFields.success)
-    return {
-      errors: validatedFields.error.flatten().fieldErrors,
-      success: false,
-    };
-
-  const { id } = Object.fromEntries(formData) as any;
+export async function deleteStockItem(id: number) {
   try {
-    await prisma.stockItem.update({
-      where: { id: parseInt(id) },
-      data: validatedFields.data,
-    });
-    revalidatePath(`/companies/${validatedFields.data.companyId}/inventory`);
-    return { success: true, message: "Item updated successfully" };
+    const deletedItem = await prisma.stockItem.delete({ where: { id } });
+    revalidatePath(`/companies/${deletedItem.companyId}/inventory`);
+    return { success: true, message: "Item deleted successfully" };
   } catch (error) {
-    return { message: "Database Error.", success: false };
+    return { success: false, message: "Failed to delete item." };
   }
 }

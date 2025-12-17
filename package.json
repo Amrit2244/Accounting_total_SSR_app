@@ -1,6 +1,6 @@
 {
   "name": "my-accounting-app",
-  "version": "5.1.2",
+  "version": "5.2.11",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -35,6 +35,7 @@
     "shadcn": "^3.6.1",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.13"
   },
   "devDependencies": {
