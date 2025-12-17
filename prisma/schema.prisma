@@ -146,6 +146,11 @@ model StockItem {
   name             String
   partNumber       String?
   
+  // New Balance Fields added here
+  openingQty       Float            @default(0)
+  openingValue     Float            @default(0)
+  quantity         Float            @default(0) // Current Stock level
+  
   groupId          Int?
   group            StockGroup?      @relation(fields: [groupId], references: [id])
   
@@ -156,7 +161,7 @@ model StockItem {
   company          Company          @relation(fields: [companyId], references: [id])
   
   inventoryEntries InventoryEntry[]
-  gstRate          Float            @default(0) // 0, 5, 12, 18, 28
+  gstRate          Float            @default(0) 
   
   @@unique([name, companyId])
 }
