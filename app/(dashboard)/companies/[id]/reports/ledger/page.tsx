@@ -16,6 +16,7 @@ const fmt = (n: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
 const fmtDate = (date: Date) =>
   date.toLocaleDateString("en-IN", {
     day: "2-digit",
@@ -75,7 +76,7 @@ export default async function LedgerReportPage({
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
       openingBalance = (ledger.openingBalance || 0) + (prevDr - prevCr);
 
-      // 2. Fetch Entries with full relational data for Party Names
+      // 2. Fetch Entries with full relational data
       entries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
@@ -132,7 +133,6 @@ export default async function LedgerReportPage({
               defaultTo={defaultTo}
             />
             <div className="h-8 w-px bg-slate-200 ml-2" />
-            {/* Update this component call to pass the variables */}
             <ReportActionButtons
               ledgerName={reportData?.name}
               entries={entries}
@@ -261,13 +261,21 @@ export default async function LedgerReportPage({
                       {entries.map((entry) => {
                         runningBalance += entry.amount;
 
-                        // ROBUST PARTY LOGIC: Find all ledgers in this voucher except the current one
+                        // ROBUST PARTY LOGIC:
+                        // We find all ledgers in this voucher that ARE NOT the current ledger being viewed
                         const oppositeEntries = entry.voucher.entries.filter(
                           (vch: any) => vch.ledgerId !== entry.ledgerId
                         );
+
+                        // FIX: Use optional chaining and fallback to ledgerName string to avoid "Self Account"
                         const partyNames = Array.from(
                           new Set(
-                            oppositeEntries.map((oe: any) => oe.ledger.name)
+                            oppositeEntries.map(
+                              (oe: any) =>
+                                oe.ledger?.name ||
+                                oe.ledgerName ||
+                                "Account Adjustment"
+                            )
                           )
                         ).join(", ");
 
