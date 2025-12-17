@@ -1,134 +1,151 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
-import { Search, BookOpen, Calendar, ChevronDown } from "lucide-react";
-
-type Props = {
-  ledgers: { id: number; name: string }[];
-  defaultLedgerId?: string;
-  defaultFrom: string;
-  defaultTo: string;
-};
+import { useCallback, useState, useMemo, useRef, useEffect } from "react";
+import {
+  Search,
+  BookOpen,
+  ChevronDown,
+  Check,
+  X,
+  Calendar,
+} from "lucide-react";
 
 export default function LedgerSearchFilter({
   ledgers,
   defaultLedgerId,
   defaultFrom,
   defaultTo,
-}: Props) {
+}: any) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      )
+        setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLedger = useMemo(
+    () => ledgers.find((l: any) => l.id.toString() === defaultLedgerId),
+    [ledgers, defaultLedgerId]
+  );
+
+  const filteredLedgers = useMemo(() => {
+    return ledgers.filter((l: any) =>
+      l.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [ledgers, searchTerm]);
+
+  // AUTO-REDIRECT ON SELECT
   const updateFilter = useCallback(
     (key: string, value: string) => {
       const params = new URLSearchParams(searchParams.toString());
       if (value) params.set(key, value);
       else params.delete(key);
       router.push(`${pathname}?${params.toString()}`);
+      setIsOpen(false); // Close dropdown on select
     },
     [searchParams, pathname, router]
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Since we are updating on change for select, this button can trigger date updates
-    const form = e.currentTarget as HTMLFormElement;
-    const from = (form.elements.namedItem("from") as HTMLInputElement).value;
-    const to = (form.elements.namedItem("to") as HTMLInputElement).value;
-
-    // Explicitly update all filters on button submit (though date inputs update automatically via change)
-    // This provides a redundant submit for browsers that don't trigger change on date field fully.
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("from", from);
-    params.set("to", to);
-    router.push(`${pathname}?${params.toString()}`);
-  };
-
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-wrap items-end gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-sm mb-6 no-print"
-    >
-      {/* 1. Select Ledger */}
-      <div className="space-y-1.5 w-64">
-        <label className="block text-xs font-bold text-slate-500 uppercase">
-          Select Ledger Account
-        </label>
-        <div className="relative">
-          <BookOpen
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-          />
-          <select
-            name="ledgerId"
-            value={defaultLedgerId || ""}
-            onChange={(e) => updateFilter("ledgerId", e.target.value)}
-            className="w-full pl-9 pr-4 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none cursor-pointer h-10 text-sm font-medium"
-          >
-            <option value="">-- Select Account --</option>
-            {ledgers.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-          {/* Custom Chevron */}
+    <div className="flex items-center gap-3">
+      {/* SMART DROPDOWN */}
+      <div className="relative" ref={dropdownRef}>
+        <div
+          onClick={() => setIsOpen(!isOpen)}
+          className={`flex items-center justify-between w-64 h-11 px-4 rounded-xl border transition-all cursor-pointer bg-slate-50/50 hover:bg-white ${
+            isOpen
+              ? "border-slate-900 ring-4 ring-slate-100"
+              : "border-slate-200"
+          }`}
+        >
+          <div className="flex items-center gap-3 truncate">
+            <BookOpen
+              size={16}
+              className={selectedLedger ? "text-blue-600" : "text-slate-400"}
+            />
+            <span
+              className={`text-xs font-bold truncate ${
+                selectedLedger ? "text-slate-900" : "text-slate-400"
+              }`}
+            >
+              {selectedLedger ? selectedLedger.name : "Select Ledger..."}
+            </span>
+          </div>
           <ChevronDown
-            size={16}
-            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"
+            size={14}
+            className={`text-slate-400 transition-transform duration-300 ${
+              isOpen ? "rotate-180" : ""
+            }`}
           />
         </div>
+
+        {isOpen && (
+          <div className="absolute top-full right-0 w-80 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2">
+            <div className="p-3 bg-slate-50 border-b border-slate-100">
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  autoFocus
+                  placeholder="Type to search..."
+                  className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-slate-900"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {filteredLedgers.map((l: any) => (
+                <div
+                  key={l.id}
+                  onClick={() => updateFilter("ledgerId", l.id.toString())}
+                  className={`flex items-center justify-between px-4 py-3 text-xs font-bold cursor-pointer hover:bg-slate-50 transition-colors ${
+                    defaultLedgerId === l.id.toString()
+                      ? "text-blue-600 bg-blue-50/50"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {l.name}
+                  {defaultLedgerId === l.id.toString() && <Check size={14} />}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 2. From Date */}
-      <div className="space-y-1.5 w-36">
-        <label className="block text-xs font-bold text-slate-500 uppercase">
-          From Date
-        </label>
-        <div className="relative">
-          <Calendar
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-          />
-          <input
-            name="from"
-            type="date"
-            defaultValue={defaultFrom}
-            onChange={(e) => updateFilter("from", e.target.value)}
-            className="w-full pl-9 pr-2 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none h-10 text-sm font-medium"
-          />
-        </div>
+      {/* DATE RANGE */}
+      <div className="flex items-center bg-slate-50/50 border border-slate-200 rounded-xl px-2 h-11">
+        <input
+          type="date"
+          defaultValue={defaultFrom}
+          onChange={(e) => updateFilter("from", e.target.value)}
+          className="bg-transparent text-[10px] font-black uppercase outline-none px-2 cursor-pointer"
+        />
+        <div className="w-px h-4 bg-slate-200 mx-1" />
+        <input
+          type="date"
+          defaultValue={defaultTo}
+          onChange={(e) => updateFilter("to", e.target.value)}
+          className="bg-transparent text-[10px] font-black uppercase outline-none px-2 cursor-pointer"
+        />
       </div>
-
-      {/* 3. To Date */}
-      <div className="space-y-1.5 w-36">
-        <label className="block text-xs font-bold text-slate-500 uppercase">
-          To Date
-        </label>
-        <div className="relative">
-          <Calendar
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-          />
-          <input
-            name="to"
-            type="date"
-            defaultValue={defaultTo}
-            onChange={(e) => updateFilter("to", e.target.value)}
-            className="w-full pl-9 pr-2 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none h-10 text-sm font-medium"
-          />
-        </div>
-      </div>
-
-      {/* 4. Filter Button (Optional, since fields auto-update, but good for explicit filter) */}
-      <button
-        type="submit"
-        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-700 h-10 shadow-md shadow-blue-500/20 transition-all active:scale-[0.99]"
-      >
-        <Search size={16} /> Filter
-      </button>
-    </form>
+    </div>
   );
 }

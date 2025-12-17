@@ -16,7 +16,7 @@ export type State = {
   success?: boolean;
 };
 
-// --- AUTH HELPER (New) ---
+// --- AUTH HELPER ---
 async function getCurrentUserId(): Promise<number | null> {
   try {
     const cookieStore = await cookies();
@@ -246,12 +246,7 @@ export async function updateLedger(prevState: State, formData: FormData) {
   }
 }
 
-/**
- * FIXED VOUCHER UPDATE (Maker-Checker Logic)
- * Ensures person who edits becomes the "Maker" and cannot verify.
- */
 export async function updateVoucher(prevState: State, formData: FormData) {
-  console.log("--- Edit Action Started ---");
   const rawData = Object.fromEntries(formData.entries());
   const validatedFields = UpdateVoucherSchema.safeParse(rawData);
 
@@ -267,7 +262,6 @@ export async function updateVoucher(prevState: State, formData: FormData) {
     validatedFields.data;
 
   try {
-    // 1. Identify current user (The person editing)
     const currentUserId = await getCurrentUserId();
     if (!currentUserId)
       return { success: false, message: "Unauthorized. Session expired." };
@@ -279,7 +273,6 @@ export async function updateVoucher(prevState: State, formData: FormData) {
 
     if (!current) return { success: false, message: "Voucher not found." };
 
-    // Smart Comparison
     const normalize = (arr: any[]) =>
       JSON.stringify(
         arr
@@ -300,7 +293,6 @@ export async function updateVoucher(prevState: State, formData: FormData) {
     const newTxCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     await prisma.$transaction(async (tx) => {
-      // 2. Update Header: Reset status to PENDING and update createdById to current editor
       await tx.voucher.update({
         where: { id: voucherId },
         data: {
@@ -309,8 +301,8 @@ export async function updateVoucher(prevState: State, formData: FormData) {
           status: "PENDING",
           transactionCode: newTxCode,
           updatedAt: new Date(),
-          createdById: currentUserId, // FIX: The person who edited is now the "Maker"
-          verifiedById: null, // FIX: Remove previous approval
+          createdById: currentUserId,
+          verifiedById: null,
           totalAmount: structuredEntries.reduce(
             (sum, e) => sum + (e.amount > 0 ? e.amount : 0),
             0
@@ -318,7 +310,6 @@ export async function updateVoucher(prevState: State, formData: FormData) {
         },
       });
 
-      // 3. Recreate Entries
       await tx.voucherEntry.deleteMany({ where: { voucherId } });
       await tx.voucherEntry.createMany({
         data: structuredEntries.map((e) => ({
@@ -340,8 +331,42 @@ export async function updateVoucher(prevState: State, formData: FormData) {
 }
 
 // ==========================================
-// 4. Delete Actions
+// 4. Delete & Bulk Actions
 // ==========================================
+
+/**
+ * NEW: Bulk Delete Ledgers with Transaction Safety
+ */
+export async function deleteBulkLedgers(ids: number[], companyId: number) {
+  try {
+    // 1. Safety Check: Are any of these ledgers used in vouchers?
+    const hasTransactions = await prisma.voucherEntry.findFirst({
+      where: { ledgerId: { in: ids } },
+    });
+
+    if (hasTransactions) {
+      return {
+        success: false,
+        message:
+          "Cannot delete ledgers that have transaction history. Delete associated vouchers first.",
+      };
+    }
+
+    // 2. Perform deletion
+    await prisma.ledger.deleteMany({
+      where: {
+        id: { in: ids },
+        companyId: companyId,
+      },
+    });
+
+    revalidatePath(`/companies/${companyId}/ledgers`);
+    return { success: true, message: "Selected ledgers deleted." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Failed to delete ledgers." };
+  }
+}
 
 export async function deleteBulkVouchers(ids: number[], companyId: number) {
   try {

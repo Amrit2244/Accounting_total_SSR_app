@@ -6,7 +6,7 @@ import { Inter } from "next/font/google"; // Using a modern font
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Modern ERP",
+  title: "AS Core -Accounting Software Solutions",
   description: "Next Gen ERP System",
 };
 

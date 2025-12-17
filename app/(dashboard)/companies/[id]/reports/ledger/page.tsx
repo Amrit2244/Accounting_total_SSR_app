@@ -1,22 +1,21 @@
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
 import {
-  ArrowLeft,
-  Calendar,
   FileText,
-  ChevronRight,
   IndianRupee,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Scale,
+  CalendarDays,
+  Hash,
 } from "lucide-react";
-// Assuming ReportActionButtons handles print/export
 import ReportActionButtons from "@/components/ReportActionButtons";
-// Assuming the polished controls component is here:
 import LedgerSearchFilter from "@/components/LedgerSearchFilter";
 
-// Helper component for currency formatting (reuse logic from Report Page)
 const fmt = (n: number) =>
-  n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
-
-// Helper for date formatting
+  n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 const fmtDate = (date: Date) =>
   date.toLocaleDateString("en-IN", {
     day: "2-digit",
@@ -35,14 +34,12 @@ export default async function LedgerReportPage({
   const { ledgerId, from, to } = await searchParams;
   const companyId = parseInt(id);
 
-  // Default Dates
   const today = new Date();
   const currentYear =
     today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
   const defaultFrom = from || `${currentYear}-04-01`;
   const defaultTo = to || today.toISOString().split("T")[0];
 
-  // Fetch all ledgers for the filter dropdown
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
@@ -60,11 +57,10 @@ export default async function LedgerReportPage({
     const lid = parseInt(ledgerId);
     const fromISO = new Date(`${defaultFrom}T00:00:00.000Z`);
     const toISO = new Date(`${defaultTo}T23:59:59.999Z`);
-
     const ledger = await prisma.ledger.findUnique({ where: { id: lid } });
 
     if (ledger) {
-      // 1. Calculate Opening Balance (Ledger's initial balance + approved transactions BEFORE 'from' date)
+      // 1. Calculate Opening Balance
       const prevEntries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
@@ -82,7 +78,7 @@ export default async function LedgerReportPage({
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
       openingBalance = (ledger.openingBalance || 0) + (prevDr - prevCr);
 
-      // 2. Fetch Current Entries (Approved transactions WITHIN the date range)
+      // 2. Fetch Entries with correct nested Date filter
       entries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
@@ -91,11 +87,18 @@ export default async function LedgerReportPage({
             status: "APPROVED",
           },
         },
-        include: { voucher: true },
+        include: {
+          voucher: {
+            include: {
+              entries: {
+                include: { ledger: { select: { name: true } } },
+              },
+            },
+          },
+        },
         orderBy: { voucher: { date: "asc" } },
       });
 
-      // 3. Totals
       periodTotalDr = entries
         .filter((e) => e.amount > 0)
         .reduce((sum, e) => sum + e.amount, 0);
@@ -103,219 +106,258 @@ export default async function LedgerReportPage({
         .filter((e) => e.amount < 0)
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
       closingBalance = openingBalance + (periodTotalDr - periodTotalCr);
-
       reportData = ledger;
     }
   }
 
-  // Running balance starts at opening balance
   let runningBalance = openingBalance;
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-slate-50 min-h-screen">
-      {/* HEADER & CONTROLS (Non-Printable) */}
-      <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-4 no-print">
-        <div className="flex items-center gap-2">
-          <FileText size={24} className="text-blue-600" />
-          <h1 className="text-2xl font-bold text-slate-900">
-            LEDGER STATEMENT
-          </h1>
+    <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans print:hidden">
+      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 no-print">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+              <Scale className="text-white" size={20} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 leading-tight">
+                Ledger Explorer
+              </h1>
+              <p className="text-xs text-slate-500 font-medium">
+                Internal Audit & Reporting
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <LedgerSearchFilter
+              companyId={companyId}
+              ledgers={ledgers}
+              defaultLedgerId={ledgerId}
+              defaultFrom={defaultFrom}
+              defaultTo={defaultTo}
+            />
+            <div className="h-8 w-px bg-slate-200 ml-2" />
+            <ReportActionButtons />
+          </div>
         </div>
-        <ReportActionButtons />
       </div>
 
-      {/* FILTER CONTROLS */}
-      <LedgerSearchFilter
-        companyId={companyId}
-        ledgers={ledgers}
-        defaultLedgerId={ledgerId}
-        defaultFrom={defaultFrom}
-        defaultTo={defaultTo}
-      />
-
-      {/* REPORT AREA */}
-      {reportData ? (
-        <div
-          id="printable-area"
-          className="bg-white p-6 rounded-xl shadow-lg print:p-0 print:shadow-none"
-        >
-          {/* Report Title & Period */}
-          <div className="mb-6 text-center border-b border-slate-200 pb-4 print:border-black">
-            <h2 className="text-2xl font-bold uppercase text-slate-900 print:text-black">
-              {reportData.name}
-            </h2>
-            <p className="text-sm text-slate-500 mt-1 print:text-black">
-              Statement Period:{" "}
-              <span className="font-bold">
-                {fmtDate(new Date(defaultFrom))}
-              </span>{" "}
-              to{" "}
-              <span className="font-bold">{fmtDate(new Date(defaultTo))}</span>
-            </p>
-          </div>
-
-          {/* Balance Summary Card */}
-          <div className="grid grid-cols-2 gap-4 mb-6 bg-blue-50/50 p-4 border border-blue-200 rounded-lg print:hidden">
-            <div>
-              <p className="text-xs font-bold text-blue-600 uppercase">
-                Opening Balance
-              </p>
-              <p className="text-lg font-mono font-bold text-slate-900 flex items-center gap-1 mt-1">
-                <IndianRupee size={16} />
-                {fmt(Math.abs(openingBalance))}{" "}
-                <span className="text-sm text-slate-600">
-                  {openingBalance >= 0 ? "Dr" : "Cr"}
-                </span>
-              </p>
+      <main className="max-w-7xl mx-auto px-6 mt-8">
+        {reportData ? (
+          <div className="grid grid-cols-12 gap-8">
+            <div className="col-span-12 lg:col-span-3 space-y-4 no-print">
+              <SummaryTile
+                label="Opening Balance"
+                amount={openingBalance}
+                icon={<ArrowDownLeft size={16} />}
+              />
+              <SummaryTile
+                label="Total Debit"
+                amount={periodTotalDr}
+                color="text-red-600"
+                icon={<ArrowUpRight size={16} />}
+              />
+              <SummaryTile
+                label="Total Credit"
+                amount={periodTotalCr}
+                color="text-emerald-600"
+                icon={<ArrowDownLeft size={16} />}
+              />
+              <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-2xl">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Net Closing
+                </p>
+                <p className="text-3xl font-mono font-bold mt-2 truncate">
+                  {fmt(Math.abs(closingBalance))}
+                </p>
+                <p className="text-sm font-medium text-slate-400 mt-1 italic">
+                  Balance Type:{" "}
+                  {closingBalance >= 0 ? "Debit (Dr)" : "Credit (Cr)"}
+                </p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-bold text-blue-600 uppercase">
-                Closing Balance
-              </p>
-              <p className="text-xl font-mono font-black text-blue-800 flex items-center justify-end gap-1 mt-1">
-                <IndianRupee size={18} />
-                {fmt(Math.abs(closingBalance))}{" "}
-                <span className="text-base">
-                  {closingBalance >= 0 ? "Dr" : "Cr"}
-                </span>
-              </p>
+
+            <div className="col-span-12 lg:col-span-9">
+              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-10 py-12 border-b border-slate-100 flex justify-between items-end">
+                  <div className="space-y-2">
+                    <span className="px-3 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-full">
+                      Official Statement
+                    </span>
+                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">
+                      {reportData.name}
+                    </h2>
+                  </div>
+                  <div className="text-right flex items-center gap-3 text-slate-500 font-medium text-sm">
+                    <CalendarDays size={18} />
+                    <span>
+                      {fmtDate(new Date(defaultFrom))} —{" "}
+                      {fmtDate(new Date(defaultTo))}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-slate-50/50 text-slate-400 font-bold uppercase tracking-widest text-[9px]">
+                        <th className="px-6 py-4 text-left border-b border-slate-100">
+                          Date
+                        </th>
+                        <th className="px-4 py-4 text-left border-b border-slate-100">
+                          TXID
+                        </th>
+                        <th className="px-6 py-4 text-left border-b border-slate-100 w-[180px]">
+                          Particulars
+                        </th>
+                        <th className="px-6 py-4 text-left border-b border-slate-100">
+                          Party / Account
+                        </th>
+                        <th className="px-6 py-4 text-right border-b border-slate-100">
+                          Debit
+                        </th>
+                        <th className="px-6 py-4 text-right border-b border-slate-100">
+                          Credit
+                        </th>
+                        <th className="px-10 py-4 text-right border-b border-slate-100">
+                          Balance
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      <tr className="bg-slate-50/30 italic text-xs">
+                        <td className="px-6 py-5 text-slate-300 font-mono italic">
+                          Start
+                        </td>
+                        <td className="px-4 py-5 text-slate-300 font-mono">
+                          —
+                        </td>
+                        <td
+                          className="px-6 py-5 text-slate-500 font-medium"
+                          colSpan={2}
+                        >
+                          Opening Balance Forwarded
+                        </td>
+                        <td className="px-6 py-5 text-right font-mono text-slate-400">
+                          {openingBalance > 0 ? fmt(openingBalance) : "—"}
+                        </td>
+                        <td className="px-6 py-5 text-right font-mono text-slate-400">
+                          {openingBalance < 0
+                            ? fmt(Math.abs(openingBalance))
+                            : "—"}
+                        </td>
+                        <td className="px-10 py-5 text-right font-mono font-bold text-slate-400">
+                          {fmt(Math.abs(openingBalance))}{" "}
+                          <span className="text-[8px]">
+                            {openingBalance >= 0 ? "Dr" : "Cr"}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {entries.map((entry) => {
+                        runningBalance += entry.amount;
+                        const partyLedger = entry.voucher.entries.find(
+                          (vch: any) =>
+                            entry.amount > 0 ? vch.amount < 0 : vch.amount > 0
+                        );
+
+                        return (
+                          <tr
+                            key={entry.id}
+                            className="hover:bg-slate-50/80 transition-all duration-200 group"
+                          >
+                            <td className="px-6 py-4 text-xs text-slate-900 font-bold whitespace-nowrap">
+                              {fmtDate(entry.voucher.date)}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-mono text-[9px] font-black uppercase">
+                                <Hash size={8} />{" "}
+                                {entry.voucher.transactionCode}
+                              </div>
+                            </td>
+                            {/* COMPACT NARRATION */}
+                            <td className="px-6 py-4 max-w-[180px]">
+                              <div className="text-[10px] text-slate-500 font-medium leading-tight italic line-clamp-2">
+                                {entry.voucher.narration || "Entry Post"}
+                              </div>
+                              <div className="text-[8px] text-slate-400 uppercase mt-0.5 font-bold tracking-tighter">
+                                {entry.voucher.type} #{entry.voucher.voucherNo}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-[10px] font-bold text-slate-800 uppercase tracking-tight bg-slate-50 px-2 py-1 rounded inline-block border border-slate-100 italic">
+                                {partyLedger?.ledger?.name ||
+                                  "Multiple Accounts"}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right font-mono text-[11px] font-bold text-red-600">
+                              {entry.amount > 0 ? fmt(entry.amount) : ""}
+                            </td>
+                            <td className="px-6 py-4 text-right font-mono text-[11px] font-bold text-emerald-600">
+                              {entry.amount < 0
+                                ? fmt(Math.abs(entry.amount))
+                                : ""}
+                            </td>
+                            <td className="px-10 py-4 text-right font-mono font-black text-slate-900 text-[11px]">
+                              {fmt(Math.abs(runningBalance))}
+                              <span
+                                className={`ml-2 text-[8px] px-1 py-0.5 rounded ${
+                                  runningBalance >= 0
+                                    ? "bg-slate-100 text-slate-700"
+                                    : "bg-slate-800 text-slate-100"
+                                }`}
+                              >
+                                {runningBalance >= 0 ? "DR" : "CR"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
+        ) : (
+          <EmptyState />
+        )}
+      </main>
+    </div>
+  );
+}
 
-          {/* Transactions Table */}
-          <table className="w-full text-sm text-left border border-slate-300 print:border-black">
-            <thead className="bg-slate-800 text-white text-xs uppercase font-bold print:bg-slate-200 print:text-black print:border-b-2 print:border-black">
-              <tr>
-                <th className="p-3 border-r border-slate-700 print:border-black">
-                  Trans ID
-                </th>
-                <th className="p-3 border-r border-slate-700 print:border-black">
-                  Date
-                </th>
-                <th className="p-3 border-r border-slate-700 print:border-black">
-                  Particulars
-                </th>
-                <th className="p-3 border-r border-slate-700 print:border-black">
-                  Vch Type
-                </th>
-                <th className="p-3 border-r border-slate-700 print:border-black text-right">
-                  Debit (₹)
-                </th>
-                <th className="p-3 border-r border-slate-700 print:border-black text-right">
-                  Credit (₹)
-                </th>
-                <th className="p-3 text-right">Balance (₹)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800 print:divide-black">
-              {/* OPENING BALANCE ROW */}
-              <tr className="bg-slate-50 font-semibold print:bg-slate-100">
-                <td
-                  className="p-2 border-r print:border-black text-slate-500"
-                  colSpan={4}
-                >
-                  Opening Balance
-                </td>
-                <td className="p-2 text-right border-r print:border-black font-mono">
-                  {openingBalance > 0 ? fmt(openingBalance) : ""}
-                </td>
-                <td className="p-2 text-right border-r print:border-black font-mono">
-                  {openingBalance < 0 ? fmt(Math.abs(openingBalance)) : ""}
-                </td>
-                <td className="p-2 text-right font-mono font-bold text-blue-700 print:text-black">
-                  {fmt(Math.abs(openingBalance))}{" "}
-                  {openingBalance >= 0 ? "Dr" : "Cr"}
-                </td>
-              </tr>
+function SummaryTile({ label, amount, icon, color = "text-slate-900" }: any) {
+  return (
+    <div className="p-6 bg-white rounded-3xl border border-slate-200/60 shadow-sm flex items-center justify-between">
+      <div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          {label}
+        </p>
+        <p className={`text-xl font-mono font-bold mt-1 ${color}`}>
+          {fmt(Math.abs(amount))}
+        </p>
+      </div>
+      <div className="w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
+        {icon}
+      </div>
+    </div>
+  );
+}
 
-              {/* TRANSACTION ROWS */}
-              {entries.map((entry) => {
-                runningBalance += entry.amount;
-                return (
-                  <tr
-                    key={entry.id}
-                    className="hover:bg-slate-50 print:border-b print:border-gray-300"
-                  >
-                    <td className="p-2 border-r border-gray-200 print:border-black font-mono font-bold text-gray-500 text-xs">
-                      {entry.voucher.transactionCode}
-                    </td>
-                    <td className="p-2 border-r border-gray-200 print:border-black whitespace-nowrap text-xs">
-                      {fmtDate(entry.voucher.date)}
-                    </td>
-                    <td className="p-2 border-r border-gray-200 print:border-black font-medium text-sm">
-                      {entry.voucher.narration || "As per details"}
-                    </td>
-                    <td className="p-2 border-r border-gray-200 print:border-black text-xs uppercase text-slate-600">
-                      {entry.voucher.type} #{entry.voucher.voucherNo}
-                    </td>
-                    <td className="p-2 border-r border-gray-200 print:border-black text-right font-mono text-slate-700 print:text-black">
-                      {entry.amount > 0 ? fmt(entry.amount) : ""}
-                    </td>
-                    <td className="p-2 border-r border-gray-200 print:border-black text-right font-mono text-slate-700 print:text-black">
-                      {entry.amount < 0 ? fmt(Math.abs(entry.amount)) : ""}
-                    </td>
-                    <td className="p-2 text-right font-mono font-bold text-slate-900 print:text-black">
-                      {fmt(Math.abs(runningBalance))}{" "}
-                      <span className="text-xs">
-                        {runningBalance >= 0 ? "Dr" : "Cr"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {entries.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="p-8 text-center text-gray-400 italic"
-                  >
-                    No approved transactions found within the selected period.
-                  </td>
-                </tr>
-              )}
-
-              {/* CLOSING TOTAL ROW */}
-              <tr className="bg-blue-100 font-extrabold border-t-2 border-blue-600 print:bg-slate-200 print:border-black">
-                <td className="p-3 text-right text-slate-800" colSpan={4}>
-                  Period Totals / Closing Balance
-                </td>
-                <td className="p-3 text-right border-r border-blue-200 print:border-black font-mono text-slate-800">
-                  {fmt(
-                    (openingBalance > 0 ? openingBalance : 0) + periodTotalDr
-                  )}
-                </td>
-                <td className="p-3 text-right border-r border-blue-200 print:border-black font-mono text-slate-800">
-                  {fmt(
-                    (openingBalance < 0 ? Math.abs(openingBalance) : 0) +
-                      periodTotalCr
-                  )}
-                </td>
-                <td className="p-3 text-right font-mono text-lg text-blue-800 print:text-black">
-                  {fmt(Math.abs(closingBalance))}{" "}
-                  {closingBalance >= 0 ? "Dr" : "Cr"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Print Footer */}
-          <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-500">
-            Generated by Accounting App on{" "}
-            {new Date().toLocaleDateString("en-IN")}
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-20 bg-white border-2 border-dashed border-gray-200 rounded-xl text-gray-400">
-          <FileText size={48} className="mx-auto mb-4 opacity-50" />
-          <p className="font-bold text-lg text-slate-600">
-            Select an Account to View Ledger
-          </p>
-          <p className="text-sm">
-            Choose an account from the dropdown above to generate the statement.
-          </p>
-        </div>
-      )}
+function EmptyState() {
+  return (
+    <div className="h-[60vh] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-200 shadow-sm text-center p-10">
+      <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+        <FileText className="text-slate-300" size={40} />
+      </div>
+      <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+        Records Repository
+      </h2>
+      <p className="text-slate-500 mt-2 max-w-sm font-medium">
+        Please select a ledger account from the navigator above.
+      </p>
     </div>
   );
 }
