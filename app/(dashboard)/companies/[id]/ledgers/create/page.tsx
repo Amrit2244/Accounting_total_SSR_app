@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import CreateLedgerForm from "./form"; // This refers to form.tsx in the same folder
+import CreateLedgerForm from "./form";
 import Link from "next/link";
 import { BookPlus, ArrowLeft, ChevronRight } from "lucide-react";
 
@@ -17,14 +17,14 @@ export default async function CreateLedgerPage({
     select: { name: true },
   });
 
-  // CRITICAL FIX: Changed accountGroup to group to match your schema
+  // Fetch All Groups (matching the 'group' model in schema)
   const groups = await prisma.group.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
   });
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-3xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* MODERN HEADER */}
       <div className="flex items-center justify-between mb-10 border-b border-slate-200 pb-8">
         <div>

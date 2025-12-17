@@ -42,6 +42,22 @@ const LedgerSchema = z.object({
   openingBalance: z.coerce.number().default(0),
   balanceType: z.string().optional(),
   companyId: z.coerce.number(),
+  tallyName: z
+    .string()
+    .optional()
+    .transform((v) => (v === "" ? null : v)),
+  state: z
+    .string()
+    .optional()
+    .transform((v) => (v === "" ? null : v)),
+  gstin: z
+    .string()
+    .optional()
+    .transform((v) => (v === "" ? null : v)),
+  address: z
+    .string()
+    .optional()
+    .transform((v) => (v === "" ? null : v)), // Added address
 });
 
 const UpdateLedgerSchema = z.object({
@@ -124,18 +140,38 @@ export async function createLedger(prevState: State, formData: FormData) {
       success: false,
     };
 
-  const { name, groupId, openingBalance, balanceType, companyId } =
-    validatedFields.data;
+  const {
+    name,
+    groupId,
+    openingBalance,
+    balanceType,
+    companyId,
+    tallyName,
+    state,
+    gstin,
+    address,
+  } = validatedFields.data;
+
   let finalBalance =
     balanceType === "Cr" ? -Math.abs(openingBalance) : Math.abs(openingBalance);
 
   try {
     await prisma.ledger.create({
-      data: { name, groupId, openingBalance: finalBalance, companyId },
+      data: {
+        name,
+        groupId,
+        openingBalance: finalBalance,
+        companyId,
+        tallyName,
+        state,
+        gstin,
+        address, // Saving the Text field
+      },
     });
     revalidatePath(`/companies/${companyId}/ledgers`);
     return { success: true, message: "Ledger created successfully" };
   } catch (error) {
+    console.error(error);
     return { message: "Database Error.", success: false };
   }
 }
@@ -334,12 +370,8 @@ export async function updateVoucher(prevState: State, formData: FormData) {
 // 4. Delete & Bulk Actions
 // ==========================================
 
-/**
- * NEW: Bulk Delete Ledgers with Transaction Safety
- */
 export async function deleteBulkLedgers(ids: number[], companyId: number) {
   try {
-    // 1. Safety Check: Are any of these ledgers used in vouchers?
     const hasTransactions = await prisma.voucherEntry.findFirst({
       where: { ledgerId: { in: ids } },
     });
@@ -352,7 +384,6 @@ export async function deleteBulkLedgers(ids: number[], companyId: number) {
       };
     }
 
-    // 2. Perform deletion
     await prisma.ledger.deleteMany({
       where: {
         id: { in: ids },

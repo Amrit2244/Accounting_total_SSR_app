@@ -64,10 +64,7 @@ export default async function LedgerReportPage({
       const prevEntries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
-          voucher: {
-            date: { lt: fromISO },
-            status: "APPROVED",
-          },
+          voucher: { date: { lt: fromISO }, status: "APPROVED" },
         },
       });
       const prevDr = prevEntries
@@ -78,14 +75,11 @@ export default async function LedgerReportPage({
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
       openingBalance = (ledger.openingBalance || 0) + (prevDr - prevCr);
 
-      // 2. Fetch Entries with correct nested Date filter
+      // 2. Fetch Entries with full relational data for Party Names
       entries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
-          voucher: {
-            date: { gte: fromISO, lte: toISO },
-            status: "APPROVED",
-          },
+          voucher: { date: { gte: fromISO, lte: toISO }, status: "APPROVED" },
         },
         include: {
           voucher: {
@@ -146,6 +140,7 @@ export default async function LedgerReportPage({
       <main className="max-w-7xl mx-auto px-6 mt-8">
         {reportData ? (
           <div className="grid grid-cols-12 gap-8">
+            {/* SIDEBAR SUMMARY */}
             <div className="col-span-12 lg:col-span-3 space-y-4 no-print">
               <SummaryTile
                 label="Opening Balance"
@@ -178,6 +173,7 @@ export default async function LedgerReportPage({
               </div>
             </div>
 
+            {/* MAIN STATEMENT */}
             <div className="col-span-12 lg:col-span-9">
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
                 <div className="px-10 py-12 border-b border-slate-100 flex justify-between items-end">
@@ -211,7 +207,7 @@ export default async function LedgerReportPage({
                         <th className="px-6 py-4 text-left border-b border-slate-100 w-[180px]">
                           Particulars
                         </th>
-                        <th className="px-6 py-4 text-left border-b border-slate-100">
+                        <th className="px-6 py-4 text-left border-b border-slate-100 min-w-[150px]">
                           Party / Account
                         </th>
                         <th className="px-6 py-4 text-right border-b border-slate-100">
@@ -226,6 +222,7 @@ export default async function LedgerReportPage({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
+                      {/* OPENING ROW */}
                       <tr className="bg-slate-50/30 italic text-xs">
                         <td className="px-6 py-5 text-slate-300 font-mono italic">
                           Start
@@ -255,12 +252,19 @@ export default async function LedgerReportPage({
                         </td>
                       </tr>
 
+                      {/* DATA ROWS */}
                       {entries.map((entry) => {
                         runningBalance += entry.amount;
-                        const partyLedger = entry.voucher.entries.find(
-                          (vch: any) =>
-                            entry.amount > 0 ? vch.amount < 0 : vch.amount > 0
+
+                        // ROBUST PARTY LOGIC: Find all ledgers in this voucher except the current one
+                        const oppositeEntries = entry.voucher.entries.filter(
+                          (vch: any) => vch.ledgerId !== entry.ledgerId
                         );
+                        const partyNames = Array.from(
+                          new Set(
+                            oppositeEntries.map((oe: any) => oe.ledger.name)
+                          )
+                        ).join(", ");
 
                         return (
                           <tr
@@ -276,7 +280,6 @@ export default async function LedgerReportPage({
                                 {entry.voucher.transactionCode}
                               </div>
                             </td>
-                            {/* COMPACT NARRATION */}
                             <td className="px-6 py-4 max-w-[180px]">
                               <div className="text-[10px] text-slate-500 font-medium leading-tight italic line-clamp-2">
                                 {entry.voucher.narration || "Entry Post"}
@@ -285,10 +288,10 @@ export default async function LedgerReportPage({
                                 {entry.voucher.type} #{entry.voucher.voucherNo}
                               </div>
                             </td>
+                            {/* FIXED PARTY COLUMN */}
                             <td className="px-6 py-4">
-                              <div className="text-[10px] font-bold text-slate-800 uppercase tracking-tight bg-slate-50 px-2 py-1 rounded inline-block border border-slate-100 italic">
-                                {partyLedger?.ledger?.name ||
-                                  "Multiple Accounts"}
+                              <div className="text-[10px] font-bold text-blue-800 uppercase tracking-tight bg-blue-50/50 px-2 py-1 rounded border border-blue-100 italic break-words whitespace-normal">
+                                {partyNames || "Self Account / Adjustment"}
                               </div>
                             </td>
                             <td className="px-6 py-4 text-right font-mono text-[11px] font-bold text-red-600">
@@ -316,6 +319,21 @@ export default async function LedgerReportPage({
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="p-10 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em]">
+                    End of Statement
+                  </p>
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400 font-black uppercase">
+                      Final Balance
+                    </p>
+                    <p className="text-2xl font-mono font-black text-slate-900">
+                      {fmt(Math.abs(closingBalance))}{" "}
+                      {closingBalance >= 0 ? "Dr" : "Cr"}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -353,7 +371,7 @@ function EmptyState() {
         <FileText className="text-slate-300" size={40} />
       </div>
       <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-        Records Repository
+        Financial Records
       </h2>
       <p className="text-slate-500 mt-2 max-w-sm font-medium">
         Please select a ledger account from the navigator above.

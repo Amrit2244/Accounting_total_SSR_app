@@ -14,7 +14,7 @@ export default function Sidebar({ companyId }: { companyId: number }) {
             <Activity size={18} className="text-white" />
           </div>
           <span className="bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-            FinCore
+            Core Accounting Sol.
           </span>
         </div>
       </div>

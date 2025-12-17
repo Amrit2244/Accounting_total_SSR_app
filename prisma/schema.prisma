@@ -92,6 +92,7 @@ model Group {
 model Ledger {
   id              Int      @id @default(autoincrement())
   name            String
+  address         String?   @db.Text
   openingBalance  Float    @default(0.0)
   
   groupId         Int?     // Optional initially, but recommended
