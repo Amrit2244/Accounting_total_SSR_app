@@ -1,6 +1,6 @@
 import { ArrowLeft, Scale } from "lucide-react";
 import Link from "next/link";
-import UnitForm from "./form"; // We create this next
+import UnitForm from "@/components/forms/UnitForm"; // Import the client form
 
 export default async function CreateUnitPage({
   params,
@@ -11,21 +11,31 @@ export default async function CreateUnitPage({
   const companyId = parseInt(id);
 
   return (
-    <div className="max-w-md mx-auto py-8">
-      <div className="flex items-center gap-4 mb-6">
+    <div className="max-w-lg mx-auto py-12 px-4">
+      {/* 1. Header Section */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shadow-sm">
+              <Scale size={20} />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900">Create Unit</h1>
+          </div>
+          <p className="text-sm text-slate-500 mt-2 ml-1">
+            Define a new measurement unit for inventory.
+          </p>
+        </div>
+
         <Link
           href={`/companies/${companyId}/inventory/units`}
-          className="p-2 hover:bg-slate-100 rounded-full"
+          className="px-3 py-2 bg-white border border-slate-300 text-slate-600 font-medium rounded-lg text-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-2 shadow-sm"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={16} /> Back
         </Link>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Scale className="w-6 h-6" />
-          Create Unit
-        </h1>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow border">
+      {/* 2. Form Card */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 md:p-8">
         <UnitForm companyId={companyId} />
       </div>
     </div>

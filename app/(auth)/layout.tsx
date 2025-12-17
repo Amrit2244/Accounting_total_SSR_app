@@ -3,10 +3,8 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-slate-100">
-      {/* This wrapper ensures the card is centered and visible */}
-      <div className="w-full max-w-md p-4">{children}</div>
-    </div>
-  );
+  // We return the children directly.
+  // This removes the "centered box" restriction, allowing
+  // the Login/Register pages to use the full 100% width of the screen.
+  return <>{children}</>;
 }

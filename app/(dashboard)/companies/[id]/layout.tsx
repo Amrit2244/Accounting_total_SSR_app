@@ -1,15 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
-import {
-  ChevronLeft,
-  Home,
-  FileText,
-  Book,
-  Layers,
-  Settings,
-  Search,
-} from "lucide-react";
-import SidebarNav from "@/components/SidebarNav";
+import Sidebar from "@/components/Sidebar";
+import { Search, Bell, ChevronRight } from "lucide-react";
 
 export default async function CompanyLayout({
   children,
@@ -21,67 +12,68 @@ export default async function CompanyLayout({
   const { id } = await params;
   const companyId = parseInt(id);
 
+  // Fetch Company Name for the Header
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { name: true, id: true },
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 font-sans">
-      {/* 1. BANKING SIDEBAR (Modules) */}
-      <aside className="w-60 bg-white border-r border-gray-300 flex flex-col z-20">
-        {/* Company Context */}
-        <div className="h-12 bg-[#004b8d] text-white flex items-center px-4 shadow-sm shrink-0">
-          <div className="truncate font-bold text-sm uppercase">
-            {company?.name}
-          </div>
-        </div>
-        <div className="bg-gray-100 border-b border-gray-300 px-4 py-2 text-[10px] font-bold text-gray-500 uppercase">
-          Unit ID: {company?.id.toString().padStart(6, "0")}
-        </div>
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
+      {/* 1. SIDEBAR (Fixed Left) */}
+      {/* We use the new Sidebar component which handles its own styling and 'aside' tag */}
+      <Sidebar companyId={companyId} />
 
-        {/* Dense Menu */}
-        <SidebarNav companyId={companyId} theme="banking" />
-
-        <div className="mt-auto p-4 border-t border-gray-300 bg-gray-50">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-xs font-bold text-[#003366] hover:underline"
-          >
-            <ChevronLeft size={14} />
-            EXIT MODULE
-          </Link>
-        </div>
-      </aside>
-
-      {/* 2. MAIN WORKSPACE */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Function Key Bar */}
-        <div className="h-10 bg-white border-b border-gray-300 flex items-center px-4 justify-between shrink-0 shadow-sm">
-          <div className="flex items-center gap-4 text-xs">
-            <span className="font-bold text-gray-700">CURRENT FUNCTION:</span>
-            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 border border-yellow-300 rounded font-mono">
-              GENERAL_LEDGER
-            </span>
+      {/* 2. MAIN CONTENT AREA (Flex Grow) */}
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-50">
+        {/* HEADER: Modern Sticky Top Bar */}
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shadow-sm shrink-0 z-10">
+          {/* LEFT: Breadcrumb / Context */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 text-xs text-slate-500 mb-0.5">
+              <span className="uppercase tracking-wider font-semibold">
+                Workspace
+              </span>
+              <ChevronRight size={12} />
+              <span>ID: {company?.id.toString().padStart(4, "0")}</span>
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-none">
+              {company?.name || "Company Dashboard"}
+            </h1>
           </div>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Search Function (F3)"
-              className="h-6 w-48 text-xs border border-gray-300 px-2"
-            />
-            <button className="bg-[#004b8d] text-white px-3 py-0.5 text-xs font-bold rounded hover:bg-blue-800">
-              GO
+          {/* RIGHT: Global Search & Notifications */}
+          <div className="flex items-center gap-4">
+            {/* Search Bar */}
+            <div className="hidden md:flex relative group">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors"
+                size={16}
+              />
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                className="h-9 w-64 pl-10 pr-4 bg-slate-100 border-transparent rounded-full text-sm focus:bg-white focus:border-blue-200 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400"
+              />
+            </div>
+
+            {/* Notification Icon */}
+            <button className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
+              <Bell size={20} />
+              <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border border-white"></span>
             </button>
-          </div>
-        </div>
 
-        {/* Content Canvas */}
-        <div className="flex-1 overflow-y-auto bg-[#f0f2f5] p-4">
-          <div className="max-w-[1600px] mx-auto bg-white border border-gray-300 shadow-sm min-h-[500px]">
-            {children}
+            {/* Company Initial Avatar */}
+            <div className="h-9 w-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold shadow-md shadow-slate-900/20">
+              {company?.name?.[0]?.toUpperCase() || "C"}
+            </div>
           </div>
+        </header>
+
+        {/* 3. SCROLLABLE CONTENT CANVAS */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+          {/* Container to center content on ultra-wide screens */}
+          <div className="max-w-[1600px] mx-auto min-h-full">{children}</div>
         </div>
       </main>
     </div>

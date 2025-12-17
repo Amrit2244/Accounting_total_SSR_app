@@ -29,20 +29,25 @@ export default async function VerifyPage({
 
   const voucher = await getVoucherByCode(code, companyId);
 
-  // Auth Check
+  // --- Auth Check (Next.js 15 Async Cookies) ---
   const cookieStore = await cookies();
   const session = cookieStore.get("session")?.value;
-  let currentUserId = 0;
+  let currentUserId: number | null = null;
 
   if (session) {
     try {
       const { payload } = await jwtVerify(session, encodedKey);
+      // Consistent parsing of UserId
       currentUserId =
-        parseInt(payload.userId as string) || parseInt(payload.sub as string);
-    } catch (e) {}
+        typeof payload.userId === "number"
+          ? payload.userId
+          : parseInt(payload.userId as string);
+    } catch (e) {
+      console.error("JWT Verify Error in Page:", e);
+    }
   }
 
-  // Error State
+  // --- Error State ---
   if (!voucher) {
     return (
       <div className="flex flex-col items-center justify-center p-10 text-center min-h-[50vh]">
@@ -61,6 +66,8 @@ export default async function VerifyPage({
     );
   }
 
+  // --- Maker-Checker Logic ---
+  // If the user created/edited the voucher, they are the "Maker"
   const isMaker = voucher.createdById === currentUserId;
   const isApproved = voucher.status === "APPROVED";
 
@@ -105,24 +112,29 @@ export default async function VerifyPage({
         {/* Basic Info */}
         <div className="grid grid-cols-3 gap-6 text-sm">
           <div>
-            <label className="block text-gray-500 font-bold text-[10px] uppercase">
-              Created By
+            <label className="block text-gray-500 font-bold text-[10px] uppercase tracking-wider">
+              Maker (Created/Edited By)
             </label>
             <div className="font-semibold text-slate-800 flex items-center gap-2 mt-1">
               <User size={14} className="text-blue-500" />{" "}
               {voucher.createdBy?.username || "Unknown"}
+              {isMaker && (
+                <span className="text-[10px] bg-slate-200 px-1 rounded text-slate-500">
+                  (You)
+                </span>
+              )}
             </div>
           </div>
           <div>
-            <label className="block text-gray-500 font-bold text-[10px] uppercase">
+            <label className="block text-gray-500 font-bold text-[10px] uppercase tracking-wider">
               Date
             </label>
             <div className="font-semibold text-slate-800 mt-1">
-              {voucher.date.toLocaleDateString()}
+              {voucher.date.toLocaleDateString("en-IN")}
             </div>
           </div>
           <div>
-            <label className="block text-gray-500 font-bold text-[10px] uppercase">
+            <label className="block text-gray-500 font-bold text-[10px] uppercase tracking-wider">
               Narration
             </label>
             <div className="font-semibold text-slate-800 italic mt-1">
@@ -132,8 +144,8 @@ export default async function VerifyPage({
         </div>
 
         {/* 1. INVENTORY TABLE (If Sales/Purchase) */}
-        {voucher.inventory && voucher.inventory.length > 0 ? (
-          <div className="border rounded-md overflow-hidden">
+        {voucher.inventory && voucher.inventory.length > 0 && (
+          <div className="border rounded-md overflow-hidden shadow-sm">
             <div className="bg-gray-100 px-4 py-2 border-b flex items-center gap-2">
               <Package size={16} className="text-gray-600" />
               <h3 className="text-xs font-bold text-gray-700 uppercase">
@@ -150,7 +162,7 @@ export default async function VerifyPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {voucher.inventory.map((item) => (
+                {voucher.inventory.map((item: any) => (
                   <tr key={item.id}>
                     <td className="p-3 pl-4 font-bold text-slate-700">
                       {item.stockItem?.name || `Item ID: ${item.itemId}`}
@@ -169,17 +181,10 @@ export default async function VerifyPage({
               </tbody>
             </table>
           </div>
-        ) : (
-          // Fallback message if no inventory found for a Sales voucher
-          (voucher.type === "SALES" || voucher.type === "PURCHASE") && (
-            <div className="p-4 bg-red-50 text-red-600 text-sm border border-red-200 rounded">
-              ⚠️ No Inventory Items found for this voucher.
-            </div>
-          )
         )}
 
         {/* 2. LEDGER ACCOUNTING TABLE */}
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-md overflow-hidden shadow-sm">
           <div className="bg-gray-100 px-4 py-2 border-b flex items-center gap-2">
             <FileText size={16} className="text-gray-600" />
             <h3 className="text-xs font-bold text-gray-700 uppercase">
@@ -195,7 +200,7 @@ export default async function VerifyPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {voucher.entries.map((entry) => {
+              {voucher.entries.map((entry: any) => {
                 const isDebit = entry.amount > 0;
                 return (
                   <tr key={entry.id}>
@@ -216,17 +221,17 @@ export default async function VerifyPage({
                 <td className="p-3 pl-4 text-right uppercase text-[10px] text-gray-500">
                   Total
                 </td>
-                <td className="p-3 text-right font-mono">
+                <td className="p-3 text-right font-mono text-blue-700">
                   {voucher.entries
-                    .filter((e) => e.amount > 0)
-                    .reduce((sum, e) => sum + e.amount, 0)
+                    .filter((e: any) => e.amount > 0)
+                    .reduce((sum: number, e: any) => sum + e.amount, 0)
                     .toFixed(2)}
                 </td>
-                <td className="p-3 text-right font-mono pr-4">
+                <td className="p-3 text-right font-mono text-orange-700 pr-4">
                   {Math.abs(
                     voucher.entries
-                      .filter((e) => e.amount < 0)
-                      .reduce((sum, e) => sum + e.amount, 0)
+                      .filter((e: any) => e.amount < 0)
+                      .reduce((sum: number, e: any) => sum + e.amount, 0)
                   ).toFixed(2)}
                 </td>
               </tr>
@@ -235,26 +240,32 @@ export default async function VerifyPage({
         </div>
 
         {/* ACTIONS */}
-        <div className="flex justify-between items-center pt-4">
+        <div className="flex justify-between items-center pt-4 border-t border-slate-100">
           <Link
             href={`/companies/${companyId}/vouchers`}
-            className="text-gray-500 text-sm hover:text-black font-bold flex items-center gap-1"
+            className="text-gray-500 text-sm hover:text-black font-bold flex items-center gap-1 transition-colors"
           >
-            <ArrowLeft size={16} /> BACK TO LIST
+            <ArrowLeft size={16} /> BACK TO DAYBOOK
           </Link>
 
           <div className="flex gap-3">
             <Link
               href={`/companies/${companyId}/vouchers/${voucher.id}/print`}
               target="_blank"
-              className="bg-gray-800 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-black"
+              className="bg-gray-800 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-black transition-colors"
             >
               <Printer size={16} /> PRINT
             </Link>
 
-            {!isMaker && !isApproved && (
-              <VerifyActionBtn voucherId={voucher.id} />
-            )}
+            {/* SECURITY: ONLY SHOW VERIFY BUTTON IF USER IS NOT THE MAKER */}
+            {!isApproved &&
+              (!isMaker ? (
+                <VerifyActionBtn voucherId={voucher.id} />
+              ) : (
+                <div className="bg-red-50 text-red-600 px-4 py-2 rounded border border-red-200 text-xs font-bold flex items-center gap-2">
+                  <Ban size={16} /> AWAITING PEER VERIFICATION
+                </div>
+              ))}
           </div>
         </div>
       </div>

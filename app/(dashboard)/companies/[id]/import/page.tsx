@@ -9,6 +9,8 @@ import {
   Loader2,
   CheckCircle,
   AlertTriangle,
+  FileText,
+  Database,
 } from "lucide-react";
 import Link from "next/link";
 import { use } from "react";
@@ -22,43 +24,55 @@ export default function ImportPage({
   const [state, action, isPending] = useActionState(importTallyXML, undefined);
 
   return (
-    <div className="max-w-2xl mx-auto p-8">
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-3xl mx-auto py-12 px-4">
+      {/* 1. HEADER SECTION */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#003366] flex items-center gap-2">
-            <UploadCloud size={32} /> Import Data
+          <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+            <Link
+              href={`/companies/${id}`}
+              className="hover:text-blue-600 transition-colors"
+            >
+              Dashboard
+            </Link>
+            <span>/</span>
+            <span className="text-slate-900 font-medium">Data Migration</span>
+          </div>
+          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+            <Database className="text-blue-600" /> Import Tally Data
           </h1>
-          <p className="text-sm text-gray-500">
-            Migrate from Tally Prime/ERP 9
+          <p className="text-slate-500 mt-1 max-w-lg">
+            Migrate your Groups, Ledgers, and Vouchers from Tally Prime/ERP 9
+            using XML export.
           </p>
         </div>
         <Link
           href={`/companies/${id}`}
-          className="text-sm font-bold text-gray-500 hover:text-[#003366] flex items-center gap-1"
+          className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg text-sm hover:bg-slate-50 transition-all flex items-center gap-2"
         >
-          <ArrowLeft size={16} /> Back to Dashboard
+          <ArrowLeft size={16} /> Cancel Import
         </Link>
       </div>
 
-      {/* CARD */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-8">
-        {/* ✅ SUCCESS MESSAGE (UPDATED) */}
+      {/* 2. MAIN CARD */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        {/* SUCCESS MESSAGE */}
         {state?.success && (
-          <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-lg flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-            <div className="bg-green-100 p-2 rounded-full text-green-600">
-              <CheckCircle size={24} />
+          <div className="bg-emerald-50 border-b border-emerald-100 p-6 flex flex-col md:flex-row items-start md:items-center gap-4 animate-in fade-in slide-in-from-top-2">
+            <div className="bg-emerald-100 p-2 rounded-full text-emerald-600 shrink-0">
+              <CheckCircle size={28} />
             </div>
-            <div>
-              <h3 className="text-green-800 font-bold">Import Successful!</h3>
-              {/* This will now show "Imported: X Groups, Y Ledgers..." */}
-              <p className="text-green-700 text-sm font-medium">
+            <div className="flex-1">
+              <h3 className="text-emerald-900 font-bold text-lg">
+                Import Successful!
+              </h3>
+              <p className="text-emerald-700 text-sm mt-1 leading-relaxed">
                 {state.message}
               </p>
             </div>
             <Link
               href={`/companies/${id}/vouchers`}
-              className="ml-auto bg-green-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-green-700"
+              className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-emerald-700 shadow-md transition-all whitespace-nowrap"
             >
               View Data
             </Link>
@@ -67,69 +81,104 @@ export default function ImportPage({
 
         {/* ERROR MESSAGE */}
         {state?.error && (
-          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-lg flex items-center gap-3">
-            <AlertTriangle className="text-red-600" />
-            <span className="text-red-700 font-bold text-sm">
-              {state.error}
-            </span>
+          <div className="bg-rose-50 border-b border-rose-100 p-6 flex items-start gap-4 animate-in fade-in slide-in-from-top-2">
+            <div className="bg-rose-100 p-2 rounded-full text-rose-600 shrink-0">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <h3 className="text-rose-900 font-bold">Import Failed</h3>
+              <p className="text-rose-700 text-sm mt-1">{state.error}</p>
+            </div>
           </div>
         )}
 
-        {/* FORM */}
+        {/* UPLOAD FORM */}
         {!state?.success && (
-          <form action={action} className="space-y-6">
-            <input type="hidden" name="companyId" value={id} />
+          <div className="p-8">
+            <form action={action} className="space-y-6">
+              <input type="hidden" name="companyId" value={id} />
 
-            <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group relative">
-              <input
-                type="file"
-                name="xmlFile"
-                accept=".xml,.txt" // ✅ Accepts XML and Text files
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                required
-              />
-              <div className="bg-white p-4 rounded-full shadow-sm mb-4 group-hover:scale-110 transition-transform">
-                <FileCode size={32} className="text-[#003366]" />
+              {/* Drag & Drop Area */}
+              <div className="relative group cursor-pointer">
+                <input
+                  type="file"
+                  name="xmlFile"
+                  accept=".xml,.txt"
+                  className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer"
+                  required
+                />
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-12 flex flex-col items-center justify-center text-center bg-slate-50 transition-all group-hover:bg-blue-50 group-hover:border-blue-300 group-hover:scale-[1.01]">
+                  <div className="bg-white p-4 rounded-full shadow-sm mb-4 text-blue-600 group-hover:scale-110 transition-transform duration-300">
+                    <UploadCloud size={40} />
+                  </div>
+                  <h3 className="font-bold text-slate-800 text-lg group-hover:text-blue-700 transition-colors">
+                    Click to Upload or Drag File Here
+                  </h3>
+                  <p className="text-slate-400 text-sm mt-2 max-w-xs">
+                    Supported Formats: Tally XML export or .txt (UTF-8 encoded)
+                  </p>
+                </div>
               </div>
-              <h3 className="font-bold text-slate-700 text-lg">
-                Click to Upload
-              </h3>
-              <p className="text-slate-400 text-xs mt-1">
-                Supported: Tally XML or .txt (UTF-8)
-              </p>
-            </div>
 
-            <button
-              disabled={isPending}
-              className="w-full bg-[#003366] hover:bg-[#002244] text-white py-4 rounded-lg font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-            >
-              {isPending ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <UploadCloud size={20} />
-              )}
-              {isPending ? "Processing..." : "Start Import"}
-            </button>
-          </form>
+              <div className="flex justify-end">
+                <button
+                  disabled={isPending}
+                  className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isPending ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <FileCode size={18} />
+                  )}
+                  {isPending ? "Processing Data..." : "Start Import Process"}
+                </button>
+              </div>
+            </form>
+          </div>
         )}
 
-        {/* INSTRUCTIONS */}
-        <div className="mt-8 pt-6 border-t border-slate-100">
-          <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">
-            Steps for Tally Migration:
+        {/* INSTRUCTIONS FOOTER */}
+        <div className="bg-slate-50 border-t border-slate-100 p-6 md:p-8">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <FileText size={14} /> Migration Guide
           </h4>
-          <ol className="text-sm text-slate-600 space-y-2 list-decimal pl-4">
-            <li>
-              <b>Step 1:</b> Export "Masters" (Groups & Ledgers) from Tally.
-              Upload it here first.
-            </li>
-            <li>
-              <b>Step 2:</b> Export "Daybook" (Vouchers). Upload it second.
-            </li>
-            <li>
-              If you get errors, save the XML file as <b>UTF-8</b> in Notepad.
-            </li>
-          </ol>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                  1
+                </div>
+                <div className="text-sm text-slate-600">
+                  <strong className="text-slate-800 block mb-0.5">
+                    Export Masters First
+                  </strong>
+                  Export "Groups & Ledgers" from Tally and upload this file
+                  first. This creates the account structure.
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                  2
+                </div>
+                <div className="text-sm text-slate-600">
+                  <strong className="text-slate-800 block mb-0.5">
+                    Export Vouchers Second
+                  </strong>
+                  Export "Daybook" (All Vouchers) and upload it second. This
+                  populates the transactions.
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 text-sm text-amber-800">
+              <p className="font-bold mb-1 flex items-center gap-2">
+                <AlertTriangle size={14} /> Important Note:
+              </p>
+              If you encounter encoding errors, open the XML file in Notepad,
+              select <strong>File &gt; Save As</strong>, and change encoding to{" "}
+              <strong>UTF-8</strong>.
+            </div>
+          </div>
         </div>
       </div>
     </div>

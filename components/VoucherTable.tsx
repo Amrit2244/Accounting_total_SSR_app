@@ -1,213 +1,273 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { Trash2, Eye, Printer, CheckSquare, Square } from "lucide-react";
-import { deleteBulkVouchers } from "@/app/actions/delete-vouchers";
-
-type Voucher = {
-  id: number;
-  date: Date;
-  voucherNo: string;
-  transactionCode: string;
-  type: string;
-  narration: string | null;
-  entries: {
-    amount: number;
-    ledger: { name: string };
-  }[];
-  inventory: any[];
-  status: string;
-};
+import {
+  ArrowRight,
+  Search,
+  FileEdit,
+  Clock,
+  CheckCircle2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { deleteBulkVouchers } from "@/app/actions/masters";
 
 export default function VoucherTable({
-  vouchers,
+  vouchers = [],
   companyId,
 }: {
-  vouchers: Voucher[];
+  vouchers: any[];
   companyId: number;
 }) {
+  const [searchId, setSearchId] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const toggleSelect = (id: number) => {
+  // Filter Logic: Ensures if search is empty, ALL vouchers show
+  const filteredVouchers = useMemo(() => {
+    if (!searchId.trim()) return vouchers;
+    return vouchers.filter(
+      (v: any) =>
+        v.transactionCode?.toLowerCase().includes(searchId.toLowerCase()) ||
+        v.voucherNo?.toLowerCase().includes(searchId.toLowerCase())
+    );
+  }, [vouchers, searchId]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredVouchers.length) setSelectedIds([]);
+    else setSelectedIds(filteredVouchers.map((v: any) => v.id));
+  };
+
+  const toggleSelectOne = (id: number) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
 
-  const toggleAll = () => {
-    if (selectedIds.length === vouchers.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(vouchers.map((v) => v.id));
-    }
-  };
-
-  const handleDelete = async () => {
-    if (
-      !confirm(
-        `Are you sure you want to delete ${selectedIds.length} vouchers?`
-      )
-    )
-      return;
-
+  const handleBulkDelete = async () => {
+    if (!confirm(`Delete ${selectedIds.length} vouchers permanently?`)) return;
     setIsDeleting(true);
-
     const res = await deleteBulkVouchers(selectedIds, companyId);
-
-    if (res.error) {
-      alert(res.error);
-    } else {
-      setSelectedIds([]);
-    }
-
+    if (res.success) setSelectedIds([]);
+    else alert("Error: " + (res.message || "Could not delete"));
     setIsDeleting(false);
   };
 
+  const formatMoney = (amount: number | null) =>
+    new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2 }).format(
+      Math.abs(amount || 0)
+    );
+
   return (
-    <div className="bg-white border border-gray-300 shadow-sm rounded-sm overflow-hidden">
-      {/* TOOLBAR */}
+    <div className="relative">
+      {/* Floating Action Bar */}
       {selectedIds.length > 0 && (
-        <div className="bg-red-50 p-2 flex justify-between items-center border-b border-red-100 px-4">
-          <span className="text-red-800 text-xs font-bold">
-            {selectedIds.length} Selected
-          </span>
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-3 border-r border-slate-700 pr-6">
+            <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+              {selectedIds.length}
+            </span>
+            <span className="text-sm font-medium">Vouchers Selected</span>
+          </div>
           <button
-            onClick={handleDelete}
+            onClick={handleBulkDelete}
             disabled={isDeleting}
-            className="text-red-600 hover:text-red-800 text-xs font-bold flex items-center gap-1 uppercase"
+            className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold text-sm disabled:opacity-50"
           >
             {isDeleting ? (
-              "Processing..."
+              "Deleting..."
             ) : (
               <>
-                <Trash2 size={14} /> Delete Selected
+                <Trash2 size={18} /> Delete Selected
               </>
             )}
+          </button>
+          <button
+            onClick={() => setSelectedIds([])}
+            className="p-1 hover:bg-slate-800 rounded-full"
+          >
+            <X size={20} />
           </button>
         </div>
       )}
 
-      {/* TABLE */}
-      <table className="w-full text-sm text-left">
-        <thead className="bg-[#003366] text-white uppercase text-[10px] font-bold">
-          <tr>
-            <th
-              className="p-3 w-10 text-center cursor-pointer"
-              onClick={toggleAll}
-            >
-              {selectedIds.length === vouchers.length && vouchers.length > 0 ? (
-                <CheckSquare size={16} />
-              ) : (
-                <Square size={16} className="opacity-50" />
-              )}
-            </th>
-            <th className="p-3">Trans ID</th>
-            <th className="p-3">Date</th>
-            <th className="p-3">Voucher No</th>
-            <th className="p-3">Type</th>
-            <th className="p-3">Party / Ledger</th>
-            <th className="p-3 text-center">Status</th>
-            <th className="p-3 text-right">Amount</th>
-            <th className="p-3 text-center">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {vouchers.length === 0 ? (
-            <tr>
-              <td colSpan={9} className="p-8 text-center text-gray-400">
-                No vouchers found.
-              </td>
-            </tr>
-          ) : (
-            vouchers.map((v) => {
-              const isSelected = selectedIds.includes(v.id);
-              const isPending = v.status?.toLowerCase() === "pending";
+      <div className="bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
+        <div className="p-5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+          <div className="relative max-w-md w-full">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="Search by ID or Voucher No..."
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+              className="pl-10 pr-4 py-2 w-full text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            Daybook entries
+          </p>
+        </div>
 
-              let rowClass = "transition-colors ";
-              if (isSelected) {
-                rowClass += "bg-blue-50";
-              } else if (isPending) {
-                rowClass += "bg-yellow-50 hover:bg-yellow-100";
-              } else {
-                rowClass += "hover:bg-blue-50";
-              }
-
-              const partyName = v.entries[0]?.ledger.name || "Unknown";
-              const amount = v.entries.find((e) => e.amount > 0)?.amount || 0;
-
-              return (
-                <tr key={v.id} className={rowClass}>
-                  <td className="p-3 text-center">
-                    <button
-                      onClick={() => toggleSelect(v.id)}
-                      className="text-gray-400 hover:text-[#003366]"
-                    >
-                      {isSelected ? (
-                        <CheckSquare size={16} className="text-[#003366]" />
-                      ) : (
-                        <Square size={16} />
-                      )}
-                    </button>
-                  </td>
-                  <td className="p-3 font-mono text-xs font-bold text-gray-500">
-                    #{v.transactionCode}
-                  </td>
-
-                  {/* ✅ FIXED: Enforcing specific locale and 2-digit format */}
-                  <td className="p-3">
-                    {new Date(v.date).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })}
-                  </td>
-
-                  <td className="p-3 font-bold">{v.voucherNo}</td>
-                  <td className="p-3">
-                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[10px] font-bold border border-gray-300">
-                      {v.type}
-                    </span>
-                  </td>
-                  <td className="p-3 font-bold text-[#003366]">{partyName}</td>
-                  <td className="p-3 text-center">
-                    <span
-                      className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${
-                        isPending
-                          ? "bg-yellow-100 text-yellow-700 border-yellow-200"
-                          : "bg-green-100 text-green-700 border-green-200"
-                      }`}
-                    >
-                      {v.status}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right font-mono font-bold">
-                    ₹ {amount.toFixed(2)}
-                  </td>
-                  <td className="p-3 flex justify-center gap-2">
-                    <Link
-                      href={`/companies/${companyId}/vouchers/verify/${v.transactionCode}`}
-                      className="text-blue-600 hover:text-blue-800 p-1"
-                      title="View/Verify"
-                    >
-                      <Eye size={16} />
-                    </Link>
-                    <Link
-                      href={`/companies/${companyId}/vouchers/${v.id}/print`}
-                      target="_blank"
-                      className="text-gray-600 hover:text-black p-1"
-                      title="Print"
-                    >
-                      <Printer size={16} />
-                    </Link>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left border-separate border-spacing-0">
+            <thead className="bg-slate-800 text-slate-200 font-bold uppercase text-[10px] tracking-widest sticky top-0">
+              <tr>
+                <th className="p-4 border-b w-10 text-center">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded accent-blue-600"
+                    checked={
+                      selectedIds.length === filteredVouchers.length &&
+                      filteredVouchers.length > 0
+                    }
+                    onChange={toggleSelectAll}
+                  />
+                </th>
+                <th className="p-4 border-b">Date</th>
+                <th className="p-4 border-b">Trans ID</th>
+                <th className="p-4 border-b">Vch No</th>
+                <th className="p-4 border-b text-center">Status</th>
+                <th className="p-4 border-b">Ledger Particulars</th>
+                <th className="p-4 border-b text-right">Debit (₹)</th>
+                <th className="p-4 border-b text-right">Credit (₹)</th>
+                <th className="p-4 border-b text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredVouchers.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-20 text-center">
+                    <p className="text-slate-400 font-medium italic">
+                      No vouchers found in database.
+                    </p>
                   </td>
                 </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+              ) : (
+                filteredVouchers.map((voucher: any) => {
+                  const isPending = voucher.status === "PENDING";
+                  const isSelected = selectedIds.includes(voucher.id);
+                  return (
+                    <React.Fragment key={voucher.id}>
+                      {voucher.entries.map((entry: any, index: number) => (
+                        <tr
+                          key={entry.id}
+                          className={`transition-all ${
+                            isSelected
+                              ? "bg-blue-50"
+                              : isPending
+                              ? "bg-red-50/40"
+                              : "bg-white hover:bg-slate-50"
+                          }`}
+                        >
+                          {index === 0 && (
+                            <>
+                              <td
+                                className="p-4 text-center border-r border-slate-50"
+                                rowSpan={voucher.entries.length}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded accent-blue-600"
+                                  checked={isSelected}
+                                  onChange={() => toggleSelectOne(voucher.id)}
+                                />
+                              </td>
+                              <td
+                                className="p-4 font-bold text-slate-700"
+                                rowSpan={voucher.entries.length}
+                              >
+                                {new Date(voucher.date).toLocaleDateString(
+                                  "en-IN",
+                                  { day: "2-digit", month: "short" }
+                                )}
+                              </td>
+                              <td
+                                className="p-4 font-mono text-xs text-blue-600"
+                                rowSpan={voucher.entries.length}
+                              >
+                                {voucher.transactionCode || "-"}
+                              </td>
+                              <td
+                                className="p-4 font-black text-slate-900 uppercase"
+                                rowSpan={voucher.entries.length}
+                              >
+                                {voucher.voucherNo}
+                              </td>
+                              <td
+                                className="p-4 text-center"
+                                rowSpan={voucher.entries.length}
+                              >
+                                <div
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                                    isPending
+                                      ? "bg-red-100 text-red-700 border-red-200 animate-pulse"
+                                      : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                                  }`}
+                                >
+                                  {isPending ? (
+                                    <Clock size={10} />
+                                  ) : (
+                                    <CheckCircle2 size={10} />
+                                  )}{" "}
+                                  {voucher.status || "APPROVED"}
+                                </div>
+                              </td>
+                            </>
+                          )}
+                          <td
+                            className={`p-4 font-medium border-l border-slate-50 ${
+                              isPending ? "text-red-700" : "text-slate-600"
+                            }`}
+                          >
+                            {index > 0 && (
+                              <ArrowRight
+                                size={10}
+                                className="inline mr-2 text-slate-300"
+                              />
+                            )}
+                            {entry.ledger?.name || "Unknown Ledger"}
+                          </td>
+                          <td
+                            className={`p-4 text-right font-mono font-bold ${
+                              isPending ? "text-red-600" : "text-slate-900"
+                            }`}
+                          >
+                            {entry.amount > 0 ? formatMoney(entry.amount) : ""}
+                          </td>
+                          <td
+                            className={`p-4 text-right font-mono font-bold ${
+                              isPending ? "text-red-600" : "text-slate-900"
+                            }`}
+                          >
+                            {entry.amount < 0 ? formatMoney(entry.amount) : ""}
+                          </td>
+                          {index === 0 && (
+                            <td
+                              className="p-4 text-center border-l border-slate-50"
+                              rowSpan={voucher.entries.length}
+                            >
+                              <Link
+                                href={`/companies/${companyId}/vouchers/${voucher.id}/edit`}
+                                className="p-2 inline-block rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:shadow-md transition-all active:scale-90"
+                              >
+                                <FileEdit size={16} />
+                              </Link>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

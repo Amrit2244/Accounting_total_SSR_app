@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { createLedger } from "@/app/actions/account"; // We will create this next
+import { createLedger } from "@/app/actions/account";
 import Link from "next/link";
-import { ArrowLeft, Save, Building2 } from "lucide-react";
+import { ArrowLeft, Check, BookOpen, Layers } from "lucide-react";
 
 export default async function CreateLedgerPage({
   params,
@@ -12,103 +12,142 @@ export default async function CreateLedgerPage({
   const companyId = parseInt(id);
 
   // Fetch Groups to populate the dropdown
+  // We include 'nature' to show helpful context (Asset, Liability, etc.)
   const groups = await prisma.accountGroup.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
   });
 
   return (
-    <div className="max-w-2xl mx-auto mt-10">
-      {/* Form Card */}
-      <div className="bg-white border-t-4 border-t-[#003366] border border-gray-300 shadow-lg rounded-sm overflow-hidden">
-        {/* Header */}
-        <div className="bg-gray-50 px-8 py-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-[#003366] flex items-center gap-2">
-            <Building2 size={24} /> CREATE NEW LEDGER
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Add a new account head to your General Ledger.
-          </p>
+    <div className="max-w-2xl mx-auto py-8 px-4">
+      {/* 1. Header Section */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+          <Link
+            href={`/companies/${companyId}/chart-of-accounts`}
+            className="hover:text-blue-600 transition-colors"
+          >
+            Chart of Accounts
+          </Link>
+          <span>/</span>
+          <span className="text-slate-900 font-medium">New Ledger</span>
         </div>
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <BookOpen className="text-blue-600" /> Create New Ledger
+        </h1>
+        <p className="text-slate-500 mt-1">
+          Add a new account head (e.g. Bank Account, Sales, Vendor) to your
+          books.
+        </p>
+      </div>
 
-        {/* Form */}
-        <form action={createLedger} className="p-8 space-y-6">
+      {/* 2. Main Form Card */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <form action={createLedger} className="p-6 md:p-8 space-y-6">
           <input type="hidden" name="companyId" value={companyId} />
 
-          {/* Name */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+          {/* Ledger Name */}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-slate-700">
               Ledger Name <span className="text-red-500">*</span>
             </label>
             <input
               name="name"
               type="text"
               required
-              placeholder="e.g. SBI Bank Account"
-              className="w-full border border-gray-300 p-3 rounded font-bold text-slate-800 focus:border-[#003366] outline-none transition-colors"
+              placeholder="e.g. HDFC Bank, Office Rent, ABC Traders"
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all placeholder:text-slate-400"
             />
           </div>
 
           {/* Group Selection */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-slate-700">
               Under Group <span className="text-red-500">*</span>
             </label>
-            <select
-              name="groupId"
-              required
-              className="w-full border border-gray-300 p-3 rounded font-medium text-slate-800 focus:border-[#003366] outline-none bg-white"
-            >
-              <option value="">-- Select Account Group --</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name} ({g.nature})
+            <div className="relative">
+              <Layers
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={18}
+              />
+              <select
+                name="groupId"
+                required
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none cursor-pointer"
+              >
+                <option value="" disabled selected>
+                  Select an Account Group...
                 </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-400 mt-1">
-              Select "Bank Accounts" for banks, "Direct Income" for sales, etc.
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} &mdash; ({g.nature})
+                  </option>
+                ))}
+              </select>
+              {/* Custom dropdown arrow */}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Correct grouping ensures accurate financial reports (Balance Sheet
+              / P&L).
             </p>
           </div>
 
-          {/* Opening Balance */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                Opening Balance
+          <hr className="border-slate-100" />
+
+          {/* Opening Balance Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-700">
+                Opening Balance (₹)
               </label>
               <input
                 name="openingBalance"
                 type="number"
                 step="0.01"
                 defaultValue="0"
-                className="w-full border border-gray-300 p-3 rounded font-mono font-bold text-right focus:border-[#003366] outline-none"
+                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-900 font-mono text-right focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-700">
                 Dr / Cr
               </label>
               <select
                 name="balanceType"
-                className="w-full border border-gray-300 p-3 rounded font-bold text-slate-700 bg-white"
+                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none cursor-pointer"
               >
-                <option value="Dr">Dr (Debit)</option>
-                <option value="Cr">Cr (Credit)</option>
+                <option value="Dr">Dr (Debit) - Assets/Expenses</option>
+                <option value="Cr">Cr (Credit) - Liabilities/Income</option>
               </select>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center justify-between pt-6 border-t border-gray-100 mt-4">
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-4">
             <Link
               href={`/companies/${companyId}/chart-of-accounts`}
-              className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1"
+              className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
             >
               <ArrowLeft size={16} /> Cancel
             </Link>
-            <button className="bg-[#003366] hover:bg-blue-900 text-white px-8 py-3 rounded font-bold shadow-md flex items-center gap-2 transition-all">
-              <Save size={18} /> SAVE LEDGER
+            <button className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center gap-2">
+              <Check size={18} /> Save Ledger
             </button>
           </div>
         </form>

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { Plus, FileText } from "lucide-react";
+import { Plus, FileText, ChevronRight, Clock } from "lucide-react";
 import TransactionSearch from "@/components/TransactionSearch";
 import VoucherTable from "@/components/VoucherTable";
 
@@ -12,53 +12,60 @@ export default async function VoucherListPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // FIXED: Kept the correct query that filters by Company ID and includes details
+  // 1. Fetch vouchers with ALL required relations
   const vouchers = await prisma.voucher.findMany({
     where: { companyId },
     include: {
       entries: {
-        include: { ledger: true }, // To get Ledger Names
+        include: { ledger: true },
       },
-      inventory: true, // To get Stock Items
-      createdBy: true,
     },
     orderBy: { date: "desc" },
   });
 
-  // REMOVED: Duplicate 'const vouchers' declaration
-  // REMOVED: Premature 'return <VoucherList...>'
+  const pendingCount = vouchers.filter((v) => v.status === "PENDING").length;
 
   return (
-    <div className="space-y-4">
-      {/* HEADER */}
-      <div className="flex justify-between items-center bg-white p-4 border border-gray-300 shadow-sm rounded-sm">
+    <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-lg font-bold text-[#003366] flex items-center gap-2">
-            <FileText size={20} /> DAYBOOK
-          </h1>
-          <p className="text-xs text-gray-500 font-medium">
-            Review and verify entries
-          </p>
-        </div>
-        <div className="flex gap-4 items-center">
-          <div className="flex flex-col items-end">
-            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-              Verify Transaction
-            </label>
-            <TransactionSearch companyId={companyId} />
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <Link
+              href={`/companies/${companyId}`}
+              className="hover:text-blue-600 transition-colors"
+            >
+              Dashboard
+            </Link>
+            <ChevronRight size={12} />
+            <span className="text-slate-900">Daybook</span>
           </div>
-          <div className="h-8 w-px bg-gray-300 mx-2"></div>
+          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+            <FileText className="text-blue-600" size={32} /> Daybook Journal
+          </h1>
+          <div className="flex items-center gap-4 mt-2">
+            <p className="text-slate-500 text-sm">
+              Reviewing {vouchers.length} total entries.
+            </p>
+            {pendingCount > 0 && (
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 rounded-full text-[11px] font-bold border border-red-200 animate-pulse">
+                <Clock size={12} /> {pendingCount} Pending Verification
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-center">
+          <TransactionSearch companyId={companyId} />
           <Link
             href={`/companies/${companyId}/vouchers/create`}
-            className="bg-[#004b8d] hover:bg-[#003366] text-white px-4 py-2 text-xs font-bold rounded shadow-sm flex items-center gap-2 h-10"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-sm font-bold rounded-xl shadow-lg flex items-center gap-2 transition-all active:scale-95"
           >
-            <Plus size={16} /> NEW ENTRY
+            <Plus size={18} /> New Voucher
           </Link>
         </div>
       </div>
 
-      {/* TABLE */}
-      {/* Passing the fetched data to the Client Component */}
+      {/* 2. Passing vouchers and companyId to the client table */}
       <VoucherTable vouchers={vouchers} companyId={companyId} />
     </div>
   );

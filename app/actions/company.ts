@@ -18,6 +18,19 @@ const CompanySchema = z.object({
   booksBeginFrom: z.string(),
 });
 
+// Update schema is simpler (usually excludes FY dates to prevent data corruption)
+const UpdateCompanySchema = CompanySchema.omit({
+  financialYearFrom: true,
+  booksBeginFrom: true,
+}).extend({
+  id: z.coerce.number(),
+});
+
+export type CompanyState = {
+  error?: string;
+  success?: boolean;
+};
+
 // --- 1. CREATE COMPANY ---
 export async function createCompany(prevState: any, formData: FormData) {
   const result = CompanySchema.safeParse(Object.fromEntries(formData));
@@ -29,7 +42,6 @@ export async function createCompany(prevState: any, formData: FormData) {
   const data = result.data;
 
   try {
-    // 1. Create the Company Record
     const newCompany = await prisma.company.create({
       data: {
         name: data.name,
@@ -44,8 +56,6 @@ export async function createCompany(prevState: any, formData: FormData) {
     });
 
     const cid = newCompany.id;
-
-    // 2. Create Primary Groups (e.g., Assets, Liabilities)
     const groupMap = new Map<string, number>();
 
     for (const group of DEFAULT_GROUPS) {
@@ -59,13 +69,11 @@ export async function createCompany(prevState: any, formData: FormData) {
       groupMap.set(group.name, created.id);
     }
 
-    // 3. Create Sub-Groups (e.g., Cash-in-hand under Current Assets)
     for (const sub of SUB_GROUPS) {
       const parentId = groupMap.get(sub.parent);
       if (parentId) {
         const parentNature =
           DEFAULT_GROUPS.find((g) => g.name === sub.parent)?.nature || "ASSET";
-
         await prisma.accountGroup.create({
           data: {
             name: sub.name,
@@ -77,7 +85,6 @@ export async function createCompany(prevState: any, formData: FormData) {
       }
     }
 
-    // 4. Create Default "Cash" Ledger
     const cashGroup = await prisma.accountGroup.findFirst({
       where: { name: "Cash-in-hand", companyId: cid },
     });
@@ -102,59 +109,60 @@ export async function createCompany(prevState: any, formData: FormData) {
 }
 
 // --- 2. UPDATE COMPANY ---
-export async function updateCompany(id: number, formData: FormData) {
-  const name = formData.get("name") as string;
-  const address = formData.get("address") as string;
-  const state = formData.get("state") as string;
-  const pincode = formData.get("pincode") as string;
-  const email = formData.get("email") as string;
-  const gstin = formData.get("gstin") as string;
+// UPDATED: Standardized to (prevState, formData) for useActionState compatibility
+export async function updateCompany(prevState: any, formData: FormData) {
+  // We extract the ID from the formData (it should be a hidden input in your form)
+  const result = UpdateCompanySchema.safeParse(Object.fromEntries(formData));
 
-  if (!name) return { error: "Company Name is required" };
+  if (!result.success) {
+    return { error: result.error.issues[0].message };
+  }
+
+  const { id, ...data } = result.data;
 
   try {
     await prisma.company.update({
       where: { id },
       data: {
-        name,
-        address,
-        state,
-        pincode,
-        email: email || null,
-        gstin,
+        name: data.name,
+        address: data.address,
+        state: data.state,
+        pincode: data.pincode,
+        email: data.email || null,
+        gstin: data.gstin,
       },
     });
   } catch (e) {
+    console.error(e);
     return { error: "Failed to update company." };
   }
 
   revalidatePath("/");
+  revalidatePath(`/companies/edit/${id}`);
   redirect("/");
 }
 
-// --- 3. DELETE COMPANY (Safe Delete) ---
+// --- 3. DELETE COMPANY ---
 export async function deleteCompany(id: number) {
   try {
-    // 1. Check for Vouchers
     const voucherCount = await prisma.voucher.count({
       where: { companyId: id },
     });
 
     if (voucherCount > 0) {
-      console.error("Cannot delete company with existing vouchers");
       return { error: "Cannot delete company. Vouchers exist." };
     }
 
-    // 2. Safe to Delete (Delete Masters first to avoid FK errors)
-    await prisma.ledger.deleteMany({ where: { companyId: id } });
-    await prisma.accountGroup.deleteMany({ where: { companyId: id } });
-    await prisma.stockItem.deleteMany({ where: { companyId: id } });
-    await prisma.stockGroup.deleteMany({ where: { companyId: id } });
-    await prisma.unit.deleteMany({ where: { companyId: id } });
-    await prisma.voucherSequence.deleteMany({ where: { companyId: id } });
-
-    // 3. Delete Company
-    await prisma.company.delete({ where: { id } });
+    // Transaction to ensure all or nothing is deleted
+    await prisma.$transaction([
+      prisma.ledger.deleteMany({ where: { companyId: id } }),
+      prisma.accountGroup.deleteMany({ where: { companyId: id } }),
+      prisma.stockItem.deleteMany({ where: { companyId: id } }),
+      prisma.stockGroup.deleteMany({ where: { companyId: id } }),
+      prisma.unit.deleteMany({ where: { companyId: id } }),
+      prisma.voucherSequence.deleteMany({ where: { companyId: id } }),
+      prisma.company.delete({ where: { id } }),
+    ]);
 
     revalidatePath("/");
   } catch (e) {

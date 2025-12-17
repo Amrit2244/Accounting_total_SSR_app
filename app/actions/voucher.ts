@@ -3,8 +3,8 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
+import { cookies } from "next/headers";
 
 const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
@@ -12,20 +12,20 @@ const encodedKey = new TextEncoder().encode(secretKey);
 
 // --- Validation Schemas ---
 const AccountRowSchema = z.object({
-  ledgerId: z.string(),
-  amount: z.coerce.number(),
+  ledgerId: z.string().min(1, "Ledger ID is required"),
+  amount: z.coerce.number().min(0.01, "Amount must be greater than zero"),
   type: z.enum(["Dr", "Cr"]),
 });
 
 const InventoryRowSchema = z.object({
-  itemId: z.string(),
-  qty: z.coerce.number(),
-  rate: z.coerce.number(),
+  itemId: z.string().min(1, "Item ID is required"),
+  qty: z.coerce.number().min(0.01, "Quantity must be greater than zero"),
+  rate: z.coerce.number().min(0, "Rate cannot be negative"),
   gst: z.coerce.number().optional().default(0),
 });
 
 const VoucherSchema = z.object({
-  date: z.string(),
+  date: z.string().min(1, "Date is required"),
   type: z.enum([
     "CONTRA",
     "PAYMENT",
@@ -43,26 +43,33 @@ const VoucherSchema = z.object({
   taxLedgerId: z.string().optional(),
 });
 
-// --- Helper: Get User ---
-async function getCurrentUserId() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("session")?.value;
-  if (!session) return null;
+// --- Helper: Get User (Cleaned up and Awaited) ---
+async function getCurrentUserId(): Promise<number | null> {
   try {
+    const cookieStore = await cookies(); // Next.js 15+ requirement
+    const session = cookieStore.get("session")?.value;
+    if (!session) return null;
+
     const { payload } = await jwtVerify(session, encodedKey);
-    return parseInt(payload.userId as string);
-  } catch (e) {
+    // Handle both string and number payloads
+    return typeof payload.userId === "string"
+      ? parseInt(payload.userId)
+      : (payload.userId as number);
+  } catch (error) {
+    console.error("Auth error:", error);
     return null;
   }
 }
 
 // ==========================================
-// 1. CREATE VOUCHER (FIXED: REMOVED STOCK UPDATE)
+// 1. CREATE VOUCHER
 // ==========================================
 export async function createVoucher(prevState: any, formData: FormData) {
-  const result = VoucherSchema.safeParse(Object.fromEntries(formData));
+  const data = Object.fromEntries(formData);
+  const result = VoucherSchema.safeParse(data);
 
   if (!result.success) {
+    console.error("Validation Error:", result.error.issues);
     return { error: result.error.issues[0].message };
   }
 
@@ -80,7 +87,7 @@ export async function createVoucher(prevState: any, formData: FormData) {
 
   const cid = parseInt(companyId);
   const userId = await getCurrentUserId();
-  if (!userId) return { error: "User not authenticated" };
+  if (!userId) return { error: "User not authenticated or session expired." };
 
   const transactionCode = Math.floor(10000 + Math.random() * 90000).toString();
 
@@ -116,45 +123,39 @@ export async function createVoucher(prevState: any, formData: FormData) {
         },
       });
 
-      // ====================================================
       // C. SALES & PURCHASE LOGIC
-      // ====================================================
       if (type === "SALES" || type === "PURCHASE") {
         if (!inventoryRows || !partyLedgerId || !salesPurchaseLedgerId) {
           throw new Error(
-            "Validation Error: Missing Items or Ledgers for Sales/Purchase"
+            "Validation Error: Missing Inventory or Ledgers for Sales/Purchase."
           );
         }
 
         const items = z
           .array(InventoryRowSchema)
           .parse(JSON.parse(inventoryRows));
-
         let totalGoodsValue = 0;
         let totalTaxValue = 0;
 
-        // 2. Process Inventory Items
         for (const item of items) {
           const itemIdInt = parseInt(item.itemId);
-
-          // Get Item Name
           const stockItem = await tx.stockItem.findUnique({
             where: { id: itemIdInt },
+            select: { name: true },
           });
 
-          if (!stockItem) throw new Error(`Item ID ${itemIdInt} not found`);
+          if (!stockItem)
+            throw new Error(`Stock Item ID ${itemIdInt} not found.`);
 
           const lineAmount = item.qty * item.rate;
           const lineTax = lineAmount * (item.gst / 100);
-
           totalGoodsValue += lineAmount;
           totalTaxValue += lineTax;
 
-          // Save Inventory Row
           await tx.inventoryEntry.create({
             data: {
               voucherId: voucher.id,
-              stockItemId: itemIdInt, // ✅ Correct Field Name
+              stockItemId: itemIdInt,
               itemName: stockItem.name,
               quantity:
                 type === "SALES" ? -Math.abs(item.qty) : Math.abs(item.qty),
@@ -162,36 +163,28 @@ export async function createVoucher(prevState: any, formData: FormData) {
               amount: lineAmount,
             },
           });
-
-          // ⚠️ NOTE: I removed the `tx.stockItem.update` code because your DB schema
-          // does not have a `currentStock` column. Stock will be calculated dynamically.
         }
 
-        // 3. Accounting Entries
-        const partyId = parseInt(partyLedgerId);
-        const accountId = parseInt(salesPurchaseLedgerId);
-
+        const partyIdInt = parseInt(partyLedgerId);
+        const accountIdInt = parseInt(salesPurchaseLedgerId);
         const finalTax = taxLedgerId ? totalTaxValue : 0;
         const grandTotal = totalGoodsValue + finalTax;
 
         if (type === "SALES") {
-          // Debit Party
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
-              ledgerId: partyId,
+              ledgerId: partyIdInt,
               amount: grandTotal,
             },
           });
-          // Credit Sales
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
-              ledgerId: accountId,
+              ledgerId: accountIdInt,
               amount: -totalGoodsValue,
             },
           });
-          // Credit Tax
           if (taxLedgerId) {
             await tx.voucherEntry.create({
               data: {
@@ -202,24 +195,20 @@ export async function createVoucher(prevState: any, formData: FormData) {
             });
           }
         } else {
-          // PURCHASE
-          // Credit Party
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
-              ledgerId: partyId,
+              ledgerId: partyIdInt,
               amount: -grandTotal,
             },
           });
-          // Debit Purchase
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
-              ledgerId: accountId,
+              ledgerId: accountIdInt,
               amount: totalGoodsValue,
             },
           });
-          // Debit Tax
           if (taxLedgerId) {
             await tx.voucherEntry.create({
               data: {
@@ -231,32 +220,47 @@ export async function createVoucher(prevState: any, formData: FormData) {
           }
         }
       }
-      // ====================================================
       // D. STANDARD VOUCHER LOGIC
-      // ====================================================
       else if (rows) {
         const entries = z.array(AccountRowSchema).parse(JSON.parse(rows));
-        for (const entry of entries) {
-          const val = entry.amount;
-          const dbAmount = entry.type === "Dr" ? Math.abs(val) : -Math.abs(val);
+        const totalDr = entries
+          .filter((e) => e.type === "Dr")
+          .reduce((sum, e) => sum + e.amount, 0);
+        const totalCr = entries
+          .filter((e) => e.type === "Cr")
+          .reduce((sum, e) => sum + e.amount, 0);
 
+        if (Math.abs(totalDr - totalCr) > 0.01) {
+          throw new Error(
+            "Validation Error: Debit and Credit totals do not match."
+          );
+        }
+
+        for (const entry of entries) {
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
               ledgerId: parseInt(entry.ledgerId),
-              amount: dbAmount,
+              amount:
+                entry.type === "Dr"
+                  ? Math.abs(entry.amount)
+                  : -Math.abs(entry.amount),
             },
           });
         }
       }
-
       return voucher;
     });
 
+    revalidatePath(`/companies/${cid}/vouchers`);
     return { success: true, code: transactionCode, id: newVoucher.id };
   } catch (e: any) {
     console.error("Create Voucher Error:", e);
-    return { error: e.message || "Failed to save voucher. Database error." };
+    return {
+      error: e.message.startsWith("Validation Error")
+        ? e.message
+        : "Failed to save voucher.",
+    };
   }
 }
 
@@ -266,7 +270,11 @@ export async function createVoucher(prevState: any, formData: FormData) {
 export async function getVoucherByCode(code: string, companyId: number) {
   const standardInclude = {
     entries: { include: { ledger: true } },
-    inventory: { include: { stockItem: true } },
+    inventory: {
+      include: {
+        stockItem: { select: { name: true, gstRate: true, unit: true } },
+      },
+    },
     createdBy: true,
   };
 
@@ -300,39 +308,60 @@ export async function getVoucherByCode(code: string, companyId: number) {
 export async function verifyVoucherAction(voucherId: number) {
   const userId = await getCurrentUserId();
   if (!userId) return { error: "Unauthorized" };
+
   try {
     const voucher = await prisma.voucher.findUnique({
       where: { id: voucherId },
+      select: { createdById: true, companyId: true },
     });
-    if (!voucher) return { error: "Not Found" };
-    if (voucher.createdById === userId)
-      return { error: "Maker cannot verify own voucher" };
+
+    if (!voucher) return { error: "Voucher not found" };
+
+    // SECURITY BLOCK: If you are the maker (last person who touched it), you cannot verify.
+    if (voucher.createdById === userId) {
+      return {
+        error:
+          "Maker-Checker Conflict: You cannot verify a voucher you created or last edited.",
+      };
+    }
 
     await prisma.voucher.update({
       where: { id: voucherId },
-      data: { status: "APPROVED", verifiedById: userId },
+      data: {
+        status: "APPROVED",
+        verifiedById: userId,
+        updatedAt: new Date(),
+      },
     });
+
     revalidatePath(`/companies/${voucher.companyId}/vouchers`);
     return { success: true };
   } catch (e) {
     return { error: "Verification Failed" };
   }
 }
+
 export const verifyVoucher = verifyVoucherAction;
 
 // ==========================================
-// 4. DELETE VOUCHER (REMOVED STOCK LOGIC)
+// 4. DELETE VOUCHER
 // ==========================================
 export async function deleteVoucher(voucherId: number) {
   try {
+    const voucher = await prisma.voucher.findUnique({
+      where: { id: voucherId },
+    });
+    if (!voucher) return { error: "Voucher not found" };
+
     await prisma.$transaction(async (tx) => {
-      // Simply delete entries. No stock reversal needed as stock is dynamic.
       await tx.inventoryEntry.deleteMany({ where: { voucherId } });
       await tx.voucherEntry.deleteMany({ where: { voucherId } });
       await tx.voucher.delete({ where: { id: voucherId } });
     });
+
+    revalidatePath(`/companies/${voucher.companyId}/vouchers`);
     return { success: true };
   } catch (e) {
-    return { error: "Delete Failed" };
+    return { error: "Delete Failed." };
   }
 }

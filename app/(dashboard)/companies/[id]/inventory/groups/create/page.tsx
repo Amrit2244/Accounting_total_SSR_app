@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { ArrowLeft, Layers, Save } from "lucide-react";
+import { ArrowLeft, Layers } from "lucide-react";
 import Link from "next/link";
-import { createStockGroup } from "@/app/actions/masters";
-import SubmitButton from "@/components/SubmitButton"; // Ensure you have this or use a simple button
+import StockGroupForm from "@/components/forms/StockGroupForm"; // Import the client form
 
 export default async function CreateStockGroupPage({
   params,
@@ -19,67 +18,34 @@ export default async function CreateStockGroupPage({
   });
 
   return (
-    <div className="max-w-xl mx-auto p-6">
+    <div className="max-w-xl mx-auto py-12 px-4">
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#003366] flex items-center gap-2">
-          <Layers size={24} /> Create Stock Group
-        </h1>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shadow-sm">
+              <Layers size={20} />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900">
+              Create Stock Group
+            </h1>
+          </div>
+          <p className="text-sm text-slate-500 mt-2 ml-1">
+            Define a new category to organize your inventory.
+          </p>
+        </div>
+
         <Link
           href={`/companies/${companyId}/inventory/groups`}
-          className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1"
+          className="px-3 py-2 bg-white border border-slate-300 text-slate-600 font-medium rounded-lg text-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-2 shadow-sm"
         >
           <ArrowLeft size={16} /> Cancel
         </Link>
       </div>
 
-      {/* FORM */}
-      <div className="bg-white border border-gray-300 shadow-sm rounded-lg p-6">
-        <form action={createStockGroup} className="space-y-4">
-          <input type="hidden" name="companyId" value={companyId} />
-
-          {/* Group Name */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-              Group Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="name"
-              required
-              placeholder="e.g. Electronics, Raw Material"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#003366] outline-none"
-            />
-          </div>
-
-          {/* Parent Group (Optional) */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-              Parent Group (Optional)
-            </label>
-            <select
-              name="parentId"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#003366] outline-none bg-white"
-            >
-              <option value="">(Primary)</option>
-              {existingGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-500 mt-1">
-              Select "Primary" if this is a main category.
-            </p>
-          </div>
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* Submit Button */}
-          <div className="flex justify-end">
-            <SubmitButton text="Save Group" icon={<Save size={16} />} />
-          </div>
-        </form>
+      {/* FORM CARD */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 md:p-8">
+        <StockGroupForm companyId={companyId} existingGroups={existingGroups} />
       </div>
     </div>
   );

@@ -1,42 +1,80 @@
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
+import { notFound } from "next/navigation";
+// FIX: Changed import from VoucherEditForm to the correct LedgerEditForm
+import LedgerEditForm from "@/components/forms/LedgerEditForm";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import EditLedgerForm from "./edit-form"; // ✅ Import the Client Component
+import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react";
+
+// Define the exact Params type expected from the URL segments
+type EditLedgerParams = {
+  id: string; // Corresponds to [id] (companyId)
+  ledgerId: string; // Corresponds to [ledgerId]
+};
 
 export default async function EditLedgerPage({
   params,
 }: {
-  params: Promise<{ id: string; ledgerId: string }>;
+  params: EditLedgerParams;
 }) {
-  const { id, ledgerId } = await params;
+  const { id, ledgerId } = params;
+
+  // --- CRITICAL FIX: Robust Parameter Validation ---
   const companyId = parseInt(id);
   const lId = parseInt(ledgerId);
 
+  if (isNaN(companyId) || companyId <= 0 || isNaN(lId) || lId <= 0) {
+    notFound();
+  }
+  // --- END CRITICAL FIX ---
+
   // 1. Fetch Ledger Data
-  const ledger = await prisma.ledger.findUnique({ where: { id: lId } });
+  const ledger = await prisma.ledger.findUnique({
+    where: { id: lId, companyId },
+  }); // Adding companyId to where clause for security
 
   // 2. Fetch Groups for Dropdown
-  const groups = await prisma.accountGroup.findMany();
+  const groups = await prisma.accountGroup.findMany({
+    where: { companyId },
+    orderBy: { name: "asc" },
+  });
 
-  if (!ledger)
-    return <div className="p-10 text-red-500 font-bold">Ledger not found</div>;
+  // --- CRITICAL DATA CHECK ---
+  if (!ledger) {
+    notFound();
+  }
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white border border-gray-300 rounded-lg mt-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-xl font-bold text-[#003366]">
-          Edit Ledger: {ledger.name}
-        </h1>
+    <div className="max-w-xl mx-auto py-12 px-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+            <Link
+              href={`/companies/${companyId}/ledgers`}
+              className="hover:text-blue-600 transition-colors"
+            >
+              Ledger Masters
+            </Link>
+            <ChevronRight size={12} />
+            <span className="text-slate-900 font-medium">Edit</span>
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <BookOpen className="text-blue-600" />
+            Edit Ledger: <span className="text-blue-700">{ledger.name}</span>
+          </h1>
+        </div>
         <Link
           href={`/companies/${companyId}/ledgers`}
-          className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1"
+          className="px-3 py-2 bg-white border border-slate-300 text-slate-600 font-medium rounded-lg text-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-2 shadow-sm"
         >
           <ArrowLeft size={16} /> Back
         </Link>
       </div>
 
-      {/* ✅ Render the Client Form */}
-      <EditLedgerForm companyId={companyId} ledger={ledger} groups={groups} />
+      {/* Form Card */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 md:p-8">
+        <LedgerEditForm companyId={companyId} ledger={ledger} groups={groups} />
+      </div>
     </div>
   );
 }

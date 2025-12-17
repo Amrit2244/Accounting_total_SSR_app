@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { updateLedger } from "@/app/actions/masters"; // Ensure this path matches your file name
 import Link from "next/link";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react";
+// Assuming the modern form component is here:
+import EditLedgerForm from "./edit-form";
 
 export default async function EditLedgerPage({
   params,
@@ -12,122 +13,58 @@ export default async function EditLedgerPage({
   const companyId = parseInt(id);
   const lId = parseInt(ledgerId);
 
+  // 1. Fetch Ledger Data
   const ledger = await prisma.ledger.findUnique({ where: { id: lId } });
-  const groups = await prisma.accountGroup.findMany();
 
-  if (!ledger) return <div>Ledger not found</div>;
+  // 2. Fetch Groups for Dropdown (Filter by companyId is good practice)
+  const groups = await prisma.accountGroup.findMany({
+    where: { companyId },
+    orderBy: { name: "asc" },
+  });
 
-  const isCr = ledger.openingBalance < 0;
-  const absBalance = Math.abs(ledger.openingBalance);
+  if (!ledger)
+    return <div className="p-10 text-red-500 font-bold">Ledger not found</div>;
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white border border-gray-300 rounded-lg mt-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-xl font-bold text-[#003366]">
-          Edit Ledger: {ledger.name}
-        </h1>
+    <div className="max-w-xl mx-auto py-12 px-4">
+      {/* 1. Header Section (Modernized) */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          {/* Breadcrumb / Context */}
+          <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+            <Link
+              href={`/companies/${companyId}/ledgers`}
+              className="hover:text-blue-600 transition-colors"
+            >
+              Ledger Masters
+            </Link>
+            <ChevronRight size={12} />
+            <span className="text-slate-900 font-medium">Edit</span>
+          </div>
+
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <BookOpen className="text-blue-600" />
+            Edit Ledger: <span className="text-blue-700">{ledger.name}</span>
+          </h1>
+        </div>
+
+        {/* Back Button (Modernized) */}
         <Link
           href={`/companies/${companyId}/ledgers`}
-          className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1"
+          className="px-3 py-2 bg-white border border-slate-300 text-slate-600 font-medium rounded-lg text-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-2 shadow-sm"
         >
           <ArrowLeft size={16} /> Back
         </Link>
       </div>
 
-      <form action={updateLedger} className="space-y-6">
-        <input type="hidden" name="companyId" value={companyId} />
-        <input type="hidden" name="id" value={ledger.id} />
-
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-            Ledger Name
-          </label>
-          <input
-            name="name"
-            type="text"
-            defaultValue={ledger.name}
-            required
-            className="w-full border border-gray-300 p-2 rounded font-bold"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-            Parent Group
-          </label>
-          <select
-            name="groupId"
-            defaultValue={ledger.groupId}
-            className="w-full border border-gray-300 p-2 rounded font-bold"
-          >
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* GST Fields (New) */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-              State
-            </label>
-            <input
-              name="state"
-              type="text"
-              defaultValue={ledger.state || ""}
-              placeholder="e.g. Maharashtra"
-              className="w-full border border-gray-300 p-2 rounded font-bold"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-              GSTIN
-            </label>
-            <input
-              name="gstin"
-              type="text"
-              defaultValue={ledger.gstin || ""}
-              placeholder="27ABC..."
-              className="w-full border border-gray-300 p-2 rounded font-bold"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-              Opening Balance
-            </label>
-            <input
-              name="openingBalance"
-              type="number"
-              step="0.01"
-              defaultValue={absBalance}
-              className="w-full border border-gray-300 p-2 rounded font-bold text-right"
-            />
-          </div>
-          <div className="w-24">
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-              Dr / Cr
-            </label>
-            <select
-              name="openingType"
-              defaultValue={isCr ? "Cr" : "Dr"}
-              className="w-full border border-gray-300 p-2 rounded font-bold"
-            >
-              <option value="Dr">Dr</option>
-              <option value="Cr">Cr</option>
-            </select>
-          </div>
-        </div>
-
-        <button className="bg-[#003366] text-white w-full py-3 rounded-lg font-bold shadow hover:bg-blue-900 flex items-center justify-center gap-2">
-          <Save size={18} /> UPDATE LEDGER
-        </button>
-      </form>
+      {/* 2. Form Card (Passes data to the modern client component) */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 md:p-8">
+        {/*
+          NOTE: The actual form logic and styling are now contained within EditLedgerForm.
+          We pass the fetched data here.
+        */}
+        <EditLedgerForm companyId={companyId} ledger={ledger} groups={groups} />
+      </div>
     </div>
   );
 }

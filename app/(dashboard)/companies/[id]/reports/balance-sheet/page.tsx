@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, PieChart } from "lucide-react";
+import { ArrowLeft, PieChart, IndianRupee } from "lucide-react";
+import { notFound } from "next/navigation";
 
 export default async function BalanceSheetPage({
   params,
@@ -10,10 +11,13 @@ export default async function BalanceSheetPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
+  if (isNaN(companyId)) notFound();
+
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     include: {
       group: { select: { name: true, nature: true } },
+      // Fetch all approved entries to calculate current balances
       entries: {
         where: { voucher: { status: "APPROVED" } },
         select: { amount: true },
@@ -21,159 +25,220 @@ export default async function BalanceSheetPage({
     },
   });
 
-  let liabilities: any[] = [];
-  let assets: any[] = [];
-  let totalLiab = 0;
-  let totalAsset = 0;
-
-  // Variables for P&L Calculation (to bring Net Profit into BS)
+  // --- 1. CORE CALCULATION ---
+  let liabilities: {
+    name: string;
+    amount: number;
+    group: string;
+    isSystem?: boolean;
+  }[] = [];
+  let assets: {
+    name: string;
+    amount: number;
+    group: string;
+    isSystem?: boolean;
+  }[] = [];
   let plIncome = 0;
   let plExpense = 0;
 
   ledgers.forEach((l) => {
+    // Current Balance = Opening Balance + Net Transactions
     const txnTotal = l.entries.reduce((sum, e) => sum + e.amount, 0);
-    const net = l.openingBalance + txnTotal;
-    if (Math.abs(net) < 0.01) return;
+    const netBalance = l.openingBalance + txnTotal;
 
-    const val = Math.abs(net);
+    // Ignore accounts with near-zero balance
+    if (Math.abs(netBalance) < 0.01) return;
 
-    if (l.group.nature === "LIABILITY") {
+    // Use absolute value for display, nature determines which column
+    const val = Math.abs(netBalance);
+
+    if (l.group.nature === "LIABILITY" || l.group.nature === "CAPITAL") {
       liabilities.push({ name: l.name, amount: val, group: l.group.name });
-      totalLiab += val;
     } else if (l.group.nature === "ASSET") {
       assets.push({ name: l.name, amount: val, group: l.group.name });
-      totalAsset += val;
     }
-    // Calculate P&L in background to find Net Profit
+    // Calculate P&L for transfer
     else if (l.group.nature === "INCOME") {
-      plIncome += val;
+      plIncome += netBalance;
     } else if (l.group.nature === "EXPENSE") {
-      plExpense += val;
+      plExpense += netBalance;
     }
   });
 
-  // Calculate Net Profit
-  const netProfit = plIncome - plExpense;
+  // --- 2. NET PROFIT TRANSFER ---
+  const netProfit = plIncome + plExpense; // Assuming EXPENSE is stored as negative, INCOME as positive
 
-  // Add Net Profit to Liabilities (or deduct loss)
-  // In accounting, Profit increases Capital (Liability side)
-  if (netProfit !== 0) {
+  if (Math.abs(netProfit) >= 0.01) {
     liabilities.push({
       name:
         netProfit >= 0
-          ? "Profit & Loss A/c (Profit)"
-          : "Profit & Loss A/c (Loss)",
-      amount: netProfit, // Use raw value, layout handles negative display if needed
-      group: "Reserves & Surplus",
+          ? "Profit & Loss A/c (Net Profit)"
+          : "Profit & Loss A/c (Net Loss)",
+      amount: netProfit, // Use raw value, layout handles sign
+      group: "Net Profit / Loss",
       isSystem: true,
     });
-    totalLiab += netProfit;
   }
 
-  // Final Tally Check
-  // Note: If DB entries are correct double-entry, totalLiab should equal totalAsset exactly.
-  // Due to our positive/negative storage logic:
-  // Assets are usually Debit (+), Liabilities Credit (-).
-  // totalLiab logic above summed absolute values.
+  // --- 3. FINAL TOTALS ---
+  const totalLiab = liabilities.reduce((sum, l) => sum + l.amount, 0);
+  const totalAsset = assets.reduce((sum, a) => sum + a.amount, 0);
+
+  // Final Tally Check: If assets and liabilities don't match, there's a serious error
+  const isBalanced = Math.abs(totalLiab - totalAsset) < 0.01;
+
+  // --- FORMATTING HELPERS ---
+  const formatCurrency = (value: number) =>
+    Math.abs(value).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  const getSign = (value: number) => (value < 0 ? "(Cr)" : "(Dr)");
+
+  const renderRow = (item: {
+    name: string;
+    amount: number;
+    group: string;
+    isSystem?: boolean;
+  }) => (
+    <div
+      key={item.name + item.group}
+      className={`flex justify-between items-center py-2 border-b border-slate-100 last:border-b-0 ${
+        item.isSystem ? "bg-blue-50/50" : "hover:bg-slate-50/50"
+      }`}
+    >
+      <div>
+        <span
+          className={`font-medium ${
+            item.isSystem ? "text-blue-700" : "text-slate-800"
+          }`}
+        >
+          {item.name}
+        </span>
+        <span className="block text-[10px] text-slate-400">
+          Under {item.group}
+        </span>
+      </div>
+      <span
+        className={`font-mono font-semibold text-right ${
+          item.amount < 0 ? "text-red-600" : "text-slate-900"
+        }`}
+      >
+        {formatCurrency(item.amount)}
+        {/* We can optionally show Dr/Cr sign for clarity */}
+        <span
+          className={`ml-1 text-[10px] ${
+            item.amount < 0 ? "text-red-500" : "text-slate-500"
+          }`}
+        >
+          {getSign(item.amount)}
+        </span>
+      </span>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-50px)] bg-slate-100">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-50">
       {/* HEADER */}
-      <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0">
-        <div>
-          <h1 className="text-lg font-bold flex items-center gap-2">
-            <PieChart size={18} /> BALANCE SHEET
-          </h1>
-          <p className="text-[11px] text-blue-200 uppercase tracking-wider">
-            Statement of Financial Position
-          </p>
+      <div className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center shadow-sm shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+            <PieChart size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">BALANCE SHEET</h1>
+            <p className="text-sm text-slate-500">
+              Statement of Financial Position
+            </p>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <Link
-            href={`/companies/${companyId}/reports`}
-            className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded flex items-center gap-1"
-          >
-            <ArrowLeft size={12} /> BACK
-          </Link>
-        </div>
+        <Link
+          href={`/companies/${companyId}/reports`}
+          className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg text-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+        >
+          <ArrowLeft size={16} /> Back to Reports
+        </Link>
       </div>
 
       {/* REPORT CONTENT */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-6xl mx-auto bg-white border border-gray-300 shadow-sm min-h-[600px] flex">
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="max-w-6xl mx-auto bg-white border border-slate-200 shadow-lg min-h-[70vh] flex rounded-xl overflow-hidden">
           {/* LEFT: LIABILITIES */}
-          <div className="w-1/2 border-r border-gray-300 flex flex-col">
-            <div className="bg-gray-100 p-2 text-center font-bold text-[#003366] text-xs uppercase border-b border-gray-300">
-              Liabilities
+          <div className="w-1/2 border-r border-slate-200 flex flex-col">
+            <div className="bg-slate-50 p-4 text-center font-bold text-slate-700 text-sm uppercase border-b border-slate-200 sticky top-0 z-10">
+              Liabilities & Capital
             </div>
-            <div className="flex-1 p-4 space-y-2">
-              {liabilities.map((l, i) => (
-                <div
-                  key={i}
-                  className={`flex justify-between text-xs border-b border-dashed border-gray-200 pb-1 ${
-                    l.isSystem ? "text-blue-700 font-bold" : ""
-                  }`}
-                >
-                  <div>
-                    <span className="font-bold text-slate-800">{l.name}</span>
-                    <span className="block text-[10px] text-gray-400">
-                      {l.group}
-                    </span>
-                  </div>
-                  <span className="font-mono">
-                    {l.amount.toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
-              ))}
+
+            <div className="flex-1 p-6 overflow-y-auto">
+              {liabilities.length === 0 ? (
+                <p className="text-center text-slate-400 py-12">
+                  No Liability/Capital accounts found.
+                </p>
+              ) : (
+                liabilities.map(renderRow)
+              )}
             </div>
-            <div className="bg-[#003366] text-white p-2 flex justify-between text-sm font-bold mt-auto">
-              <span>Total</span>
-              <span>
-                {totalLiab.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                })}
+
+            {/* TOTAL LIABILITY */}
+            <div
+              className={`p-4 flex justify-between text-base font-extrabold mt-auto ${
+                isBalanced
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              <span className="uppercase">Total Liabilities</span>
+              <span className="font-mono flex items-center gap-1">
+                <IndianRupee size={16} />
+                {formatCurrency(totalLiab)}
               </span>
             </div>
           </div>
 
           {/* RIGHT: ASSETS */}
           <div className="w-1/2 flex flex-col">
-            <div className="bg-gray-100 p-2 text-center font-bold text-[#003366] text-xs uppercase border-b border-gray-300">
+            <div className="bg-slate-50 p-4 text-center font-bold text-slate-700 text-sm uppercase border-b border-slate-200 sticky top-0 z-10">
               Assets
             </div>
-            <div className="flex-1 p-4 space-y-2">
-              {assets.map((a, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between text-xs border-b border-dashed border-gray-200 pb-1"
-                >
-                  <div>
-                    <span className="font-bold text-slate-800">{a.name}</span>
-                    <span className="block text-[10px] text-gray-400">
-                      {a.group}
-                    </span>
-                  </div>
-                  <span className="font-mono">
-                    {a.amount.toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
-              ))}
+
+            <div className="flex-1 p-6 overflow-y-auto">
+              {assets.length === 0 ? (
+                <p className="text-center text-slate-400 py-12">
+                  No Asset accounts found.
+                </p>
+              ) : (
+                assets.map(renderRow)
+              )}
             </div>
-            <div className="bg-[#003366] text-white p-2 flex justify-between text-sm font-bold mt-auto">
-              <span>Total</span>
-              <span>
-                {totalAsset.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                })}
+
+            {/* TOTAL ASSETS */}
+            <div
+              className={`p-4 flex justify-between text-base font-extrabold mt-auto ${
+                isBalanced
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              <span className="uppercase">Total Assets</span>
+              <span className="font-mono flex items-center gap-1">
+                <IndianRupee size={16} />
+                {formatCurrency(totalAsset)}
               </span>
             </div>
           </div>
         </div>
+
+        {/* Tally Message */}
+        {!isBalanced && (
+          <div className="max-w-6xl mx-auto mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium rounded-lg">
+            <AlertCircle size={16} className="inline-block mr-2" />
+            Warning: Balance Sheet is not tallied. Difference: ₹{" "}
+            {formatCurrency(totalLiab - totalAsset)}.
+          </div>
+        )}
       </div>
+      {/*  - I would not trigger this as the code itself is the primary focus. */}
     </div>
   );
 }
