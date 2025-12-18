@@ -24,7 +24,8 @@ export default async function PrintVoucherPage({
           },
         },
       },
-      createdBy: true,
+      createdBy: true, // ✅ Included for Audit Trail
+      verifiedBy: true, // ✅ Included for Audit Trail
     },
   });
 
@@ -32,12 +33,9 @@ export default async function PrintVoucherPage({
 
   // 2. Logic to determine Grand Total
   const isStockJournal = voucher.type === "STOCK_JOURNAL";
-
   let grandTotal = 0;
 
   if (isStockJournal) {
-    // For Stock Journal: Sum the value of Items PRODUCED (Destination)
-    // If no isProduction flag found, sum all inventory amounts
     const productionTotal = voucher.inventory
       .filter((i) => i.isProduction === true)
       .reduce((sum, i) => sum + i.amount, 0);
@@ -46,9 +44,7 @@ export default async function PrintVoucherPage({
       productionTotal > 0
         ? productionTotal
         : voucher.inventory.reduce((sum, i) => sum + i.amount, 0) / 2;
-    // fallback: total/2 because Stock Journals usually have equal In and Out
   } else {
-    // For Regular Vouchers: Sum the positive (Debit) ledger entries
     grandTotal = voucher.entries
       .filter((e) => e.amount > 0)
       .reduce((sum, e) => sum + e.amount, 0);
@@ -63,14 +59,12 @@ export default async function PrintVoucherPage({
         Math.abs(e.amount) > 0
     )?.ledger.name || "Cash / Counterparty";
 
-  // Helper: Number Formatting (Indian Format)
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
 
-  // Helper: Date Formatting
   const fmtDate = (date: Date) =>
     date.toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -82,12 +76,10 @@ export default async function PrintVoucherPage({
 
   return (
     <div className="bg-slate-100 min-h-screen flex justify-center p-8 print:p-0 print:bg-white">
-      {/* PRINT BUTTON - Hidden during actual print */}
       <div className="fixed top-6 right-6 no-print z-50">
         <PrintTriggerButton />
       </div>
 
-      {/* A4 PAPER CONTAINER */}
       <div
         id="printable-area"
         className="w-[210mm] min-h-[297mm] bg-white p-12 shadow-2xl text-slate-900 print:shadow-none print:w-full print:p-8"
@@ -117,12 +109,10 @@ export default async function PrintVoucherPage({
               <p className="text-xl font-black font-mono">
                 {voucher.voucherNo}
               </p>
-
               <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest pt-2">
                 Date
               </p>
               <p className="text-lg font-bold">{fmtDate(voucher.date)}</p>
-
               <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest pt-2">
                 Reference ID
               </p>
@@ -169,7 +159,6 @@ export default async function PrintVoucherPage({
 
         {/* 3. MAIN CONTENT TABLE */}
         {isInventory ? (
-          /* INVENTORY ITEMS TABLE */
           <table className="w-full mb-8 border-collapse">
             <thead className="bg-slate-900 text-white print:bg-slate-100 print:text-black">
               <tr>
@@ -231,7 +220,6 @@ export default async function PrintVoucherPage({
             </tbody>
           </table>
         ) : (
-          /* ACCOUNTING LEDGERS TABLE */
           <table className="w-full mb-8 border-collapse">
             <thead className="bg-slate-100 text-slate-800 border-y-2 border-slate-900">
               <tr>
@@ -282,8 +270,33 @@ export default async function PrintVoucherPage({
           </div>
         </div>
 
+        {/* ✅ FEATURE 5: AUDIT TRAIL SECTION */}
+        <div className="mt-12 pt-8 border-t border-slate-100 space-y-3 no-print-background">
+          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+            Voucher Audit Trail
+          </h4>
+          <div className="flex items-center gap-8 text-[11px] text-slate-600">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-900">Maker:</span>{" "}
+              {voucher.createdBy?.name || "System"}
+              <span className="text-slate-400 italic">
+                ({new Date(voucher.createdAt).toLocaleString("en-IN")})
+              </span>
+            </div>
+            {voucher.verifiedBy && (
+              <div className="flex items-center gap-2 border-l pl-8 border-slate-200">
+                <span className="font-bold text-emerald-600">Verified By:</span>{" "}
+                {voucher.verifiedBy?.name}
+                <span className="text-slate-400 italic">
+                  ({new Date(voucher.updatedAt).toLocaleString("en-IN")})
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* 5. FOOTER SECTION */}
-        <div className="grid grid-cols-2 gap-12 border-t border-slate-200 pt-8 mt-auto">
+        <div className="grid grid-cols-2 gap-12 border-t border-slate-200 pt-8 mt-12">
           <div className="space-y-4">
             <p className="text-xs font-black uppercase text-slate-900 tracking-widest">
               Terms & Conditions

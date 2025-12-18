@@ -17,37 +17,65 @@ export default function DashboardCharts({ data }: { data: any[] }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       {/* CHART 1: Sales vs Purchase (Bar) */}
-      <div className="bg-white p-6 border border-gray-300 shadow-sm rounded-sm">
-        <h3 className="text-sm font-bold text-gray-500 uppercase mb-4">
-          Sales vs Purchase Performance
+      <div className="bg-white p-6 border border-slate-200 shadow-sm rounded-2xl">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+          Revenue vs Expense Performance
         </h3>
-        <div className="h-[300px] w-full text-xs">
+        <div className="h-[300px] w-full text-xs font-bold">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis />
+            <BarChart
+              data={data}
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#f1f5f9"
+              />
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#94a3b8" }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#94a3b8" }}
+              />
               <Tooltip
                 contentStyle={{
-                  borderRadius: "8px",
+                  borderRadius: "12px",
                   border: "none",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  backgroundColor: "#0f172a",
+                  color: "#fff",
+                  boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                }}
+                itemStyle={{ color: "#fff" }}
+              />
+              <Legend
+                verticalAlign="top"
+                align="right"
+                iconType="circle"
+                wrapperStyle={{
+                  paddingBottom: "20px",
+                  fontSize: "10px",
+                  textTransform: "uppercase",
                 }}
               />
-              <Legend />
               <Bar
                 dataKey="sales"
-                name="Total Sales"
-                fill="#003366"
-                radius={[4, 4, 0, 0]}
-                barSize={20}
+                name="Revenue"
+                fill="#3b82f6"
+                radius={[6, 6, 0, 0]}
+                barSize={12}
               />
               <Bar
                 dataKey="purchase"
-                name="Total Purchase"
-                fill="#f59e0b"
-                radius={[4, 4, 0, 0]}
-                barSize={20}
+                name="Expense"
+                fill="#f43f5e"
+                radius={[6, 6, 0, 0]}
+                barSize={12}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -55,31 +83,47 @@ export default function DashboardCharts({ data }: { data: any[] }) {
       </div>
 
       {/* CHART 2: Cash Flow Trend (Area) */}
-      {/* Uses same data but visualizes 'Sales' as generic 'Inflow' trend for visual variety */}
-      <div className="bg-white p-6 border border-gray-300 shadow-sm rounded-sm">
-        <h3 className="text-sm font-bold text-gray-500 uppercase mb-4">
-          Revenue Trend Line
+      <div className="bg-white p-6 border border-slate-200 shadow-sm rounded-2xl">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+          Inflow Trend Line
         </h3>
-        <div className="h-[300px] w-full text-xs">
+        <div className="h-[300px] w-full text-xs font-bold">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data}>
+            <AreaChart
+              data={data}
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#004b8d" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#004b8d" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#f1f5f9"
+              />
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#94a3b8" }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#94a3b8" }}
+              />
               <Tooltip />
               <Area
                 type="monotone"
                 dataKey="sales"
-                stroke="#004b8d"
+                name="Revenue Inflow"
+                stroke="#3b82f6"
                 fillOpacity={1}
                 fill="url(#colorSales)"
-                strokeWidth={3}
+                strokeWidth={4}
               />
             </AreaChart>
           </ResponsiveContainer>

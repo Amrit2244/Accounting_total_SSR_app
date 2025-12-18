@@ -14,7 +14,9 @@ import {
   UserCog,
   ShieldCheck,
   Cpu,
-  RefreshCcw, // Added for Stock Journal icon
+  RefreshCcw,
+  Beaker, // ✅ Added missing icon
+  Factory, // ✅ Added missing icon
 } from "lucide-react";
 import clsx from "clsx";
 import packageJson from "@/package.json";
@@ -46,7 +48,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
       ],
     },
     {
-      label: "Masters & Manufacturing", // Updated Label for clarity
+      label: "Masters & Manufacturing",
       items: [
         {
           name: "Ledger Masters",
@@ -59,16 +61,19 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           icon: Layers,
         },
         {
-          name: "Inventory",
+          name: "Stock Manager",
           href: `/companies/${companyId}/inventory`,
           icon: Package,
-          exact: true, // Set to exact so it doesn't highlight when in sub-pages
         },
-        // ✅ NEW: STOCK JOURNAL ACCESS
         {
-          name: "Stock Journal",
-          href: `/companies/${companyId}/inventory/stock-journal`,
-          icon: RefreshCcw,
+          name: "Production Recipes (BOM)",
+          href: `/companies/${companyId}/inventory/bom`,
+          icon: Beaker,
+        },
+        {
+          name: "Manufacturing Journal",
+          href: `/companies/${companyId}/vouchers/create?type=STOCK_JOURNAL`,
+          icon: Factory,
         },
       ],
     },
@@ -85,7 +90,6 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           href: `/companies/${companyId}/export`,
           icon: FileDown,
         },
-        // ✅ NEW: VERIFICATION QUEUE
         {
           name: "Verification",
           href: `/companies/${companyId}/verify`,

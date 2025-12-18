@@ -24,24 +24,27 @@ model User {
   // Relations
   createdVouchers  Voucher[] @relation("CreatedBy")
   verifiedVouchers Voucher[] @relation("VerifiedBy")
+  
+  // ✅ FEATURE 5: Audit Tracking for BOMs
+  createdBoms      BOM[]     @relation("BOMMaker")
 }
 
 // ==========================================
 // 2. COMPANY DATA
 // ==========================================
 model Company {
-  id               Int       @id @default(autoincrement())
-  name             String
-  address          String?   @db.Text
-  state            String?
-  pincode          String?
-  email            String?
-  gstin            String?
+  id                Int               @id @default(autoincrement())
+  name              String
+  address           String?           @db.Text
+  state             String?
+  pincode           String?
+  email             String?
+  gstin             String?
   
   // Settings
-  currencySymbol   String    @default("₹")
+  currencySymbol    String            @default("₹")
   financialYearFrom DateTime
-  booksBeginFrom   DateTime
+  booksBeginFrom    DateTime
 
   // Relations
   groups           Group[]
@@ -51,8 +54,9 @@ model Company {
   stockGroups      StockGroup[]
   stockItems       StockItem[]
   sequences        VoucherSequence[]
+  boms             BOM[]             
   
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime          @default(now())
 }
 
 // ==========================================
@@ -74,7 +78,7 @@ model VoucherSequence {
 model Group {
   id        Int     @id @default(autoincrement())
   name      String
-  nature    String? // ASSET, LIABILITY, INCOME, EXPENSE (Optional for Tally Import)
+  nature    String? // ASSET, LIABILITY, INCOME, EXPENSE
   
   companyId Int
   company   Company @relation(fields: [companyId], references: [id])
@@ -90,20 +94,20 @@ model Group {
 }
 
 model Ledger {
-  id              Int      @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   name            String
-  address         String?   @db.Text
-  openingBalance  Float    @default(0.0)
+  address         String?        @db.Text
+  openingBalance  Float          @default(0.0)
   
-  groupId         Int?     // Optional initially, but recommended
-  group           Group?   @relation(fields: [groupId], references: [id])
+  groupId         Int?           
+  group           Group?         @relation(fields: [groupId], references: [id])
   
   companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
+  company         Company        @relation(fields: [companyId], references: [id])
   
   // Relations
   entries         VoucherEntry[]
-  vouchersAsParty Voucher[] @relation("PartyLedger") // Link for 'partyLedgerId' in Voucher
+  vouchersAsParty Voucher[]      @relation("PartyLedger")
 
   // Tally Specifics
   tallyName       String?        
@@ -128,14 +132,14 @@ model Unit {
 }
 
 model StockGroup {
-  id        Int         @id @default(autoincrement())
+  id        Int          @id @default(autoincrement())
   name      String
   companyId Int
-  company   Company     @relation(fields: [companyId], references: [id])
+  company   Company      @relation(fields: [companyId], references: [id])
   items     StockItem[]
   
   parentId  Int?
-  parent    StockGroup? @relation("StockHierarchy", fields: [parentId], references: [id])
+  parent    StockGroup?  @relation("StockHierarchy", fields: [parentId], references: [id])
   children  StockGroup[] @relation("StockHierarchy")
   
   @@unique([name, companyId])
@@ -146,11 +150,14 @@ model StockItem {
   name             String
   partNumber       String?
   
-  // New Balance Fields added here
+  // Balance Fields
   openingQty       Float            @default(0)
   openingValue     Float            @default(0)
   quantity         Float            @default(0) // Current Stock level
   
+  // ✅ FEATURE 3: REORDER ALERTS
+  minStock         Float            @default(0) 
+
   groupId          Int?
   group            StockGroup?      @relation(fields: [groupId], references: [id])
   
@@ -162,8 +169,43 @@ model StockItem {
   
   inventoryEntries InventoryEntry[]
   gstRate          Float            @default(0) 
+
+  // ✅ FEATURE 2: BILL OF MATERIALS (BOM) RELATIONS
+  producedBy       BOM[]            @relation("FinishedGood")
+  usedInBoms       BOMItem[]        @relation("BOMComponent")
   
   @@unique([name, companyId])
+}
+
+// ✅ NEW MODEL: BILL OF MATERIALS (BOM)
+model BOM {
+  id             Int       @id @default(autoincrement())
+  name           String    
+  
+  finishedGoodId Int
+  finishedGood   StockItem @relation("FinishedGood", fields: [finishedGoodId], references: [id])
+  targetQty      Float     @default(1.0) 
+  
+  components     BOMItem[]
+
+  companyId      Int
+  company        Company   @relation(fields: [companyId], references: [id])
+
+  // ✅ FEATURE 5: AUDIT TRAIL for Master Data
+  createdById    Int
+  createdBy      User      @relation("BOMMaker", fields: [createdById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model BOMItem {
+  id          Int       @id @default(autoincrement())
+  bomId       Int
+  bom         BOM       @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  
+  stockItemId Int
+  stockItem   StockItem @relation("BOMComponent", fields: [stockItemId], references: [id])
+  quantity    Float     
 }
 
 // ==========================================
@@ -172,56 +214,66 @@ model StockItem {
 model Voucher {
   id              Int      @id @default(autoincrement())
   
-  // --- Existing Identity Fields ---
   voucherNo       String   
-  transactionCode String?  @unique // 5 Digit Code
+  transactionCode String?  @unique 
   
-  // --- Tally/Voucher Fields ---
-  type            String   // SALES, RECEIPT, PAYMENT...
+  type            String   // SALES, RECEIPT, PAYMENT, STOCK_JOURNAL...
   date            DateTime 
-  narration       String?
+  narration       String?  @db.Text
   
-  // --- New Fields for Tally Import ---
-  reference       String?  // For Tally Reference (e.g. "5689")
-  partyName       String?  // For Tally Party Name
+  reference       String?  
+  partyName       String?  
   
-  partyLedgerId   Int?     // Link to Ledger Table
+  partyLedgerId   Int?     
   partyLedger     Ledger?  @relation("PartyLedger", fields: [partyLedgerId], references: [id])
 
-  partyGstin      String?  // Optional Taxation Field
-  placeOfSupply   String?  // Optional Taxation Field
-  totalAmount     Float?    // Total Voucher Value (Required for Reports)
+  partyGstin      String?  
+  placeOfSupply   String?  
+  totalAmount     Float?    
 
-  // --- Company Relation ---
+  // ✅ FEATURE 5: ATTACHMENTS (Unique field)
+  attachmentUrl   String?  @db.Text 
+
   companyId       Int
   company         Company  @relation(fields: [companyId], references: [id])
   
-  // --- Maker Checker Workflow ---
   status          String   @default("PENDING") // PENDING, APPROVED
   
-  createdById     Int      // Kept as Int (Required)
+  createdById     Int      
   createdBy       User     @relation("CreatedBy", fields: [createdById], references: [id])
   
   verifiedById    Int?
   verifiedBy      User?    @relation("VerifiedBy", fields: [verifiedById], references: [id])
 
-  // --- Relations ---
-  entries         VoucherEntry[]   // Accounting Dr/Cr
-  inventory       InventoryEntry[] // Item Details
+  entries         VoucherEntry[]   
+  inventory       InventoryEntry[] 
   
+  // ✅ FEATURE 5: AUDIT LOGS
+  auditLogs       AuditLog[]
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  // Unique constraint to prevent duplicate Tally imports
   @@unique([companyId, voucherNo, type]) 
+}
+
+// ✅ NEW MODEL: AUDIT LOG (Feature 5)
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  voucherId   Int
+  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  userId      Int
+  userName    String   
+  action      String   // "CREATED", "EDITED", "VERIFIED", "REJECTED"
+  details     String?  @db.Text 
+  createdAt   DateTime @default(now())
 }
 
 model VoucherEntry {
   id              Int      @id @default(autoincrement())
-  
   ledgerName      String?   
-  ledgerId        Int?     // Linked Ledger ID
-  ledger          Ledger?  @relation(fields: [ledgerId], references: [id]) // FIXED: Added Relation
+  ledgerId        Int?     
+  ledger          Ledger?  @relation(fields: [ledgerId], references: [id]) 
   
   amount          Float    // Positive = Debit, Negative = Credit
   
@@ -229,9 +281,6 @@ model VoucherEntry {
   voucher         Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
 }
 
-// ---------------------------------------------
-// INVENTORY ENTRIES (Stock Items)
-// ---------------------------------------------
 model InventoryEntry {
   id          Int       @id @default(autoincrement())
   voucherId   Int
@@ -241,9 +290,7 @@ model InventoryEntry {
   rate        Float
   amount      Float
   unit        String?
-  // ✅ NEW FIELD: Consumption vs Production
-  // true = Product being made (Stock Increase)
-  // false = Raw material used (Stock Decrease)
+  
   isProduction Boolean   @default(false) 
 
   voucher     Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)

@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { useActionState } from "react";
+import React, { useState, useMemo, useActionState, useTransition } from "react";
 import {
   Plus,
   Trash2,
@@ -15,8 +14,10 @@ import {
   TrendingDown,
   TrendingUp,
   ShieldEllipsis,
+  Zap,
 } from "lucide-react";
 import { createStockJournal } from "@/app/actions/inventory";
+import { getRecipeByItem } from "@/app/actions/bom"; // ✅ Import the new action
 
 interface StockItem {
   id: number;
@@ -33,6 +34,7 @@ export default function StockJournalForm({
 }) {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [narration, setNarration] = useState("");
+  const [isFetching, startTransition] = useTransition(); // ✅ For Recipe Loading
 
   const [consumption, setConsumption] = useState<any[]>([
     { tempId: Math.random(), sid: "", name: "", qty: 0, rate: 0 },
@@ -47,6 +49,34 @@ export default function StockJournalForm({
     null
   );
 
+  // --- SMART RECIPE HANDLER ---
+  const handleProductionChange = (tempId: number, sid: string) => {
+    const selectedItem = stockItems.find((s) => s.id === Number(sid));
+
+    setProduction(
+      production.map((p) =>
+        p.tempId === tempId ? { ...p, sid, name: selectedItem?.name } : p
+      )
+    );
+
+    if (!sid) return;
+
+    // ✅ Automatically Fetch Recipe using Server Action
+    startTransition(async () => {
+      const bom = await getRecipeByItem(Number(sid));
+      if (bom && bom.components) {
+        const recipeRows = bom.components.map((c: any) => ({
+          tempId: Math.random(),
+          sid: c.stockItemId.toString(),
+          name: c.stockItem.name,
+          qty: c.quantity,
+          rate: 0,
+        }));
+        setConsumption(recipeRows);
+      }
+    });
+  };
+
   const totals = useMemo(() => {
     const consTotal = consumption.reduce(
       (sum, item) => sum + Number(item.qty) * Number(item.rate),
@@ -56,11 +86,36 @@ export default function StockJournalForm({
       (sum, item) => sum + Number(item.qty) * Number(item.rate),
       0
     );
-    return { consTotal, prodTotal };
+    const totalProdQty = production.reduce(
+      (sum, item) => sum + Number(item.qty),
+      0
+    );
+    return { consTotal, prodTotal, totalProdQty };
   }, [consumption, production]);
 
+  const suggestedRate = useMemo(() => {
+    if (totals.totalProdQty <= 0) return 0;
+    return (totals.consTotal / totals.totalProdQty).toFixed(2);
+  }, [totals.consTotal, totals.totalProdQty]);
+
+  const applySuggestedRate = () => {
+    setProduction(production.map((item) => ({ ...item, rate: suggestedRate })));
+  };
+
   return (
-    <form action={action} className="space-y-8">
+    <form action={action} className="relative space-y-8">
+      {/* Recipe Loading Overlay */}
+      {isFetching && (
+        <div className="absolute inset-0 z-50 bg-white/40 backdrop-blur-[2px] flex items-center justify-center rounded-[2.5rem]">
+          <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl flex items-center gap-3 shadow-2xl">
+            <Loader2 className="animate-spin" size={18} />
+            <span className="text-xs font-black uppercase tracking-widest">
+              Applying Recipe...
+            </span>
+          </div>
+        </div>
+      )}
+
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="date" value={date} />
       <input
@@ -74,43 +129,28 @@ export default function StockJournalForm({
         value={JSON.stringify(production.filter((i) => i.sid))}
       />
 
-      {/* ✅ MAKER-CHECKER SUCCESS MESSAGE */}
       {state?.success && (
         <div className="relative overflow-hidden bg-amber-600 rounded-[2.5rem] p-8 text-white shadow-2xl animate-in zoom-in-95 duration-500">
           <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
             <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/30">
               <ShieldEllipsis size={40} className="text-white" />
             </div>
-            <div className="text-center md:text-left">
-              <h2 className="text-3xl font-black tracking-tight uppercase">
+            <div>
+              <h2 className="text-3xl font-black tracking-tight uppercase tracking-tight">
                 Sent for Verification
               </h2>
               <p className="text-amber-50 text-lg font-medium opacity-90 mt-1">
                 {state.message}
               </p>
             </div>
-            <div className="md:ml-auto">
-              <div className="px-6 py-3 bg-white text-amber-700 rounded-2xl font-black text-sm tracking-widest uppercase shadow-lg">
-                Status: Pending
-              </div>
-            </div>
           </div>
-          <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
         </div>
       )}
 
-      {state?.error && (
-        <div className="p-6 bg-red-50 border-2 border-red-100 text-red-700 rounded-[2rem] flex items-center gap-4">
-          <AlertCircle size={32} />
-          <p className="font-bold text-lg">{state.error}</p>
-        </div>
-      )}
-
-      {/* Header Info */}
       <div className="bg-white p-8 border border-slate-200 rounded-[2.5rem] shadow-sm grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-            <Calendar size={14} className="text-blue-500" /> Journal Date
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+            <Calendar size={14} /> Journal Date
           </label>
           <input
             type="date"
@@ -120,8 +160,8 @@ export default function StockJournalForm({
           />
         </div>
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-            <ArrowRightLeft size={14} className="text-blue-500" /> Voucher Type
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+            <ArrowRightLeft size={14} /> Voucher Type
           </label>
           <div className="p-4 bg-blue-50 rounded-2xl text-blue-700 font-black uppercase tracking-widest text-center">
             Stock Journal (Manufacturing)
@@ -130,11 +170,11 @@ export default function StockJournalForm({
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        {/* Consumption Side */}
+        {/* CONSUMPTION */}
         <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col">
           <div className="bg-orange-50 px-8 py-6 border-b border-orange-100 flex justify-between items-center">
             <h3 className="text-lg font-black text-orange-800 tracking-tight flex items-center gap-3">
-              <TrendingDown size={22} /> Consumption (Source)
+              <TrendingDown /> Consumption
             </h3>
             <button
               type="button"
@@ -144,144 +184,162 @@ export default function StockJournalForm({
                   { tempId: Math.random(), sid: "", name: "", qty: 0, rate: 0 },
                 ])
               }
-              className="p-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-all"
+              className="p-2 bg-orange-600 text-white rounded-xl"
             >
               <Plus size={20} />
             </button>
           </div>
           <table className="w-full text-sm">
             <tbody className="divide-y divide-slate-50">
-              {consumption.map((item) => (
-                <tr key={item.tempId} className="hover:bg-slate-50/50">
-                  <td className="p-3 px-8">
-                    <select
-                      value={item.sid}
-                      onChange={(e) => {
-                        const selected = stockItems.find(
-                          (si) => si.id === Number(e.target.value)
-                        );
-                        setConsumption(
-                          consumption.map((i) =>
-                            i.tempId === item.tempId
-                              ? {
-                                  ...i,
-                                  sid: e.target.value,
-                                  name: selected?.name,
-                                }
-                              : i
+              {consumption.map((item) => {
+                const masterItem = stockItems.find(
+                  (si) => si.id === Number(item.sid)
+                );
+                const isShortage =
+                  Number(item.qty) > (masterItem?.quantity || 0);
+                return (
+                  <tr key={item.tempId}>
+                    <td className="p-3 px-8">
+                      <select
+                        value={item.sid}
+                        onChange={(e) => {
+                          const s = stockItems.find(
+                            (si) => si.id === Number(e.target.value)
+                          );
+                          setConsumption(
+                            consumption.map((i) =>
+                              i.tempId === item.tempId
+                                ? { ...i, sid: e.target.value, name: s?.name }
+                                : i
+                            )
+                          );
+                        }}
+                        className="w-full p-2 bg-transparent font-bold"
+                      >
+                        <option value="">Select Item...</option>
+                        {stockItems.map((si) => (
+                          <option key={si.id} value={si.id}>
+                            {si.name}
+                          </option>
+                        ))}
+                      </select>
+                      {item.sid && (
+                        <div
+                          className={`text-[9px] font-black px-2 py-0.5 rounded inline-block mt-1 ${
+                            isShortage
+                              ? "bg-red-100 text-red-600 animate-pulse"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          Available Stock: {masterItem?.quantity || 0}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <input
+                        type="number"
+                        value={item.qty || ""}
+                        onChange={(e) =>
+                          setConsumption(
+                            consumption.map((i) =>
+                              i.tempId === item.tempId
+                                ? { ...i, qty: e.target.value }
+                                : i
+                            )
                           )
-                        );
-                      }}
-                      className="w-full p-2 bg-transparent border-none focus:ring-0 font-bold text-slate-800"
-                    >
-                      <option value="">Select Item...</option>
-                      {stockItems.map((si) => (
-                        <option key={si.id} value={si.id}>
-                          {si.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      value={item.qty || ""}
-                      onChange={(e) =>
-                        setConsumption(
-                          consumption.map((i) =>
-                            i.tempId === item.tempId
-                              ? { ...i, qty: e.target.value }
-                              : i
+                        }
+                        className="w-full p-2 text-right font-mono font-black text-orange-600 outline-none"
+                        placeholder="Qty"
+                      />
+                    </td>
+                    <td className="p-3">
+                      <input
+                        type="number"
+                        value={item.rate || ""}
+                        onChange={(e) =>
+                          setConsumption(
+                            consumption.map((i) =>
+                              i.tempId === item.tempId
+                                ? { ...i, rate: e.target.value }
+                                : i
+                            )
                           )
-                        )
-                      }
-                      className="w-full p-2 text-right bg-transparent outline-none font-mono font-black text-orange-600"
-                    />
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      value={item.rate || ""}
-                      onChange={(e) =>
-                        setConsumption(
-                          consumption.map((i) =>
-                            i.tempId === item.tempId
-                              ? { ...i, rate: e.target.value }
-                              : i
+                        }
+                        className="w-full p-2 text-right font-mono font-bold text-slate-600 outline-none"
+                        placeholder="Rate"
+                      />
+                    </td>
+                    <td className="p-3 px-8">
+                      <Trash2
+                        size={18}
+                        className="text-slate-300 hover:text-red-500 cursor-pointer"
+                        onClick={() =>
+                          setConsumption(
+                            consumption.filter((i) => i.tempId !== item.tempId)
                           )
-                        )
-                      }
-                      className="w-full p-2 text-right bg-transparent outline-none font-mono font-bold text-slate-600"
-                    />
-                  </td>
-                  <td className="p-3 px-8 text-center">
-                    <Trash2
-                      size={18}
-                      className="text-slate-300 hover:text-red-500 cursor-pointer"
-                      onClick={() =>
-                        setConsumption(
-                          consumption.filter((i) => i.tempId !== item.tempId)
-                        )
-                      }
-                    />
-                  </td>
-                </tr>
-              ))}
+                        }
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           <div className="p-6 bg-slate-50 border-t flex justify-between items-center px-8">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
               Total Consumption
             </span>
-            <span className="text-xl font-black text-slate-900 font-mono">
+            <span className="text-xl font-black text-slate-900 font-mono text-slate-900">
               ₹{totals.consTotal.toFixed(2)}
             </span>
           </div>
         </div>
 
-        {/* Production Side */}
+        {/* PRODUCTION */}
         <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col">
           <div className="bg-emerald-50 px-8 py-6 border-b border-emerald-100 flex justify-between items-center">
             <h3 className="text-lg font-black text-emerald-800 tracking-tight flex items-center gap-3">
-              <TrendingUp size={22} /> Production (Destination)
+              <TrendingUp /> Production
             </h3>
-            <button
-              type="button"
-              onClick={() =>
-                setProduction([
-                  ...production,
-                  { tempId: Math.random(), sid: "", name: "", qty: 0, rate: 0 },
-                ])
-              }
-              className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all"
-            >
-              <Plus size={20} />
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={applySuggestedRate}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase"
+              >
+                <Zap size={14} /> Auto Rate
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setProduction([
+                    ...production,
+                    {
+                      tempId: Math.random(),
+                      sid: "",
+                      name: "",
+                      qty: 0,
+                      rate: 0,
+                    },
+                  ])
+                }
+                className="p-2 bg-emerald-600 text-white rounded-xl"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
           </div>
           <table className="w-full text-sm">
             <tbody className="divide-y divide-slate-50">
               {production.map((item) => (
-                <tr key={item.tempId} className="hover:bg-slate-50/50">
+                <tr key={item.tempId}>
                   <td className="p-3 px-8">
                     <select
                       value={item.sid}
-                      onChange={(e) => {
-                        const selected = stockItems.find(
-                          (si) => si.id === Number(e.target.value)
-                        );
-                        setProduction(
-                          production.map((i) =>
-                            i.tempId === item.tempId
-                              ? {
-                                  ...i,
-                                  sid: e.target.value,
-                                  name: selected?.name,
-                                }
-                              : i
-                          )
-                        );
-                      }}
-                      className="w-full p-2 bg-transparent border-none focus:ring-0 font-bold text-slate-800"
+                      onChange={(e) =>
+                        handleProductionChange(item.tempId, e.target.value)
+                      }
+                      className="w-full p-2 bg-transparent font-bold"
                     >
                       <option value="">Select Item...</option>
                       {stockItems.map((si) => (
@@ -304,7 +362,8 @@ export default function StockJournalForm({
                           )
                         )
                       }
-                      className="w-full p-2 text-right bg-transparent outline-none font-mono font-black text-emerald-600"
+                      className="w-full p-2 text-right font-mono font-black text-emerald-600 outline-none"
+                      placeholder="Qty"
                     />
                   </td>
                   <td className="p-3">
@@ -320,10 +379,11 @@ export default function StockJournalForm({
                           )
                         )
                       }
-                      className="w-full p-2 text-right bg-transparent outline-none font-mono font-bold text-slate-600"
+                      className="w-full p-2 text-right font-mono font-bold text-slate-600 outline-none"
+                      placeholder="Rate"
                     />
                   </td>
-                  <td className="p-3 px-8 text-center">
+                  <td className="p-3 px-8">
                     <Trash2
                       size={18}
                       className="text-slate-300 hover:text-red-500 cursor-pointer"
@@ -339,9 +399,16 @@ export default function StockJournalForm({
             </tbody>
           </table>
           <div className="p-6 bg-slate-50 border-t flex justify-between items-center px-8">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Total Production
-            </span>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Total Production
+              </span>
+              {Number(suggestedRate) > 0 && (
+                <span className="text-[9px] font-bold text-blue-500 italic">
+                  Suggested Rate: ₹{suggestedRate}
+                </span>
+              )}
+            </div>
             <span className="text-xl font-black text-slate-900 font-mono">
               ₹{totals.prodTotal.toFixed(2)}
             </span>
@@ -366,18 +433,14 @@ export default function StockJournalForm({
       <button
         disabled={isPending}
         type="submit"
-        className={`w-full py-6 rounded-[2rem] font-black tracking-[0.2em] uppercase flex items-center justify-center gap-4 transition-all text-lg shadow-2xl ${
+        className={`w-full py-6 rounded-[2rem] font-black uppercase tracking-widest transition-all text-lg shadow-2xl ${
           isPending
             ? "bg-slate-100 text-slate-300"
             : "bg-slate-900 text-white hover:bg-black"
         }`}
       >
-        {isPending ? (
-          <Loader2 className="animate-spin" size={24} />
-        ) : (
-          <Save size={24} />
-        )}
-        Submit for Verification
+        {isPending ? <Loader2 className="animate-spin" /> : <Save />} Submit for
+        Verification
       </button>
     </form>
   );

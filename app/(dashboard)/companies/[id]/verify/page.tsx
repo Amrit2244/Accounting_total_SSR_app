@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { ShieldCheck, Clock, AlertCircle } from "lucide-react";
+import { ShieldCheck, Clock, CheckCircle } from "lucide-react";
 import VoucherTable from "@/components/VoucherTable";
 
 export default async function VerificationQueuePage({
@@ -10,15 +10,23 @@ export default async function VerificationQueuePage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // Fetch only PENDING vouchers
+  // Fetch only PENDING vouchers with all required relations
   const pendingVouchers = await prisma.voucher.findMany({
     where: {
       companyId,
       status: "PENDING",
     },
     include: {
-      entries: { include: { ledger: true } },
+      // Include ledgers to prevent the "null name" error in the table
+      entries: {
+        include: {
+          ledger: {
+            include: { group: true },
+          },
+        },
+      },
       inventory: { include: { stockItem: true } },
+      createdBy: true,
     },
     orderBy: { date: "desc" },
   });

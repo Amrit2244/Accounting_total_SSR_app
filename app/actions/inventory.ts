@@ -26,7 +26,7 @@ async function getCurrentUserId(): Promise<number | null> {
   }
 }
 
-// --- CREATE UNIT ---
+// --- CREATE UNIT (NO CHANGES) ---
 const UnitSchema = z.object({
   name: z.string().min(1),
   symbol: z.string().min(1),
@@ -52,13 +52,14 @@ export async function createUnit(prevState: any, formData: FormData) {
   }
 }
 
-// --- CREATE STOCK ITEM ---
+// --- CREATE STOCK ITEM (UPDATED FOR FEATURE 3) ---
 const ItemSchema = z.object({
   name: z.string().min(1),
   unitId: z.string().min(1, "Unit is required"),
   partNumber: z.string().optional(),
   openingQty: z.string().optional(),
   openingRate: z.string().optional(),
+  minStock: z.string().optional(), // ✅ Added for Reorder Alerts
   companyId: z.string(),
 });
 
@@ -66,12 +67,20 @@ export async function createStockItem(prevState: any, formData: FormData) {
   const result = ItemSchema.safeParse(Object.fromEntries(formData));
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const { name, unitId, partNumber, openingQty, openingRate, companyId } =
-    result.data;
+  const {
+    name,
+    unitId,
+    partNumber,
+    openingQty,
+    openingRate,
+    companyId,
+    minStock,
+  } = result.data;
 
   try {
     const qty = parseFloat(openingQty || "0");
     const rate = parseFloat(openingRate || "0");
+    const reorderLevel = parseFloat(minStock || "0"); // ✅
 
     await prisma.stockItem.create({
       data: {
@@ -82,6 +91,7 @@ export async function createStockItem(prevState: any, formData: FormData) {
         openingQty: qty,
         openingValue: qty * rate,
         quantity: qty,
+        minStock: reorderLevel, // ✅ Feature 3: Set minStock
       },
     });
   } catch (e) {
@@ -92,7 +102,7 @@ export async function createStockItem(prevState: any, formData: FormData) {
 }
 
 // ==========================================
-// ✅ UPDATED: CREATE STOCK JOURNAL (MAKER-CHECKER ENABLED)
+// ✅ UPDATED: CREATE STOCK JOURNAL (FEATURE 5: AUDIT LOGS)
 // ==========================================
 
 export async function createStockJournal(prevState: any, formData: FormData) {
@@ -115,12 +125,14 @@ export async function createStockJournal(prevState: any, formData: FormData) {
     const userId = await getCurrentUserId();
     if (!userId) return { error: "Unauthorized" };
 
+    // Fetch user details for the Audit Log
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return { error: "User not found" };
+
     const txCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     await prisma.$transaction(async (tx) => {
       // 1. Create the Voucher Header with PENDING status
-      // Note: We do NOT update StockItem quantities here.
-      // Movement happens only upon Approval.
       const voucher = await tx.voucher.create({
         data: {
           companyId,
@@ -129,7 +141,7 @@ export async function createStockJournal(prevState: any, formData: FormData) {
           voucherNo: "SJ-" + Date.now().toString().slice(-4),
           transactionCode: txCode,
           narration,
-          status: "PENDING", // ✅ Set to Pending for Checker to review
+          status: "PENDING",
           createdById: userId,
           totalAmount: productionEntries.reduce(
             (sum: number, p: any) => sum + Number(p.qty) * Number(p.rate),
@@ -138,7 +150,7 @@ export async function createStockJournal(prevState: any, formData: FormData) {
         },
       });
 
-      // 2. Create Consumption Entries (isProduction: false)
+      // 2. Create Consumption Entries
       for (const item of consumptionEntries) {
         await tx.inventoryEntry.create({
           data: {
@@ -151,10 +163,9 @@ export async function createStockJournal(prevState: any, formData: FormData) {
             isProduction: false,
           },
         });
-        // ❌ Stock update logic removed from Maker step
       }
 
-      // 3. Create Production Entries (isProduction: true)
+      // 3. Create Production Entries
       for (const item of productionEntries) {
         await tx.inventoryEntry.create({
           data: {
@@ -167,8 +178,18 @@ export async function createStockJournal(prevState: any, formData: FormData) {
             isProduction: true,
           },
         });
-        // ❌ Stock update logic removed from Maker step
       }
+
+      // ✅ 4. FEATURE 5: RECORD AUDIT LOG
+      await tx.auditLog.create({
+        data: {
+          voucherId: voucher.id,
+          userId: userId,
+          userName: user.name,
+          action: "CREATED",
+          details: `Stock Journal #${txCode} created. Consumption items: ${consumptionEntries.length}, Production items: ${productionEntries.length}.`,
+        },
+      });
     });
 
     revalidatePath(`/companies/${companyId}/inventory`);

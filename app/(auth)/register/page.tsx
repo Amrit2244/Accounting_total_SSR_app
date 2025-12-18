@@ -16,7 +16,7 @@ export default function RegisterPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none" />
 
         <div className="relative z-10 flex items-center gap-2 font-bold text-xl">
-          <Activity className="text-blue-500" /> FinCore ERP
+          <Activity className="text-blue-500" /> AS Core ERP
         </div>
 
         <div className="relative z-10">
@@ -37,7 +37,7 @@ export default function RegisterPage() {
           </ul>
         </div>
         <div className="text-slate-500 text-xs relative z-10">
-          © 2024 FinCore Inc.
+          © 2025 AS Core ERP SOLUTIONS.
         </div>
       </div>
 

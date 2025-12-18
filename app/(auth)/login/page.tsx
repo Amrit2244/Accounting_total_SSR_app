@@ -104,7 +104,7 @@ export default function LoginPage() {
           <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm border border-white/10">
             <Sparkles size={20} className="text-blue-400" />
           </div>
-          FinCore ERP
+          AS Core ERP SOLUTIONS
         </div>
 
         <div className="relative z-10 max-w-lg">
