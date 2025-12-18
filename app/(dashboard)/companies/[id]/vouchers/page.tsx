@@ -12,12 +12,16 @@ export default async function VoucherListPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // 1. Fetch vouchers with ALL required relations
+  // 1. Fetch vouchers with ALL required relations (Accounting + Inventory)
   const vouchers = await prisma.voucher.findMany({
     where: { companyId },
     include: {
       entries: {
         include: { ledger: true },
+      },
+      // ✅ ADDED: Include inventory so Stock Journals show up with their data
+      inventory: {
+        include: { stockItem: true },
       },
     },
     orderBy: { date: "desc" },

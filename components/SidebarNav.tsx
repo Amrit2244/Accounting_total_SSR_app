@@ -14,13 +14,14 @@ import {
   UserCog,
   ShieldCheck,
   Cpu,
+  RefreshCcw, // Added for Stock Journal icon
 } from "lucide-react";
 import clsx from "clsx";
-import packageJson from "@/package.json"; // Import the file
+import packageJson from "@/package.json";
 
 export default function SidebarNav({ companyId }: { companyId: number }) {
   const pathname = usePathname();
-  const appVersion = `v${packageJson.version}`; // Update this per release
+  const appVersion = `v${packageJson.version}`;
 
   const menuGroups = [
     {
@@ -45,7 +46,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
       ],
     },
     {
-      label: "Masters",
+      label: "Masters & Manufacturing", // Updated Label for clarity
       items: [
         {
           name: "Ledger Masters",
@@ -61,6 +62,13 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           name: "Inventory",
           href: `/companies/${companyId}/inventory`,
           icon: Package,
+          exact: true, // Set to exact so it doesn't highlight when in sub-pages
+        },
+        // ✅ NEW: STOCK JOURNAL ACCESS
+        {
+          name: "Stock Journal",
+          href: `/companies/${companyId}/inventory/stock-journal`,
+          icon: RefreshCcw,
         },
       ],
     },
@@ -77,6 +85,12 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           href: `/companies/${companyId}/export`,
           icon: FileDown,
         },
+        // ✅ NEW: VERIFICATION QUEUE
+        {
+          name: "Verification",
+          href: `/companies/${companyId}/verify`,
+          icon: ShieldCheck,
+        },
         {
           name: "Settings",
           href: `/companies/edit/${companyId}`,
@@ -88,7 +102,6 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
 
   return (
     <div className="flex flex-col h-full bg-[#0f172a] text-slate-300 select-none">
-      {/* Scrollable Navigation Area */}
       <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar">
         {menuGroups.map((group, idx) => (
           <div key={idx} className="mb-8">
@@ -113,7 +126,6 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
                         : "hover:bg-slate-800/50 hover:text-slate-100"
                     )}
                   >
-                    {/* Active Indicator Line */}
                     {isActive && (
                       <div className="absolute left-0 w-1 h-5 bg-blue-500 rounded-r-full shadow-[0_0_10px_#3b82f6]" />
                     )}
@@ -136,7 +148,6 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
         ))}
       </div>
 
-      {/* Modern Version Footer */}
       <div className="p-4 mx-4 mb-6 rounded-2xl bg-slate-800/40 border border-slate-700/50 backdrop-blur-sm">
         <div className="flex items-center justify-between mb-2">
           <div className="p-1.5 bg-blue-500/10 rounded-lg">

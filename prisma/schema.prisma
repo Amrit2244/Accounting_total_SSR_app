@@ -233,17 +233,19 @@ model VoucherEntry {
 // INVENTORY ENTRIES (Stock Items)
 // ---------------------------------------------
 model InventoryEntry {
-  id              Int        @id @default(autoincrement())
-  
-  itemName        String   
-  stockItemId     Int?       // Linked StockItem ID
-  stockItem       StockItem? @relation(fields: [stockItemId], references: [id]) // FIXED: Added Relation
-  
-  quantity        Float    
-  unit            String?  
-  rate            Float    
-  amount          Float    
-  
-  voucherId       Int
-  voucher         Voucher    @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  id          Int       @id @default(autoincrement())
+  voucherId   Int
+  stockItemId Int
+  itemName    String
+  quantity    Float
+  rate        Float
+  amount      Float
+  unit        String?
+  // ✅ NEW FIELD: Consumption vs Production
+  // true = Product being made (Stock Increase)
+  // false = Raw material used (Stock Decrease)
+  isProduction Boolean   @default(false) 
+
+  voucher     Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
 }

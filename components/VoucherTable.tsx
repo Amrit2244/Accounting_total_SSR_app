@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Trash2,
   X,
+  Package,
 } from "lucide-react";
 import { deleteBulkVouchers } from "@/app/actions/masters";
 
@@ -24,7 +25,6 @@ export default function VoucherTable({
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Filter Logic: Ensures if search is empty, ALL vouchers show
   const filteredVouchers = useMemo(() => {
     if (!searchId.trim()) return vouchers;
     return vouchers.filter(
@@ -61,7 +61,6 @@ export default function VoucherTable({
 
   return (
     <div className="relative">
-      {/* Floating Action Bar */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-4">
           <div className="flex items-center gap-3 border-r border-slate-700 pr-6">
@@ -140,21 +139,29 @@ export default function VoucherTable({
             <tbody className="divide-y divide-slate-100">
               {filteredVouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-20 text-center">
-                    <p className="text-slate-400 font-medium italic">
-                      No vouchers found in database.
-                    </p>
+                  <td
+                    colSpan={9}
+                    className="p-20 text-center text-slate-400 italic"
+                  >
+                    No vouchers found.
                   </td>
                 </tr>
               ) : (
                 filteredVouchers.map((voucher: any) => {
                   const isPending = voucher.status === "PENDING";
                   const isSelected = selectedIds.includes(voucher.id);
+                  const isStockJournal = voucher.type === "STOCK_JOURNAL";
+
+                  // Logic to handle row display for Stock Journals (which have no entries)
+                  const rowsToRender = isStockJournal
+                    ? [{ id: `sj-${voucher.id}`, isSJ: true }]
+                    : voucher.entries;
+
                   return (
                     <React.Fragment key={voucher.id}>
-                      {voucher.entries.map((entry: any, index: number) => (
+                      {rowsToRender.map((row: any, index: number) => (
                         <tr
-                          key={entry.id}
+                          key={row.id}
                           className={`transition-all ${
                             isSelected
                               ? "bg-blue-50"
@@ -167,7 +174,7 @@ export default function VoucherTable({
                             <>
                               <td
                                 className="p-4 text-center border-r border-slate-50"
-                                rowSpan={voucher.entries.length}
+                                rowSpan={rowsToRender.length}
                               >
                                 <input
                                   type="checkbox"
@@ -178,7 +185,7 @@ export default function VoucherTable({
                               </td>
                               <td
                                 className="p-4 font-bold text-slate-700"
-                                rowSpan={voucher.entries.length}
+                                rowSpan={rowsToRender.length}
                               >
                                 {new Date(voucher.date).toLocaleDateString(
                                   "en-IN",
@@ -187,19 +194,19 @@ export default function VoucherTable({
                               </td>
                               <td
                                 className="p-4 font-mono text-xs text-blue-600"
-                                rowSpan={voucher.entries.length}
+                                rowSpan={rowsToRender.length}
                               >
                                 {voucher.transactionCode || "-"}
                               </td>
                               <td
                                 className="p-4 font-black text-slate-900 uppercase"
-                                rowSpan={voucher.entries.length}
+                                rowSpan={rowsToRender.length}
                               >
                                 {voucher.voucherNo}
                               </td>
                               <td
                                 className="p-4 text-center"
-                                rowSpan={voucher.entries.length}
+                                rowSpan={rowsToRender.length}
                               >
                                 <div
                                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${
@@ -218,41 +225,65 @@ export default function VoucherTable({
                               </td>
                             </>
                           )}
+
+                          {/* Particulars Logic */}
                           <td
                             className={`p-4 font-medium border-l border-slate-50 ${
                               isPending ? "text-red-700" : "text-slate-600"
                             }`}
                           >
-                            {index > 0 && (
-                              <ArrowRight
-                                size={10}
-                                className="inline mr-2 text-slate-300"
-                              />
+                            {isStockJournal ? (
+                              <div className="flex items-center gap-2">
+                                <Package size={14} className="text-blue-500" />
+                                <span className="font-bold">
+                                  Stock Journal / Manufacturing
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                {index > 0 && (
+                                  <ArrowRight
+                                    size={10}
+                                    className="inline mr-2 text-slate-300"
+                                  />
+                                )}
+                                {row.ledger?.name || "Unknown Ledger"}
+                              </>
                             )}
-                            {entry.ledger?.name || "Unknown Ledger"}
+                          </td>
+
+                          {/* Amount Logic */}
+                          <td
+                            className={`p-4 text-right font-mono font-bold ${
+                              isPending ? "text-red-600" : "text-slate-900"
+                            }`}
+                          >
+                            {isStockJournal
+                              ? "-"
+                              : row.amount > 0
+                              ? formatMoney(row.amount)
+                              : ""}
                           </td>
                           <td
                             className={`p-4 text-right font-mono font-bold ${
                               isPending ? "text-red-600" : "text-slate-900"
                             }`}
                           >
-                            {entry.amount > 0 ? formatMoney(entry.amount) : ""}
+                            {isStockJournal
+                              ? formatMoney(voucher.totalAmount)
+                              : row.amount < 0
+                              ? formatMoney(row.amount)
+                              : ""}
                           </td>
-                          <td
-                            className={`p-4 text-right font-mono font-bold ${
-                              isPending ? "text-red-600" : "text-slate-900"
-                            }`}
-                          >
-                            {entry.amount < 0 ? formatMoney(entry.amount) : ""}
-                          </td>
+
                           {index === 0 && (
                             <td
                               className="p-4 text-center border-l border-slate-50"
-                              rowSpan={voucher.entries.length}
+                              rowSpan={rowsToRender.length}
                             >
                               <Link
                                 href={`/companies/${companyId}/vouchers/${voucher.id}/edit`}
-                                className="p-2 inline-block rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:shadow-md transition-all active:scale-90"
+                                className="p-2 inline-block rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 transition-all"
                               >
                                 <FileEdit size={16} />
                               </Link>

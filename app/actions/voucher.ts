@@ -312,12 +312,11 @@ export async function verifyVoucherAction(voucherId: number) {
   try {
     const voucher = await prisma.voucher.findUnique({
       where: { id: voucherId },
-      select: { createdById: true, companyId: true },
+      include: { inventory: true }, // ✅ Added to check inventory movement
     });
 
     if (!voucher) return { error: "Voucher not found" };
 
-    // SECURITY BLOCK: If you are the maker (last person who touched it), you cannot verify.
     if (voucher.createdById === userId) {
       return {
         error:
@@ -325,18 +324,37 @@ export async function verifyVoucherAction(voucherId: number) {
       };
     }
 
-    await prisma.voucher.update({
-      where: { id: voucherId },
-      data: {
-        status: "APPROVED",
-        verifiedById: userId,
-        updatedAt: new Date(),
-      },
+    await prisma.$transaction(async (tx) => {
+      // 1. Update Status
+      await tx.voucher.update({
+        where: { id: voucherId },
+        data: {
+          status: "APPROVED",
+          verifiedById: userId,
+          updatedAt: new Date(),
+        },
+      });
+
+      // 2. ✅ Process Stock Journal Inventory Movement
+      if (voucher.type === "STOCK_JOURNAL") {
+        for (const item of voucher.inventory) {
+          await tx.stockItem.update({
+            where: { id: item.stockItemId },
+            data: {
+              quantity: item.isProduction
+                ? { increment: item.quantity }
+                : { decrement: item.quantity },
+            },
+          });
+        }
+      }
     });
 
     revalidatePath(`/companies/${voucher.companyId}/vouchers`);
+    revalidatePath(`/companies/${voucher.companyId}/inventory`);
     return { success: true };
   } catch (e) {
+    console.error("Verification Error:", e);
     return { error: "Verification Failed" };
   }
 }
