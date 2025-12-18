@@ -18,6 +18,15 @@ const config = {
       },
     },
     extend: {
+      // ✅ GLOBAL FONT SIZE DECREASE
+      fontSize: {
+        xs: ["0.65rem", { lineHeight: "0.9rem" }], // Standard is 0.75rem
+        sm: ["0.75rem", { lineHeight: "1rem" }], // Standard is 0.875rem
+        base: ["0.85rem", { lineHeight: "1.25rem" }], // Standard is 1rem
+        lg: ["1rem", { lineHeight: "1.5rem" }], // Standard is 1.125rem
+        xl: ["1.1rem", { lineHeight: "1.75rem" }], // Standard is 1.25rem
+        "2xl": ["1.25rem", { lineHeight: "2rem" }], // Standard is 1.5rem
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

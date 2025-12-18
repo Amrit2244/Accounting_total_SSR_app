@@ -71,6 +71,7 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 221.2 83.2% 53.3%;
   --radius: 0.5rem;
+  --font-size: 14px;
 }
 
 .dark {
@@ -105,4 +106,6 @@
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
