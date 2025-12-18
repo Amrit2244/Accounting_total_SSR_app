@@ -238,6 +238,7 @@ model Voucher {
   company         Company  @relation(fields: [companyId], references: [id])
   
   status          String   @default("PENDING") // PENDING, APPROVED
+  rejectionReason  String?  @db.Text            // ✅ Added this field
   
   createdById     Int      
   createdBy       User     @relation("CreatedBy", fields: [createdById], references: [id])

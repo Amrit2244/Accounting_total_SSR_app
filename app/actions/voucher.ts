@@ -277,3 +277,50 @@ export async function deleteVoucher(voucherId: number) {
     return { error: "Delete Failed." };
   }
 }
+
+// 4. REJECT VOUCHER (Checker)
+// ==========================================
+export async function rejectVoucher(voucherId: number, reason: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) return { error: "Unauthorized" };
+  if (!reason.trim()) return { error: "Rejection reason is required." };
+
+  try {
+    const voucher = await prisma.voucher.findUnique({
+      where: { id: voucherId },
+    });
+
+    if (!voucher) return { error: "Voucher not found" };
+    if (voucher.createdById === userId)
+      return { error: "You cannot reject your own entry." };
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Update Status to REJECTED
+      await tx.voucher.update({
+        where: { id: voucherId },
+        data: {
+          status: "REJECTED",
+          rejectionReason: reason,
+          updatedAt: new Date(),
+        },
+      });
+
+      // 2. Record Audit Log
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      await tx.auditLog.create({
+        data: {
+          voucherId: voucher.id,
+          userId,
+          userName: user?.name || "Checker",
+          action: "REJECTED",
+          details: `Reason: ${reason}`,
+        },
+      });
+    });
+
+    revalidatePath(`/companies/${voucher.companyId}/vouchers`);
+    return { success: true };
+  } catch (e) {
+    return { error: "Rejection Failed" };
+  }
+}
