@@ -22,7 +22,6 @@ async function getCurrentUserId() {
   }
 }
 
-// ✅ Robust Number Parser: Masters keep sign, Transactions flip sign via separate logic
 function parseTallyNumber(val: any): number {
   if (val === undefined || val === null) return 0;
   const str = String(Array.isArray(val) ? val[0] : val)
@@ -66,6 +65,7 @@ function findKeyInObject(obj: any, key: string): any {
 
 function getName(obj: any): string {
   if (!obj) return "";
+  if (typeof obj === "string") return obj.trim();
   if (obj["@_NAME"]) return String(obj["@_NAME"]).trim();
   if (obj.NAME) {
     const n = Array.isArray(obj.NAME) ? obj.NAME[0] : obj.NAME;
@@ -91,7 +91,6 @@ export async function importTallyXML(prevState: any, formData: FormData) {
     if (text.includes("\u0000")) text = buffer.toString("utf16le");
     text = text.replace(/<[\/]{0,1}[a-zA-Z0-9]+:/g, "<");
 
-    // ✅ Using your working Chunking Strategy
     let rawChunks = text.match(/<TALLYMESSAGE[\s\S]*?<\/TALLYMESSAGE>/gi) || [];
     if (rawChunks.length === 0) {
       rawChunks =
@@ -118,6 +117,43 @@ export async function importTallyXML(prevState: any, formData: FormData) {
       vouchers: 0,
     };
 
+    // PASS 1: Create all Groups first
+    for (const rawMsg of rawChunks) {
+      const safeXML = rawMsg.startsWith("<")
+        ? rawMsg
+        : `<ROOT>${rawMsg}</ROOT>`;
+      const jsonObj = parser.parse(safeXML);
+      const data = jsonObj.TALLYMESSAGE || jsonObj;
+      const groupData = findKeyInObject(data, "GROUP");
+      const stockGroupData = findKeyInObject(data, "STOCKGROUP");
+
+      if (groupData) {
+        const name = getName(groupData);
+        if (name && name !== "Primary") {
+          const exists = await prisma.group.findFirst({
+            where: { name, companyId },
+          });
+          if (!exists) {
+            await prisma.group.create({ data: { name, companyId } });
+            stats.groups++;
+          }
+        }
+      }
+      if (stockGroupData) {
+        const name = getName(stockGroupData);
+        if (name && name !== "Primary") {
+          const exists = await prisma.stockGroup.findFirst({
+            where: { name, companyId },
+          });
+          if (!exists) {
+            await prisma.stockGroup.create({ data: { name, companyId } });
+            stats.stockGroups++;
+          }
+        }
+      }
+    }
+
+    // PASS 2: Create Ledgers, Items, and Vouchers
     for (const rawMsg of rawChunks) {
       const safeXML = rawMsg.startsWith("<")
         ? rawMsg
@@ -125,26 +161,12 @@ export async function importTallyXML(prevState: any, formData: FormData) {
       const jsonObj = parser.parse(safeXML);
       const data = jsonObj.TALLYMESSAGE || jsonObj;
 
-      const groupData = findKeyInObject(data, "GROUP");
       const ledgerData = findKeyInObject(data, "LEDGER");
       const unitData = findKeyInObject(data, "UNIT");
-      const stockGroupData = findKeyInObject(data, "STOCKGROUP");
       const stockItemData = findKeyInObject(data, "STOCKITEM");
       const voucherData = findKeyInObject(data, "VOUCHER");
 
-      // 1. MASTERS (Your working logic)
-      if (groupData) {
-        const name = getName(groupData);
-        if (name && name !== "Primary") {
-          const existing = await prisma.group.findFirst({
-            where: { name, companyId },
-          });
-          if (!existing) {
-            await prisma.group.create({ data: { name, companyId } });
-            stats.groups++;
-          }
-        }
-      } else if (ledgerData) {
+      if (ledgerData) {
         const name = getName(ledgerData);
         if (name) {
           const existing = await prisma.ledger.findFirst({
@@ -152,14 +174,34 @@ export async function importTallyXML(prevState: any, formData: FormData) {
           });
           if (!existing) {
             let parentName = ledgerData["@_PARENT"] || ledgerData.PARENT;
+            if (Array.isArray(parentName)) parentName = parentName[0];
+
             let groupId = null;
-            if (parentName) {
+
+            // ✅ SPECIAL FIX FOR PROFIT & LOSS ACCOUNT
+            if (
+              name === "Profit & Loss A/c" ||
+              (name.toLowerCase().includes("profit") &&
+                name.toLowerCase().includes("loss"))
+            ) {
+              const primaryGroup = await prisma.group.findFirst({
+                where: {
+                  name: { in: ["Primary", "Capital Account"] },
+                  companyId,
+                },
+              });
+              if (primaryGroup) groupId = primaryGroup.id;
+            }
+
+            if (!groupId && parentName) {
               const g = await prisma.group.findFirst({
-                where: { name: getName(parentName), companyId },
+                where: { name: String(parentName).trim(), companyId },
               });
               if (g) groupId = g.id;
             }
+
             if (!groupId) groupId = await getFallbackGroupId(companyId);
+
             await prisma.ledger.create({
               data: {
                 name,
@@ -187,17 +229,6 @@ export async function importTallyXML(prevState: any, formData: FormData) {
               },
             });
             stats.units++;
-          }
-        }
-      } else if (stockGroupData) {
-        const name = getName(stockGroupData);
-        if (name && name !== "Primary") {
-          const existing = await prisma.stockGroup.findFirst({
-            where: { name, companyId },
-          });
-          if (!existing) {
-            await prisma.stockGroup.create({ data: { name, companyId } });
-            stats.stockGroups++;
           }
         }
       } else if (stockItemData) {
@@ -241,10 +272,7 @@ export async function importTallyXML(prevState: any, formData: FormData) {
             stats.stockItems++;
           }
         }
-      }
-
-      // 2. VOUCHERS (Integrated Fixed Logic)
-      else if (voucherData) {
+      } else if (voucherData) {
         const vchNo = String(
           voucherData.VOUCHERNUMBER || voucherData["@_VOUCHERNUMBER"] || "AUTO"
         );
@@ -259,25 +287,21 @@ export async function importTallyXML(prevState: any, formData: FormData) {
             const accountingEntries = [];
             let totalDebitValue = 0;
 
-            // Collect All Ledgers
             let rawLedgers =
               voucherData["ALLLEDGERENTRIES.LIST"] ||
               voucherData["LEDGERENTRIES.LIST"] ||
               [];
             if (!Array.isArray(rawLedgers)) rawLedgers = [rawLedgers];
 
-            // Collect All Inventory
             let rawInv =
               voucherData["ALLINVENTORYENTRIES.LIST"] ||
               voucherData["INVENTORYENTRIES.LIST"] ||
               [];
             const inventoryList = Array.isArray(rawInv) ? rawInv : [rawInv];
 
-            // A. Process Ledger Entries
             for (const ent of rawLedgers) {
               const lName = getName(ent);
               if (!lName) continue;
-              // Flip sign: Negative = Debit (+)
               const amt = -parseTallyNumber(ent.AMOUNT);
               if (amt > 0) totalDebitValue += amt;
 
@@ -302,7 +326,6 @@ export async function importTallyXML(prevState: any, formData: FormData) {
               });
             }
 
-            // B. Process Inventory Entries
             const inventoryEntries = [];
             for (const inv of inventoryList) {
               const iName = getName(inv);
@@ -328,12 +351,11 @@ export async function importTallyXML(prevState: any, formData: FormData) {
                 unit: String(qtyStr).match(/[a-zA-Z]+/)?.[0] || "",
               });
 
-              // Extract nested Sales Account (Fixes "Self Account" issue)
               let allocs = inv["ACCOUNTINGALLOCATIONS.LIST"] || [];
               if (!Array.isArray(allocs)) allocs = [allocs];
               for (const al of allocs) {
                 const aName = getName(al);
-                const aAmt = -parseTallyNumber(al.AMOUNT); // Flip sign
+                const aAmt = -parseTallyNumber(al.AMOUNT);
                 let aLedger = await tx.ledger.findFirst({
                   where: { name: aName, companyId },
                 });
@@ -350,7 +372,6 @@ export async function importTallyXML(prevState: any, formData: FormData) {
                 });
               }
 
-              // Update Quantity
               const isSale = vchType.toLowerCase().includes("sale");
               await tx.stockItem.update({
                 where: { id: item.id },
@@ -386,7 +407,7 @@ export async function importTallyXML(prevState: any, formData: FormData) {
     revalidatePath(`/companies/${companyId}`);
     return {
       success: true,
-      message: `Imported: ${stats.ledgers} Ledgers, ${stats.stockItems} Items, ${stats.vouchers} Vouchers.`,
+      message: `Imported: ${stats.groups} Groups, ${stats.ledgers} Ledgers, ${stats.stockItems} Items, ${stats.vouchers} Vouchers.`,
     };
   } catch (err: any) {
     return { error: `Processing Failed: ${err.message}` };

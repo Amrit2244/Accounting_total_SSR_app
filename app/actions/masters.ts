@@ -125,6 +125,10 @@ const UpdateVoucherSchema = z.object({
       }
     })
     .pipe(z.array(VoucherEntrySchema).min(2)),
+  structuredInventory: z
+    .string()
+    .optional()
+    .transform((str) => (str ? JSON.parse(str) : [])),
 });
 
 // ==========================================
@@ -280,6 +284,10 @@ export async function updateLedger(prevState: State, formData: FormData) {
   }
 }
 
+/**
+ * UPDATED: updateVoucher handles TXID generation, Status Reset,
+ * Accounting entries, AND Inventory items with Dirty Checking.
+ */
 export async function updateVoucher(prevState: State, formData: FormData) {
   const rawData = Object.fromEntries(formData.entries());
   const validatedFields = UpdateVoucherSchema.safeParse(rawData);
@@ -292,22 +300,30 @@ export async function updateVoucher(prevState: State, formData: FormData) {
     };
   }
 
-  const { voucherId, companyId, date, narration, structuredEntries } =
-    validatedFields.data;
+  const {
+    voucherId,
+    companyId,
+    date,
+    narration,
+    structuredEntries,
+    structuredInventory,
+  } = validatedFields.data;
 
   try {
     const currentUserId = await getCurrentUserId();
     if (!currentUserId)
       return { success: false, message: "Unauthorized. Session expired." };
 
+    // Fetch current state for dirty check and comparison
     const current = await prisma.voucher.findUnique({
       where: { id: voucherId },
-      include: { entries: true },
+      include: { entries: true, inventory: true },
     });
 
     if (!current) return { success: false, message: "Voucher not found." };
 
-    const normalize = (arr: any[]) =>
+    // --- DIRTY CHECK LOGIC ---
+    const normalizeAccounting = (arr: any[]) =>
       JSON.stringify(
         arr
           .map((e) => ({
@@ -316,51 +332,106 @@ export async function updateVoucher(prevState: State, formData: FormData) {
           }))
           .sort((a, b) => a.lid - b.lid)
       );
-    const hasChanged =
-      new Date(date).toISOString().split("T")[0] !==
-        new Date(current.date).toISOString().split("T")[0] ||
-      (current.narration || "") !== (narration || "") ||
-      normalize(structuredEntries) !== normalize(current.entries);
 
-    if (!hasChanged) return { success: true, message: "No changes detected." };
+    const normalizeInventory = (arr: any[]) =>
+      JSON.stringify(
+        arr
+          .map((i) => ({
+            sid: Number(i.stockItemId),
+            qty: Number(i.quantity).toFixed(2),
+            rate: Number(i.rate).toFixed(2),
+          }))
+          .sort((a, b) => a.sid - b.sid)
+      );
 
+    const isDateSame =
+      new Date(date).toISOString().split("T")[0] ===
+      new Date(current.date).toISOString().split("T")[0];
+    const isNarrationSame = (current.narration || "") === (narration || "");
+    const isAccountingSame =
+      normalizeAccounting(structuredEntries) ===
+      normalizeAccounting(current.entries);
+    const isInventorySame =
+      normalizeInventory(structuredInventory) ===
+      normalizeInventory(current.inventory);
+
+    if (isDateSame && isNarrationSame && isAccountingSame && isInventorySame) {
+      return {
+        success: true,
+        message: "Voucher is already up to date. No changes detected.",
+      };
+    }
+
+    // --- PROCEED WITH UPDATE ---
     const newTxCode = Math.floor(10000 + Math.random() * 90000).toString();
 
+    // Fetch item names to satisfy schema requirement
+    const itemIds = structuredInventory.map((i: any) => Number(i.stockItemId));
+    const stockItemsMaster = await prisma.stockItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, name: true },
+    });
+
     await prisma.$transaction(async (tx) => {
+      // 1. Update main voucher record
       await tx.voucher.update({
         where: { id: voucherId },
         data: {
           date: new Date(date),
           narration: narration,
-          status: "PENDING",
+          status: "PENDING", // Always reset to pending on edit
           transactionCode: newTxCode,
           updatedAt: new Date(),
           createdById: currentUserId,
           verifiedById: null,
           totalAmount: structuredEntries.reduce(
-            (sum, e) => sum + (e.amount > 0 ? e.amount : 0),
+            (sum: number, e: any) => sum + (e.amount > 0 ? e.amount : 0),
             0
           ),
         },
       });
 
+      // 2. Sync Ledger Entries
       await tx.voucherEntry.deleteMany({ where: { voucherId } });
       await tx.voucherEntry.createMany({
-        data: structuredEntries.map((e) => ({
+        data: structuredEntries.map((e: any) => ({
           voucherId: voucherId,
           ledgerId: Number(e.ledgerId),
           amount: Number(e.amount),
         })),
       });
+
+      // 3. Sync Inventory Entries (WITH itemName FIX)
+      await tx.inventoryEntry.deleteMany({ where: { voucherId } });
+      if (structuredInventory.length > 0) {
+        await tx.inventoryEntry.createMany({
+          data: structuredInventory.map((i: any) => {
+            const itemMaster = stockItemsMaster.find(
+              (si) => si.id === Number(i.stockItemId)
+            );
+            return {
+              voucherId: voucherId,
+              stockItemId: Number(i.stockItemId),
+              itemName: itemMaster?.name || "Unknown Item",
+              quantity: Number(i.quantity),
+              rate: Number(i.rate),
+              amount: Number(i.quantity) * Number(i.rate),
+            };
+          }),
+        });
+      }
     });
 
     revalidatePath(`/companies/${companyId}/vouchers`);
+    revalidatePath(`/companies/${companyId}/reports/ledger`);
+
     return {
       success: true,
-      message: `Updated and locked for verification. ID: ${newTxCode}`,
+      message: `Transaction updated and sent for verification. Ref: ${newTxCode}`,
     };
   } catch (error: any) {
-    return { success: false, message: "Database Error." };
+    console.error("Voucher Update Error:", error);
+    return { success: false, message: "Database Error: " + error.message };
   }
 }
 
@@ -416,6 +487,7 @@ export async function deleteBulkVouchers(ids: number[], companyId: number) {
   try {
     await prisma.$transaction(async (tx) => {
       await tx.voucherEntry.deleteMany({ where: { voucherId: { in: ids } } });
+      await tx.inventoryEntry.deleteMany({ where: { voucherId: { in: ids } } });
       await tx.voucher.deleteMany({ where: { id: { in: ids }, companyId } });
     });
     revalidatePath(`/companies/${companyId}/vouchers`);
