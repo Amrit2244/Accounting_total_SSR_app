@@ -18,8 +18,29 @@ import {
   Globe,
 } from "lucide-react";
 
+// 1. Define State interface
+interface CompanyActionState {
+  success?: boolean;
+  error?: string;
+}
+
+// ✅ FIX: Pass 'prevState' to the server action (it expects 2 args)
+async function createCompanyWrapper(prevState: any, formData: FormData) {
+  const result = await createCompany(prevState, formData);
+  return result as CompanyActionState;
+}
+
+// 2. Define initial state
+const initialState: CompanyActionState = {
+  success: false,
+  error: "",
+};
+
 export default function CreateCompanyPage() {
-  const [state, action, isPending] = useActionState(createCompany, undefined);
+  const [state, action, isPending] = useActionState(
+    createCompanyWrapper,
+    initialState
+  );
 
   return (
     <div className="max-w-xl mx-auto py-8 px-4 font-sans">

@@ -277,7 +277,7 @@ model VoucherEntry {
   ledger          Ledger?  @relation(fields: [ledgerId], references: [id]) 
   
   amount          Float    // Positive = Debit, Negative = Credit
-  
+  bankDate        DateTime?
   voucherId       Int
   voucher         Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
 }

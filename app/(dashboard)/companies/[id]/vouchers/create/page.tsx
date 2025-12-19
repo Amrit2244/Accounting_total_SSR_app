@@ -73,16 +73,27 @@ export default async function CreateVoucherPage({
 
   const currentVoucher =
     voucherTypes.find((v) => v.id === voucherType) || voucherTypes[3];
-  const ledgers = await prisma.ledger.findMany({
+
+  // Fetch Raw Ledgers
+  const rawLedgers = await prisma.ledger.findMany({
     where: { companyId },
     select: { id: true, name: true, group: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
+
+  // ✅ FIX: Sanitize ledgers to ensure 'group' is never null
+  // This satisfies the strict type requirement of the child components
+  const ledgers = rawLedgers.map((l) => ({
+    ...l,
+    group: l.group || { name: "Uncategorized" },
+  }));
+
   const items = await prisma.stockItem.findMany({
     where: { companyId },
     select: { id: true, name: true, gstRate: true },
     orderBy: { name: "asc" },
   });
+
   const isInventory = voucherType === "SALES" || voucherType === "PURCHASE";
 
   return (

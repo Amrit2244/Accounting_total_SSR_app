@@ -15,7 +15,7 @@ export default async function PrintVoucherPage({
     where: { id: vId },
     include: {
       company: true,
-      entries: { include: { ledger: true } },
+      entries: { include: { ledger: { include: { group: true } } } },
       inventory: { include: { stockItem: { include: { unit: true } } } },
       createdBy: true,
       verifiedBy: true,
@@ -41,13 +41,24 @@ export default async function PrintVoucherPage({
       .reduce((sum, e) => sum + e.amount, 0);
   }
 
-  const primaryParty =
-    voucher.entries.find(
-      (e) =>
-        !["cash", "bank"].some((k) =>
-          e.ledger.name.toLowerCase().includes(k)
-        ) && Math.abs(e.amount) > 0
-    )?.ledger.name || "Cash / Counterparty";
+  // ✅ FIX: Explicit check to satisfy TypeScript
+  const primaryPartyEntry = voucher.entries.find((e) => {
+    // 1. If ledger is null, skip this entry
+    if (!e.ledger) return false;
+
+    // 2. Now safe to access name
+    const name = e.ledger.name.toLowerCase();
+
+    // 3. check against keywords
+    const isCashOrBank = ["cash", "bank"].some((k) => name.includes(k));
+
+    return !isCashOrBank && Math.abs(e.amount) > 0;
+  });
+
+  // Fallback if no party found
+  const primaryPartyName =
+    primaryPartyEntry?.ledger?.name || "Cash / Counterparty";
+
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
   const fmtDate = (date: Date) =>
@@ -190,9 +201,9 @@ export default async function PrintVoucherPage({
               {voucher.entries.map((entry, idx) => (
                 <tr key={idx}>
                   <td className="p-2 font-bold text-slate-800">
-                    {entry.ledger.name}
+                    {entry.ledger?.name || "Unknown Ledger"}
                     <span className="block text-[9px] text-slate-400 font-black uppercase">
-                      {entry.ledger.group?.name}
+                      {entry.ledger?.group?.name || ""}
                     </span>
                   </td>
                   <td className="p-2 text-right font-mono font-bold">

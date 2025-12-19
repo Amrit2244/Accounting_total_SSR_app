@@ -2,14 +2,15 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, FileEdit, ExternalLink, Trash2, X, Check } from "lucide-react";
+import { Search, FileEdit, ExternalLink, Trash2, X } from "lucide-react";
 import { deleteBulkLedgers } from "@/app/actions/masters";
 
 interface Ledger {
   id: number;
   name: string;
   openingBalance: number;
-  group: { name: string };
+  // ✅ FIX: Allow group to be null to match Prisma schema
+  group: { name: string } | null;
 }
 
 export default function LedgerTable({
@@ -28,7 +29,8 @@ export default function LedgerTable({
       ledgers.filter(
         (l) =>
           l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          l.group?.name.toLowerCase().includes(searchTerm.toLowerCase())
+          // ✅ FIX: Safely handle null groups during search
+          (l.group?.name || "").toLowerCase().includes(searchTerm.toLowerCase())
       ),
     [ledgers, searchTerm]
   );
@@ -135,7 +137,8 @@ export default function LedgerTable({
                     {ledger.name}
                   </td>
                   <td className="px-4 py-1.5 text-[10px] font-bold text-slate-500 uppercase">
-                    {ledger.group?.name}
+                    {/* ✅ FIX: Optional chaining for group name */}
+                    {ledger.group?.name || "-"}
                   </td>
                   <td
                     className={`px-4 py-1.5 text-right font-mono font-bold ${

@@ -8,8 +8,6 @@ function parseTallyNumber(str: string | null | undefined): number {
   if (!str) return 0;
   const clean = str.replace(/,/g, "");
   const match = clean.match(/-?\d+(\.\d+)?/);
-  // Tally uses Negative for DEBIT and Positive for CREDIT in its export.
-  // We flip it to match standard accounting software conventions.
   return match ? -parseFloat(match[0]) : 0;
 }
 
@@ -51,7 +49,17 @@ export async function importVouchers(
 
     // --- 1. PROCESS INVENTORY (ITEMS) ---
     const invList = v.getElementsByTagName("ALLINVENTORYENTRIES.LIST");
-    const inventoryData = [];
+
+    // ✅ FIX: Define explicit type for inventory data
+    const inventoryData: {
+      itemName: string;
+      stockItemId: number;
+      quantity: number;
+      unit: string;
+      rate: number;
+      amount: number;
+    }[] = [];
+
     let inventoryTotal = 0;
 
     for (let j = 0; j < invList.length; j++) {
@@ -68,23 +76,27 @@ export async function importVouchers(
       const rate = Math.abs(
         parseTallyNumber(itemNode.getElementsByTagName("RATE")[0]?.textContent)
       );
-      const amount = parseTallyNumber(amountStr); // This will be Debit/Credit flipped correctly
+      const amount = parseTallyNumber(amountStr);
 
       inventoryTotal += Math.abs(amount);
 
       const stockItem = await prisma.stockItem.findFirst({
         where: { name: itemName, companyId },
       });
-      inventoryData.push({
-        itemName,
-        stockItemId: stockItem?.id,
-        quantity,
-        unit: parseTallyUnit(
-          itemNode.getElementsByTagName("ACTUALQTY")[0]?.textContent
-        ),
-        rate,
-        amount,
-      });
+
+      // ✅ FIX: Only add if stockItem exists to ensure stockItemId is a number
+      if (stockItem) {
+        inventoryData.push({
+          itemName,
+          stockItemId: stockItem.id,
+          quantity,
+          unit: parseTallyUnit(
+            itemNode.getElementsByTagName("ACTUALQTY")[0]?.textContent
+          ),
+          rate,
+          amount,
+        });
+      }
     }
 
     // --- 2. PROCESS ACCOUNTING (LEDGERS) ---
@@ -93,7 +105,13 @@ export async function importVouchers(
         ? v.getElementsByTagName("LEDGERENTRIES.LIST")
         : v.getElementsByTagName("ALLLEDGERENTRIES.LIST");
 
-    const ledgerData = [];
+    // ✅ FIX: Define explicit type for ledger data
+    const ledgerData: {
+      ledgerName: string;
+      ledgerId: number;
+      amount: number;
+    }[] = [];
+
     let ledgerDebitTotal = 0;
 
     for (let k = 0; k < ledgerList.length; k++) {
@@ -103,17 +121,21 @@ export async function importVouchers(
       const amountStr =
         lNode.getElementsByTagName("AMOUNT")[0]?.textContent || "0";
 
-      const amount = parseTallyNumber(amountStr); // Flipped: Positive = Debit, Negative = Credit
+      const amount = parseTallyNumber(amountStr);
       if (amount > 0) ledgerDebitTotal += amount;
 
       const ledger = await prisma.ledger.findFirst({
         where: { name: ledgerName, companyId },
       });
-      ledgerData.push({
-        ledgerName,
-        ledgerId: ledger?.id,
-        amount,
-      });
+
+      // ✅ FIX: Only add if ledger exists to ensure ledgerId is a number
+      if (ledger) {
+        ledgerData.push({
+          ledgerName,
+          ledgerId: ledger.id,
+          amount,
+        });
+      }
     }
 
     const finalTotalAmount =
@@ -124,8 +146,8 @@ export async function importVouchers(
         where: {
           companyId_voucherNo_type: {
             companyId,
-            voucherNo: String(voucherNumber), // FIX: Type Safety
-            type: String(voucherType), // FIX: Type Safety
+            voucherNo: String(voucherNumber),
+            type: String(voucherType),
           },
         },
         update: {

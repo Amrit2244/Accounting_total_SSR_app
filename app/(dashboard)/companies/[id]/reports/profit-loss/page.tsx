@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, TrendingUp, Printer } from "lucide-react";
+import { ArrowLeft, TrendingUp } from "lucide-react";
 import { notFound } from "next/navigation";
 import PrintButton from "@/components/PrintButton";
-import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown"; // Import the new component
+import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown";
 
 const fmt = (v: number) =>
   Math.abs(v).toLocaleString("en-IN", {
@@ -58,9 +58,9 @@ export default async function ProfitLossPage({
   let closingStockDetails: { name: string; amount: number }[] = [];
 
   stockItems.forEach((item) => {
-    // Opening
-    const opVal =
-      item.openingValue || (item.openingQty || 0) * (item.openingRate || 0);
+    // ✅ FIX: Use openingValue directly since openingRate does not exist
+    const opVal = item.openingValue || 0;
+
     if (opVal > 0) {
       openingStockTotal += opVal;
       openingStockDetails.push({ name: item.name, amount: opVal });
@@ -69,6 +69,7 @@ export default async function ProfitLossPage({
     // Closing Logic
     let qty = item.openingQty || 0;
     let val = opVal;
+
     item.inventoryEntries.forEach((e) => {
       if (e.quantity > 0) {
         qty += e.quantity;
@@ -84,11 +85,13 @@ export default async function ProfitLossPage({
         (s, e) => (e.quantity > 0 ? s + e.quantity : s),
         0
       ) + (item.openingQty || 0) || 1;
+
     const totalInwardVal =
       item.inventoryEntries.reduce(
         (s, e) => (e.quantity > 0 ? s + e.amount : s),
         0
       ) + opVal;
+
     const avgRate = totalInwardVal / inwardRate;
     const clVal = Math.max(0, qty * avgRate);
 
@@ -125,6 +128,9 @@ export default async function ProfitLossPage({
     const netBalance =
       (l.openingBalance || 0) + l.entries.reduce((sum, e) => sum + e.amount, 0);
     if (Math.abs(netBalance) < 0.01) return;
+
+    // ✅ FIX: Add safety check for l.group
+    if (!l.group) return;
 
     const absAmount = Math.abs(netBalance);
     const gName = l.group.name; // E.g., "Indirect Expenses"

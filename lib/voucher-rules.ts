@@ -9,9 +9,10 @@ export async function getLedgerNature(ledgerId: number) {
 
   if (!ledger) return "OTHER";
 
-  // Check Tally Name or Group Name
-  const groupName = ledger.group.name;
-  const tallyName = ledger.tallyName; // We will store "Cash" or "Bank" here
+  // ✅ FIX: Use optional chaining and nullish coalescing
+  // Since ledger.group could be null, we handle it safely
+  const groupName = ledger.group?.name || "";
+  const tallyName = ledger.tallyName;
 
   if (tallyName === "Cash" || groupName === "Cash-in-hand") return "CASH";
   if (tallyName === "Bank" || groupName === "Bank Accounts") return "BANK";

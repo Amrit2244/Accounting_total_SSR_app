@@ -17,13 +17,34 @@ import {
 } from "lucide-react";
 import { updateVoucher } from "@/app/actions/masters";
 
+// ✅ FIX 1: State Interface
+interface VoucherUpdateState {
+  success: boolean;
+  message?: string;
+  errors?: any;
+}
+
+// ✅ FIX 2: Initial State
+const initialState: VoucherUpdateState = {
+  success: false,
+  message: "",
+};
+
+// ✅ FIX 3: Typed Wrapper
+async function updateVoucherWrapper(
+  prevState: VoucherUpdateState,
+  formData: FormData
+): Promise<VoucherUpdateState> {
+  const result = await updateVoucher(prevState, formData);
+  return result as VoucherUpdateState;
+}
+
 export default function VoucherEditForm({
   companyId,
   voucher,
   ledgers,
   stockItems,
 }: any) {
-  // --- 1. INITIAL DATA SETUP ---
   const initialData = useMemo(
     () => ({
       date: new Date(voucher.date).toISOString().split("T")[0],
@@ -49,7 +70,6 @@ export default function VoucherEditForm({
     [voucher]
   );
 
-  // --- 2. STATE ---
   const [date, setDate] = useState(initialData.date);
   const [narration, setNarration] = useState(initialData.narration);
   const [entries, setEntries] = useState(
@@ -62,9 +82,12 @@ export default function VoucherEditForm({
     }))
   );
 
-  const [state, action, isPending] = useActionState(updateVoucher as any, null);
+  // ✅ FIX 4: Connected to Wrapper
+  const [state, action, isPending] = useActionState(
+    updateVoucherWrapper,
+    initialState
+  );
 
-  // --- 3. AUTO-CALCULATION LOGIC ---
   useEffect(() => {
     const isSalesOrPurchase =
       voucher.type?.toUpperCase().includes("SALE") ||
@@ -85,16 +108,15 @@ export default function VoucherEditForm({
     }
   }, [inventory, voucher.type]);
 
-  // --- 4. DIRTY CHECK & CALCULATIONS ---
   const { totalDebit, totalCredit, currentEntriesJson, currentInventoryJson } =
     useMemo(() => {
       const d = entries.reduce(
-        (sum: number, e: any) => sum + (e.amount > 0 ? Number(e.amount) : 0),
+        (s: number, e: any) => s + (e.amount > 0 ? Number(e.amount) : 0),
         0
       );
       const c = entries.reduce(
-        (sum: number, e: any) =>
-          sum + (e.amount < 0 ? Math.abs(Number(e.amount)) : 0),
+        (s: number, e: any) =>
+          s + (e.amount < 0 ? Math.abs(Number(e.amount)) : 0),
         0
       );
       const validEntries = entries
@@ -128,7 +150,6 @@ export default function VoucherEditForm({
     narration !== initialData.narration ||
     currentEntriesJson !== initialData.entriesJson ||
     currentInventoryJson !== initialData.inventoryJson;
-
   const isSalesOrPurchase =
     voucher.type?.toUpperCase().includes("SALE") ||
     voucher.type?.toUpperCase().includes("PURCHASE");
@@ -148,7 +169,6 @@ export default function VoucherEditForm({
         value={currentInventoryJson}
       />
 
-      {/* ✅ FULL-SCREEN IMPACT SUCCESS BANNER */}
       {state?.success && state.message?.includes("Ref:") && (
         <div className="bg-emerald-600 rounded-[2.5rem] p-10 text-white shadow-2xl animate-in zoom-in-95 duration-500 relative overflow-hidden">
           <div className="relative z-10 flex items-center gap-8">
@@ -164,11 +184,9 @@ export default function VoucherEditForm({
               </p>
             </div>
           </div>
-          <div className="absolute -right-16 -bottom-16 w-80 h-80 bg-white/10 rounded-full blur-[100px]" />
         </div>
       )}
 
-      {/* NO CHANGES INFO BANNER */}
       {state?.success && state.message?.includes("No changes detected") && (
         <div className="p-8 bg-blue-600 rounded-[2.5rem] text-white flex items-center gap-6 shadow-xl animate-in fade-in">
           <Info size={40} />
@@ -183,7 +201,6 @@ export default function VoucherEditForm({
         </div>
       )}
 
-      {/* Header */}
       <div className="bg-white p-8 border border-slate-200 rounded-[2.5rem] shadow-sm grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
@@ -210,7 +227,7 @@ export default function VoucherEditForm({
         </div>
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-            <ShieldAlert size={14} className="text-blue-500" /> Current Status
+            <ShieldAlert size={14} className="text-blue-500" /> Status
           </label>
           <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-600 font-black text-center text-sm tracking-widest uppercase">
             {voucher.status}
@@ -218,7 +235,6 @@ export default function VoucherEditForm({
         </div>
       </div>
 
-      {/* Inventory & Ledgers Table Logic here (same as previous working code)... */}
       {isSalesOrPurchase && (
         <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
           <div className="bg-slate-50/50 px-8 py-6 border-b border-slate-100 flex justify-between items-center">
@@ -238,7 +254,7 @@ export default function VoucherEditForm({
                   },
                 ])
               }
-              className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg"
+              className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg"
             >
               <ListPlus size={16} /> Add Row
             </button>
@@ -327,7 +343,6 @@ export default function VoucherEditForm({
         </div>
       )}
 
-      {/* Ledger Distribution */}
       <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
         <div className="bg-slate-50/50 px-8 py-6 border-b border-slate-100 text-lg font-black text-slate-800 tracking-tight">
           Ledger Distribution
@@ -377,7 +392,7 @@ export default function VoucherEditForm({
                         )
                       )
                     }
-                    className="w-full p-2 text-right outline-none bg-transparent font-black text-red-600 text-lg"
+                    className="w-full p-2 text-right bg-transparent font-black text-red-600 text-lg outline-none"
                   />
                 </td>
                 <td className="p-3 px-8">
@@ -396,7 +411,7 @@ export default function VoucherEditForm({
                         )
                       )
                     }
-                    className="w-full p-2 text-right outline-none bg-transparent font-black text-emerald-600 text-lg"
+                    className="w-full p-2 text-right bg-transparent font-black text-emerald-600 text-lg outline-none"
                   />
                 </td>
                 <td className="p-3 text-center">
@@ -424,7 +439,7 @@ export default function VoucherEditForm({
                       { tempId: Math.random(), ledgerId: null, amount: 0 },
                     ])
                   }
-                  className="text-blue-400 text-xs font-black uppercase tracking-widest hover:text-white transition-colors flex items-center gap-2"
+                  className="text-blue-400 text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:text-white"
                 >
                   <ListPlus size={16} /> Add Split Row
                 </button>
@@ -451,14 +466,14 @@ export default function VoucherEditForm({
 
       <div className="space-y-4">
         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
-          Audit Note / Narration
+          Audit Note
         </label>
         <textarea
           value={narration}
           onChange={(e) => setNarration(e.target.value)}
           name="narration"
           rows={3}
-          className="w-full p-6 bg-white border border-slate-200 rounded-[2rem] outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm font-bold text-slate-600 text-lg"
+          className="w-full p-6 bg-white border border-slate-200 rounded-[2rem] outline-none shadow-sm font-bold text-slate-600 text-lg"
           placeholder="Reason for change..."
         />
       </div>
@@ -468,8 +483,8 @@ export default function VoucherEditForm({
         type="submit"
         className={`w-full py-6 rounded-[2rem] font-black tracking-[0.2em] uppercase flex items-center justify-center gap-4 transition-all text-lg shadow-2xl ${
           !isBalanced || !hasChanged
-            ? "bg-slate-100 text-slate-300 cursor-not-allowed border border-slate-200"
-            : "bg-slate-900 text-white hover:bg-black hover:-translate-y-1 shadow-black/20"
+            ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+            : "bg-slate-900 text-white hover:bg-black hover:-translate-y-1"
         }`}
       >
         {isPending ? (

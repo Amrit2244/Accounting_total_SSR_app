@@ -12,8 +12,46 @@ import {
   IndianRupee,
 } from "lucide-react";
 
+// ✅ 1. Define the specific state interface to satisfy TypeScript
+interface LedgerUpdateState {
+  success?: boolean;
+  message?: string | null;
+  error?: string; // Some actions use .error instead of .message
+  errors?: {
+    id?: string[];
+    name?: string[];
+    groupId?: string[];
+    openingBalance?: string[];
+    gstin?: string[];
+    state?: string[];
+    companyId?: string[];
+    balanceType?: string[];
+  };
+}
+
+// ✅ 2. Provide a valid initial state object instead of undefined
+const initialState: LedgerUpdateState = {
+  success: false,
+  message: null,
+  errors: {},
+};
+
+// ✅ 3. Use a wrapper to ensure both arguments (prevState, formData) are passed
+async function updateLedgerWrapper(
+  prevState: LedgerUpdateState,
+  formData: FormData
+): Promise<LedgerUpdateState> {
+  const result = await updateLedger(prevState, formData);
+  return result as LedgerUpdateState;
+}
+
 export default function LedgerEditForm({ companyId, ledger, groups }: any) {
-  const [state, action, isPending] = useActionState(updateLedger, undefined);
+  // ✅ 4. Use the wrapper and typed initial state
+  const [state, action, isPending] = useActionState(
+    updateLedgerWrapper,
+    initialState
+  );
+
   const isCr = ledger.openingBalance < 0;
   const absBalance = Math.abs(ledger.openingBalance);
 
@@ -22,11 +60,13 @@ export default function LedgerEditForm({ companyId, ledger, groups }: any) {
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="id" value={ledger.id} />
 
-      {state?.error && (
+      {/* --- STATUS MESSAGES --- */}
+      {(state?.message || (state as any)?.error) && !state.success && (
         <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
-          <AlertCircle size={12} /> {state.error}
+          <AlertCircle size={12} /> {state.message || (state as any).error}
         </div>
       )}
+
       {state?.success && (
         <div className="bg-emerald-50 text-emerald-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
           <CheckCircle size={12} /> Updated Successfully!
@@ -77,6 +117,7 @@ export default function LedgerEditForm({ companyId, ledger, groups }: any) {
         </div>
       </div>
 
+      {/* --- BALANCES --- */}
       <div className="bg-slate-900 p-4 rounded-xl shadow-md border border-white/5">
         <div className="flex items-center gap-2 mb-2 text-blue-400 font-black uppercase text-[9px] tracking-widest">
           <IndianRupee size={12} /> Opening Balance
@@ -118,7 +159,7 @@ export default function LedgerEditForm({ companyId, ledger, groups }: any) {
             <Loader2 size={14} className="animate-spin" />
           ) : (
             <Save size={14} />
-          )}{" "}
+          )}
           SAVE CHANGES
         </button>
       </div>

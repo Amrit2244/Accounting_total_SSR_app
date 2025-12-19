@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import CreateLedgerForm from "./form";
+import CreateLedgerForm from "./form"; // Imports the detailed form above
 import Link from "next/link";
 import { BookPlus, ArrowLeft, ChevronRight } from "lucide-react";
 
@@ -16,6 +16,7 @@ export default async function CreateLedgerPage({
       where: { id: companyId },
       select: { name: true },
     }),
+    // ✅ FIX: Use 'prisma.group' (lowercase)
     prisma.group.findMany({ where: { companyId }, orderBy: { name: "asc" } }),
   ]);
 

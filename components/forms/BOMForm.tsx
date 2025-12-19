@@ -4,6 +4,26 @@ import React, { useState, useActionState } from "react";
 import { Plus, Trash2, Save, Loader2, Beaker } from "lucide-react";
 import { createBOM } from "@/app/actions/bom";
 
+// 1. Define State Interface
+interface BOMState {
+  success?: boolean;
+  message?: string;
+  error?: string;
+}
+
+// 2. Wrapper to handle arguments and return type
+async function createBOMWrapper(prevState: any, formData: FormData) {
+  const result = await createBOM(prevState, formData);
+  return result as BOMState;
+}
+
+// 3. Initial State
+const initialState: BOMState = {
+  success: false,
+  message: "",
+  error: "",
+};
+
 export default function BOMForm({
   companyId,
   stockItems,
@@ -14,7 +34,12 @@ export default function BOMForm({
   const [components, setComponents] = useState<any[]>([
     { stockItemId: "", quantity: 1 },
   ]);
-  const [state, action, isPending] = useActionState(createBOM as any, null);
+
+  // 4. Use wrapper and initial state
+  const [state, action, isPending] = useActionState(
+    createBOMWrapper,
+    initialState
+  );
 
   return (
     <form action={action} className="space-y-4 font-sans">

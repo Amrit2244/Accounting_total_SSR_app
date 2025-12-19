@@ -58,8 +58,9 @@ export async function createCompany(prevState: any, formData: FormData) {
     const cid = newCompany.id;
     const groupMap = new Map<string, number>();
 
+    // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
     for (const group of DEFAULT_GROUPS) {
-      const created = await prisma.accountGroup.create({
+      const created = await prisma.group.create({
         data: {
           name: group.name,
           nature: group.nature,
@@ -69,12 +70,13 @@ export async function createCompany(prevState: any, formData: FormData) {
       groupMap.set(group.name, created.id);
     }
 
+    // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
     for (const sub of SUB_GROUPS) {
       const parentId = groupMap.get(sub.parent);
       if (parentId) {
         const parentNature =
           DEFAULT_GROUPS.find((g) => g.name === sub.parent)?.nature || "ASSET";
-        await prisma.accountGroup.create({
+        await prisma.group.create({
           data: {
             name: sub.name,
             nature: parentNature,
@@ -85,7 +87,8 @@ export async function createCompany(prevState: any, formData: FormData) {
       }
     }
 
-    const cashGroup = await prisma.accountGroup.findFirst({
+    // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
+    const cashGroup = await prisma.group.findFirst({
       where: { name: "Cash-in-hand", companyId: cid },
     });
 
@@ -109,9 +112,7 @@ export async function createCompany(prevState: any, formData: FormData) {
 }
 
 // --- 2. UPDATE COMPANY ---
-// UPDATED: Standardized to (prevState, formData) for useActionState compatibility
 export async function updateCompany(prevState: any, formData: FormData) {
-  // We extract the ID from the formData (it should be a hidden input in your form)
   const result = UpdateCompanySchema.safeParse(Object.fromEntries(formData));
 
   if (!result.success) {
@@ -156,7 +157,8 @@ export async function deleteCompany(id: number) {
     // Transaction to ensure all or nothing is deleted
     await prisma.$transaction([
       prisma.ledger.deleteMany({ where: { companyId: id } }),
-      prisma.accountGroup.deleteMany({ where: { companyId: id } }),
+      // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
+      prisma.group.deleteMany({ where: { companyId: id } }),
       prisma.stockItem.deleteMany({ where: { companyId: id } }),
       prisma.stockGroup.deleteMany({ where: { companyId: id } }),
       prisma.unit.deleteMany({ where: { companyId: id } }),

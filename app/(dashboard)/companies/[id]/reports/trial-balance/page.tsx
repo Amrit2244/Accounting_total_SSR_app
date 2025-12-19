@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ArrowLeft, Scale, AlertTriangle } from "lucide-react";
-import ReportPrintBtn from "@/components/reports/ReportPrintBtn"; // ✅ Import the client component
+import ReportPrintBtn from "@/components/reports/ReportPrintBtn";
 
 const fmt = (n: number) =>
   n.toLocaleString("en-IN", {
@@ -51,7 +51,8 @@ export default async function TrialBalancePage({
       return {
         id: ledger.id,
         name: ledger.name,
-        groupName: ledger.group.name,
+        // ✅ FIX: Use optional chaining and fallback for group name
+        groupName: ledger.group?.name || "Uncategorized",
         balance: netBalance,
       };
     })

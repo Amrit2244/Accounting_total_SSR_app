@@ -12,7 +12,20 @@ import {
   CheckCircle,
 } from "lucide-react";
 
-type Group = { id: number; name: string; nature: string };
+type Group = { id: number; name: string; nature: string | null };
+
+// ✅ FIX: Pass both arguments to the server action to match its signature
+async function createLedgerWrapper(prevState: any, formData: FormData) {
+  return await createLedger(prevState, formData);
+}
+
+// ✅ FIX: Define a proper initial state object instead of 'undefined'
+// to prevent "Object is possibly null" errors in the UI
+const initialState = {
+  success: false,
+  message: "",
+  errors: {},
+};
 
 export default function CreateLedgerForm({
   companyId,
@@ -21,19 +34,24 @@ export default function CreateLedgerForm({
   companyId: number;
   groups: Group[];
 }) {
-  const [state, action, isPending] = useActionState(createLedger, undefined);
+  const [state, action, isPending] = useActionState(
+    createLedgerWrapper,
+    initialState
+  );
 
   return (
     <form action={action} className="space-y-4 font-sans">
       <input type="hidden" name="companyId" value={companyId} />
 
-      {state?.error && (
-        <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
-          <AlertCircle size={12} /> {state.error}
+      {/* ✅ Updated to check state.message or specific error keys based on your master action */}
+      {state?.message && !state.success && (
+        <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2 animate-in fade-in">
+          <AlertCircle size={12} /> {state.message}
         </div>
       )}
+
       {state?.success && (
-        <div className="bg-emerald-50 text-emerald-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
+        <div className="bg-emerald-50 text-emerald-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2 animate-in fade-in">
           <CheckCircle size={12} /> Ledger Created!
         </div>
       )}
@@ -77,7 +95,7 @@ export default function CreateLedgerForm({
               </option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.name} ({g.nature})
+                  {g.name} ({g.nature || "Group"})
                 </option>
               ))}
             </select>
@@ -119,7 +137,7 @@ export default function CreateLedgerForm({
         <button
           disabled={isPending}
           type="submit"
-          className="bg-[#003366] hover:bg-black text-white px-6 h-10 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-md flex items-center gap-2 transition-all"
+          className="bg-[#003366] hover:bg-black text-white px-6 h-10 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-md flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isPending ? (
             <Loader2 size={14} className="animate-spin" />

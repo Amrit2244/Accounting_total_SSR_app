@@ -34,7 +34,9 @@ export async function getDashboardMetrics(companyId: number) {
       .filter((e) => e.amount < 0)
       .reduce((sum, e) => sum + Math.abs(e.amount), 0);
     const balance = l.openingBalance + (dr - cr);
-    const groupName = l.group.name.toLowerCase();
+
+    // ✅ FIX: Use optional chaining + fallback for possibly null group
+    const groupName = l.group?.name.toLowerCase() || "";
 
     if (groupName.includes("cash")) totalCash += balance;
     else if (groupName.includes("bank")) totalBank += balance;

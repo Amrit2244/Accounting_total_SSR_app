@@ -9,6 +9,7 @@ import {
   Plus,
 } from "lucide-react";
 
+// Recursive component to render the tree
 const GroupItem = ({ group, level = 0 }: { group: any; level?: number }) => {
   return (
     <div className="relative">
@@ -36,6 +37,7 @@ const GroupItem = ({ group, level = 0 }: { group: any; level?: number }) => {
       </div>
 
       <div className={`ml-4 pl-3 border-l border-slate-200`}>
+        {/* Render Ledgers inside this group */}
         {group.ledgers?.map((ledger: any) => (
           <div
             key={ledger.id}
@@ -49,10 +51,12 @@ const GroupItem = ({ group, level = 0 }: { group: any; level?: number }) => {
               <span className="font-medium text-slate-700">{ledger.name}</span>
             </div>
             <span className="font-mono text-[10px] text-slate-400">
-              ₹{ledger.openingBalance.toFixed(2)}
+              ₹{ledger.openingBalance?.toFixed(2) || "0.00"}
             </span>
           </div>
         ))}
+
+        {/* Render Sub-groups (Recursion) */}
         {group.children?.map((child: any) => (
           <GroupItem key={child.id} group={child} level={level + 1} />
         ))}
@@ -69,12 +73,11 @@ export default async function ChartOfAccountsPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // ✅ FIX: Using 'group' instead of 'accountGroup'
-  // If your model is named 'AccountGroup', change this back but ensure you run 'npx prisma generate'
+  // ✅ FIX: Changed to 'prisma.group' based on your specific error logs
   const rootGroups = await prisma.group.findMany({
     where: {
       companyId,
-      parentId: null,
+      parentId: null, // Only fetch top-level groups
     },
     include: {
       ledgers: true,
@@ -93,7 +96,8 @@ export default async function ChartOfAccountsPage({
   });
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-4xl mx-auto space-y-4 py-8 animate-in fade-in duration-500">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-black text-slate-900 flex items-center gap-2 uppercase tracking-tight">
           <Layers size={20} className="text-blue-600" /> Chart of Accounts
@@ -101,19 +105,21 @@ export default async function ChartOfAccountsPage({
         <div className="flex gap-2">
           <Link
             href={`/companies/${id}`}
-            className="px-3 py-1.5 text-[10px] font-black uppercase border border-slate-200 rounded hover:bg-slate-50"
+            className="px-3 py-1.5 text-[10px] font-black uppercase border border-slate-200 rounded hover:bg-slate-50 flex items-center gap-2"
           >
-            Back
+            <ArrowLeft size={12} /> Back
           </Link>
+
           <Link
             href={`/companies/${id}/ledgers/create`}
-            className="px-3 py-1.5 text-[10px] font-black uppercase bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm"
+            className="px-3 py-1.5 text-[10px] font-black uppercase bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center gap-1"
           >
-            + Add Ledger
+            <Plus size={12} /> Add Ledger
           </Link>
         </div>
       </div>
 
+      {/* Tree View */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 columns-1 md:columns-2 gap-8">
           {rootGroups.map((group) => (

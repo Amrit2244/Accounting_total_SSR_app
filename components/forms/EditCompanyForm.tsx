@@ -12,8 +12,35 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-export default function EditCompanyForm({ initialCompany, updateAction }) {
-  const [state, action, isPending] = useActionState(updateAction, null);
+// ✅ Define the structure of the Company object
+interface Company {
+  id: number;
+  name: string;
+  address?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  email?: string | null;
+  gstin?: string | null;
+}
+
+// ✅ Define the structure of the Form State
+interface FormState {
+  error?: string;
+  success?: boolean;
+}
+
+// ✅ Define the Props for the component
+interface EditCompanyFormProps {
+  initialCompany: Company;
+  updateAction: (prevState: any, formData: FormData) => Promise<FormState>;
+}
+
+export default function EditCompanyForm({
+  initialCompany,
+  updateAction,
+}: EditCompanyFormProps) {
+  // Initialize with an empty object instead of null to avoid type errors on state?.error
+  const [state, action, isPending] = useActionState(updateAction, {});
 
   return (
     <form action={action} className="space-y-6">
@@ -37,7 +64,6 @@ export default function EditCompanyForm({ initialCompany, updateAction }) {
 
       {/* --- Form Fields --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Company Name (Full Width) */}
         <div className="md:col-span-2 space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <Building2 size={16} className="text-blue-600" /> Company Name
@@ -51,45 +77,41 @@ export default function EditCompanyForm({ initialCompany, updateAction }) {
           />
         </div>
 
-        {/* Address (Full Width) */}
         <div className="md:col-span-2 space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <MapPin size={16} className="text-blue-600" /> Address
           </label>
           <textarea
             name="address"
-            defaultValue={initialCompany.address}
+            defaultValue={initialCompany.address || ""}
             placeholder="Building, Street, Area..."
             rows={3}
             className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
           />
         </div>
 
-        {/* State */}
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700">State</label>
           <input
             name="state"
-            defaultValue={initialCompany.state}
+            defaultValue={initialCompany.state || ""}
             placeholder="e.g. Maharashtra"
             className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
           />
         </div>
 
-        {/* Pincode */}
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700">
             Pincode
           </label>
           <input
             name="pincode"
-            defaultValue={initialCompany.pincode}
+            defaultValue={initialCompany.pincode || ""}
             placeholder="6-digit PIN"
             className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
           />
         </div>
 
-        {/* Email */}
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <Mail size={16} className="text-blue-600" /> Email Address
@@ -97,20 +119,19 @@ export default function EditCompanyForm({ initialCompany, updateAction }) {
           <input
             name="email"
             type="email"
-            defaultValue={initialCompany.email}
+            defaultValue={initialCompany.email || ""}
             placeholder="contact@company.com"
             className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
           />
         </div>
 
-        {/* GSTIN */}
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <Hash size={16} className="text-blue-600" /> GSTIN
           </label>
           <input
             name="gstin"
-            defaultValue={initialCompany.gstin}
+            defaultValue={initialCompany.gstin || ""}
             placeholder="15-digit GST Number"
             className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all uppercase"
           />

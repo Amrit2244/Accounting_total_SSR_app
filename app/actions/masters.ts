@@ -234,7 +234,8 @@ export async function createStockItem(prevState: State, formData: FormData) {
       data: {
         ...data,
         quantity: data.openingQty,
-        openingBalance: data.openingQty,
+        // ✅ FIX: Removed 'openingBalance' which does not exist in schema.
+        // We use 'quantity' and 'openingValue' instead.
         openingValue: data.openingQty * data.openingRate,
       },
     });

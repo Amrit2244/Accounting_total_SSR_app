@@ -8,7 +8,6 @@ import {
   Scale,
   ChevronRight,
   IndianRupee,
-  Barcode,
 } from "lucide-react";
 import InventoryTable from "@/components/InventoryTable";
 
@@ -29,14 +28,24 @@ export default async function InventoryListPage({
 
   // Calculate Totals
   const totalItems = items.length;
-  // Assumes 'openingValue' exists or calculates it on the fly: quantity * openingRate
+
+  // ✅ FIX: Calculate Total Value using derived rate
+  // Since 'openingRate' does not exist in DB, we calculate: Rate = OpeningValue / OpeningQty
   const totalValue = items.reduce((sum, item) => {
-    const val = item.openingValue || item.quantity * (item.openingRate || 0);
+    // 1. Derive the rate
+    const rate =
+      item.openingQty && item.openingQty > 0
+        ? item.openingValue / item.openingQty
+        : 0;
+
+    // 2. Calculate current value (Current Qty * Rate)
+    const val = item.quantity * rate;
+
     return sum + val;
   }, 0);
 
   return (
-    <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
+    <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8 animate-in fade-in duration-500">
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

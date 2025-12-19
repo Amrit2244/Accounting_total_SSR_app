@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useMemo, useRef, useEffect } from "react";
-import { createLedger } from "@/app/actions/masters";
+import { createLedger } from "@/app/actions/masters"; // Verify this import path matches your project
 import Link from "next/link";
 import {
   Save,
@@ -14,13 +14,26 @@ import {
   Home,
   Search,
   Check,
-  CheckCircle2, // Added for success icon
+  CheckCircle2,
   ArrowRight,
 } from "lucide-react";
 
 type Group = {
   id: number;
   name: string;
+};
+
+// ✅ FIX 1: Pass 'prevState' to createLedger
+// The error "Expected 2 arguments" means createLedger needs (state, formData)
+async function createLedgerWrapper(prevState: any, formData: FormData) {
+  return await createLedger(prevState, formData);
+}
+
+// ✅ FIX 2: Define strict initial state to avoid "undefined" type errors
+const initialState = {
+  success: false,
+  message: "",
+  errors: {},
 };
 
 export default function CreateLedgerForm({
@@ -30,7 +43,11 @@ export default function CreateLedgerForm({
   companyId: number;
   groups: Group[];
 }) {
-  const [state, action, isPending] = useActionState(createLedger, undefined);
+  // ✅ FIX 3: Use the wrapper and the explicit initial state
+  const [state, action, isPending] = useActionState(
+    createLedgerWrapper,
+    initialState
+  );
 
   // --- Smart Search State ---
   const [isGroupOpen, setIsGroupOpen] = useState(false);
@@ -93,6 +110,7 @@ export default function CreateLedgerForm({
       )}
 
       <input type="hidden" name="companyId" value={companyId} />
+      {/* Use selectedGroup ID if available */}
       <input type="hidden" name="groupId" value={selectedGroup?.id || ""} />
 
       <div className="grid gap-8">

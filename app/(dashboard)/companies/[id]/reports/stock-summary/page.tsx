@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Package, IndianRupee, ChevronRight } from "lucide-react";
+import { ArrowLeft, Package } from "lucide-react";
 import { notFound } from "next/navigation";
 
 const formatCurrency = (value: number) =>
@@ -34,7 +34,8 @@ export default async function StockSummaryPage({
   // 2. Calculate WAC (Weighted Average Cost)
   const stockData = items.map((item) => {
     let inwardQty = item.quantity || 0; // Opening Qty
-    let inwardValue = item.openingValue || 0; // Opening Value
+    // ✅ FIX: Use openingValue directly
+    let inwardValue = item.openingValue || 0;
     let outwardQty = 0;
 
     item.inventoryEntries.forEach((e) => {
@@ -54,9 +55,10 @@ export default async function StockSummaryPage({
     // WAC Logic: Total Cost / Total Inward Qty
     let avgRate = inwardQty > 0 ? inwardValue / inwardQty : 0;
 
-    // Fallback: If no inwards but we have opening rate, use that
-    if (avgRate === 0 && item.openingRate) {
-      avgRate = item.openingRate;
+    // ✅ FIX: Removed fallback to 'item.openingRate' since it doesn't exist.
+    // Instead, if avgRate is 0 but we have opening value/qty, recalculate.
+    if (avgRate === 0 && (item.openingQty || 0) > 0) {
+      avgRate = (item.openingValue || 0) / (item.openingQty || 1);
     }
 
     const closingValue = closingQty * avgRate;

@@ -53,6 +53,9 @@ export async function register(prevState: any, formData: FormData) {
 
   const { username, password, name } = result.data;
 
+  // Define variable to hold company ID for redirect
+  let newCompanyId = 1;
+
   try {
     const existingUser = await prisma.user.findUnique({
       where: { username },
@@ -73,10 +76,22 @@ export async function register(prevState: any, formData: FormData) {
       },
     });
 
-    // Create a Default Company for the new user (Optional, but helpful)
+    // ✅ FIX: Calculate default dates (April 1st of current year)
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const fyStart = new Date(currentYear, 3, 1); // Month is 0-indexed (3 = April)
+
+    // ✅ FIX: Removed 'createdById' (not in schema)
+    // ✅ FIX: Added required date fields
     const company = await prisma.company.create({
-      data: { name: "My Company", createdById: user.id },
+      data: {
+        name: "My Company",
+        financialYearFrom: fyStart,
+        booksBeginFrom: fyStart,
+      },
     });
+
+    newCompanyId = company.id;
 
     await createSession(user.id.toString());
   } catch (error) {
@@ -84,8 +99,8 @@ export async function register(prevState: any, formData: FormData) {
     return { error: "Registration failed. Database error." };
   }
 
-  // Redirect to the new company dashboard
-  redirect("/companies/1");
+  // ✅ FIX: Redirect to the actual created company ID
+  redirect(`/companies/${newCompanyId}`);
 }
 
 // ==========================================
@@ -100,6 +115,9 @@ export async function login(prevState: any, formData: FormData) {
 
   const { username, password } = result.data;
 
+  // Define variable for redirect
+  let companyIdToRedirect = 1;
+
   try {
     const user = await prisma.user.findUnique({
       where: { username },
@@ -110,12 +128,18 @@ export async function login(prevState: any, formData: FormData) {
     }
 
     await createSession(user.id.toString());
+
+    // Optional: Find the first company to redirect to
+    const firstCompany = await prisma.company.findFirst();
+    if (firstCompany) {
+      companyIdToRedirect = firstCompany.id;
+    }
   } catch (error) {
     return { error: "Login failed. Database error." };
   }
 
-  // ✅ REDIRECT TO DASHBOARD (Instead of "/")
-  redirect("/companies/1");
+  // ✅ REDIRECT TO DASHBOARD
+  redirect(`/companies/${companyIdToRedirect}`);
 }
 
 // ==========================================

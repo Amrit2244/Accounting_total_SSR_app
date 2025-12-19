@@ -53,9 +53,11 @@ export default async function StockItemRegisterPage({
   // 2. Process Data for Running Balance
   // Start with Opening Balance
   let runningQty = stockItem.openingQty || 0;
-  let runningVal =
-    stockItem.openingValue ||
-    (stockItem.openingQty || 0) * (stockItem.openingRate || 0);
+  // Use openingValue directly
+  let runningVal = stockItem.openingValue || 0;
+
+  // Calculate implicit opening rate for display (Value / Qty)
+  const derivedOpeningRate = runningQty !== 0 ? runningVal / runningQty : 0;
 
   // Flatten transactions
   const transactions = stockItem.inventoryEntries.map((entry) => {
@@ -64,19 +66,20 @@ export default async function StockItemRegisterPage({
     // Find "Particulars" (The Party Name)
     const partyEntry = v.entries.find(
       (e) =>
+        e.ledger && // Check if ledger exists first
         !e.ledger.name.toLowerCase().includes("gst") &&
         !e.ledger.name.toLowerCase().includes("sales") &&
         !e.ledger.name.toLowerCase().includes("purchase")
     );
-    const particulars = partyEntry
-      ? partyEntry.ledger.name
-      : "Cash / Adjustment";
+
+    // Safety check for party name
+    const particulars = partyEntry?.ledger?.name || "Cash / Adjustment";
 
     const qty = Math.abs(entry.quantity); // Always work with positive magnitude
     const amount = Math.abs(entry.amount);
     const rate = qty !== 0 ? amount / qty : 0;
 
-    // ✅ FIX: Normalize Type to UpperCase for reliable checking
+    // Normalize Type to UpperCase for reliable checking
     const type = v.type.toUpperCase();
 
     let isInward = false;
@@ -241,12 +244,10 @@ export default async function StockItemRegisterPage({
                   {fmtQty(stockItem.openingQty || 0)}
                 </div>
                 <div className="w-16 p-2 text-right border-r border-slate-200">
-                  {fmt(stockItem.openingRate || 0)}
+                  {fmt(derivedOpeningRate)}
                 </div>
                 <div className="flex-1 p-2 text-right">
-                  {fmt(
-                    (stockItem.openingQty || 0) * (stockItem.openingRate || 0)
-                  )}
+                  {fmt(stockItem.openingValue || 0)}
                 </div>
               </div>
             </div>
@@ -332,7 +333,8 @@ export default async function StockItemRegisterPage({
             <div className="flex-1"></div>
           </div>
           <div className="w-[180px] bg-slate-200 border-l border-slate-300 flex items-center justify-end px-2 text-slate-900">
-            {fmtQty(runningQty)} {stockItem.unit.symbol}
+            {/* ✅ FIX: Added optional chaining here */}
+            {fmtQty(runningQty)} {stockItem.unit?.symbol}
           </div>
         </div>
       </div>

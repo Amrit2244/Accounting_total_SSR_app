@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, PieChart, Printer } from "lucide-react";
+import { ArrowLeft, PieChart } from "lucide-react";
 import { notFound } from "next/navigation";
 import PrintButton from "@/components/PrintButton";
-import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown"; // Reusing the drill-down component
+import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown";
 
 const fmt = (v: number) =>
   Math.abs(v).toLocaleString("en-IN", {
@@ -55,8 +55,10 @@ export default async function BalanceSheetPage({
 
   // Stock Valuation
   stockItems.forEach((item) => {
-    const opVal =
-      item.openingValue || (item.openingQty || 0) * (item.openingRate || 0);
+    // ✅ FIX: Removed 'item.openingRate' as it does not exist.
+    // Just use 'item.openingValue'.
+    const opVal = item.openingValue || 0;
+
     openingStock += opVal;
 
     let qty = item.openingQty || 0;
@@ -77,11 +79,13 @@ export default async function BalanceSheetPage({
         (s, e) => (e.quantity > 0 ? s + e.quantity : s),
         0
       ) + (item.openingQty || 0) || 1;
+
     const totalInwardVal =
       item.inventoryEntries.reduce(
         (s, e) => (e.quantity > 0 ? s + e.amount : s),
         0
       ) + opVal;
+
     const avgRate = totalInwardVal / inwardRate;
     const clVal = Math.max(0, qty * avgRate);
 
@@ -100,8 +104,9 @@ export default async function BalanceSheetPage({
       (l.openingBalance || 0) + l.entries.reduce((s, e) => s + e.amount, 0);
     if (Math.abs(net) < 0.01) return;
 
-    const nature = l.group.nature?.toUpperCase();
-    const gName = l.group.name.toLowerCase();
+    // ✅ FIX: Use optional chaining in case nature is null
+    const nature = l.group?.nature?.toUpperCase();
+    const gName = l.group?.name.toLowerCase() || "";
     const amt = Math.abs(net);
 
     // Identify P&L Items
@@ -144,6 +149,9 @@ export default async function BalanceSheetPage({
     const net =
       (l.openingBalance || 0) + l.entries.reduce((s, e) => s + e.amount, 0);
     if (Math.abs(net) < 0.01) return;
+
+    // ✅ FIX: Safety Check for group existence
+    if (!l.group) return;
 
     const nature = l.group.nature?.toUpperCase();
     const gName = l.group.name.toLowerCase();

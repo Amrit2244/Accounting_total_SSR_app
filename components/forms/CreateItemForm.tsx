@@ -18,6 +18,37 @@ import {
 type Unit = { id: number; name: string; symbol: string };
 type Group = { id: number; name: string };
 
+// ✅ FIX 1: Define a strict type for the Action State
+interface CreateItemState {
+  success: boolean;
+  message?: string;
+  errors?: {
+    name?: string[];
+    groupId?: string[];
+    unitId?: string[];
+    openingQty?: string[];
+    openingRate?: string[];
+    companyId?: string[];
+    partNumber?: string[];
+  };
+}
+
+// ✅ FIX 2: Explicitly type the Initial State
+const initialState: CreateItemState = {
+  success: false,
+  message: "",
+  errors: {},
+};
+
+// ✅ FIX 3: Ensure the wrapper is typed correctly
+async function createStockItemWrapper(
+  prevState: CreateItemState,
+  formData: FormData
+): Promise<CreateItemState> {
+  const result = await createStockItem(prevState, formData);
+  return result as CreateItemState;
+}
+
 export default function CreateItemForm({
   companyId,
   units,
@@ -27,20 +58,33 @@ export default function CreateItemForm({
   units: Unit[];
   groups: Group[];
 }) {
-  const [state, action, isPending] = useActionState(createStockItem, undefined);
+  // ✅ FIX 4: Call useActionState with explicit typing
+  const [state, action, isPending] = useActionState(
+    createStockItemWrapper,
+    initialState
+  );
 
   return (
     <form action={action} className="space-y-4 font-sans">
       <input type="hidden" name="companyId" value={companyId} />
 
-      {state?.error && (
+      {/* Error Alerts */}
+      {state?.errors && Object.keys(state.errors).length > 0 && (
         <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
-          <AlertCircle size={12} /> {state.error}
+          <AlertCircle size={12} /> Please check required fields.
         </div>
       )}
+
+      {state?.message && !state.success && (
+        <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
+          <AlertCircle size={12} /> {state.message}
+        </div>
+      )}
+
+      {/* Success Alert */}
       {state?.success && (
         <div className="bg-emerald-50 text-emerald-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
-          <CheckCircle size={12} /> Item Created!
+          <CheckCircle size={12} /> Item Created Successfully!
         </div>
       )}
 
@@ -61,6 +105,11 @@ export default function CreateItemForm({
               className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
             />
           </div>
+          {state.errors?.name && (
+            <p className="text-[10px] text-red-500 ml-1">
+              {state.errors.name[0]}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1">

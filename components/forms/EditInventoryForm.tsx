@@ -18,6 +18,37 @@ import Link from "next/link";
 type Group = { id: number; name: string };
 type Unit = { id: number; name: string; symbol: string };
 
+// ✅ FIX 1: Define a strict interface for the form state
+interface EditInventoryState {
+  success: boolean;
+  message?: string;
+  errors?: {
+    name?: string[];
+    groupId?: string[];
+    unitId?: string[];
+    openingQty?: string[];
+    openingRate?: string[];
+    companyId?: string[];
+    partNumber?: string[];
+  };
+}
+
+// ✅ FIX 2: Explicitly type the initial state
+const initialState: EditInventoryState = {
+  success: false,
+  message: "",
+  errors: undefined, // Changed from {} to undefined to match the signature
+};
+
+// ✅ FIX 3: Properly type the wrapper function
+async function updateStockItemWrapper(
+  prevState: EditInventoryState,
+  formData: FormData
+): Promise<EditInventoryState> {
+  const result = await updateStockItem(prevState, formData);
+  return result as EditInventoryState;
+}
+
 export default function EditInventoryForm({
   item,
   companyId,
@@ -29,7 +60,11 @@ export default function EditInventoryForm({
   groups: Group[];
   units: Unit[];
 }) {
-  const [state, action, isPending] = useActionState(updateStockItem, undefined);
+  // ✅ FIX 4: Call useActionState with the typed wrapper
+  const [state, action, isPending] = useActionState(
+    updateStockItemWrapper,
+    initialState
+  );
 
   return (
     <form action={action} className="space-y-6">
@@ -68,6 +103,11 @@ export default function EditInventoryForm({
               className="w-full h-12 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:ring-4 focus:ring-blue-50 focus:border-blue-500 outline-none transition-all"
             />
           </div>
+          {state.errors?.name && (
+            <p className="text-red-500 text-[10px] mt-1 ml-1">
+              {state.errors.name[0]}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">

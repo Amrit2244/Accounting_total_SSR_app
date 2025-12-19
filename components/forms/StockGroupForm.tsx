@@ -11,6 +11,33 @@ import {
   FolderOpen,
 } from "lucide-react";
 
+// ✅ 1. Define the specific state interface
+interface StockGroupState {
+  success?: boolean;
+  message?: string | null;
+  error?: string;
+  errors?: {
+    name?: string[];
+    companyId?: string[];
+    parentId?: string[];
+  };
+}
+
+// ✅ 2. Provide a valid initial state object
+const initialState: StockGroupState = {
+  success: false,
+  message: null,
+};
+
+// ✅ 3. Wrapper function to handle the (prevState, formData) signature
+async function createStockGroupWrapper(
+  prevState: StockGroupState,
+  formData: FormData
+): Promise<StockGroupState> {
+  const result = await createStockGroup(prevState, formData);
+  return result as StockGroupState;
+}
+
 export default function StockGroupForm({
   companyId,
   existingGroups,
@@ -18,20 +45,23 @@ export default function StockGroupForm({
   companyId: number;
   existingGroups: any[];
 }) {
+  // ✅ 4. Use the wrapper and typed initial state
   const [state, action, isPending] = useActionState(
-    createStockGroup,
-    undefined
+    createStockGroupWrapper,
+    initialState
   );
 
   return (
     <form action={action} className="space-y-4 font-sans">
       <input type="hidden" name="companyId" value={companyId} />
 
-      {state?.error && (
+      {/* --- STATUS MESSAGES --- */}
+      {(state?.message || (state as any)?.error) && !state.success && (
         <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
-          <AlertCircle size={12} /> {state.error}
+          <AlertCircle size={12} /> {state.message || (state as any).error}
         </div>
       )}
+
       {state?.success && (
         <div className="bg-emerald-50 text-emerald-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2">
           <CheckCircle size={12} /> Group Created!
@@ -55,6 +85,11 @@ export default function StockGroupForm({
             className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none"
           />
         </div>
+        {state?.errors?.name && (
+          <p className="text-[10px] text-red-500 ml-1 mt-1">
+            {state.errors.name[0]}
+          </p>
+        )}
       </div>
 
       <div className="space-y-1">
@@ -83,7 +118,7 @@ export default function StockGroupForm({
       <div className="pt-2 flex justify-end">
         <button
           disabled={isPending}
-          className="bg-[#003366] hover:bg-black text-white px-6 h-10 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-md flex items-center gap-2 transition-all"
+          className="bg-[#003366] hover:bg-black text-white px-6 h-10 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-md flex items-center gap-2 transition-all disabled:opacity-50"
         >
           {isPending ? (
             <Loader2 size={14} className="animate-spin" />

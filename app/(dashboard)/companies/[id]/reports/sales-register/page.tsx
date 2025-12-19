@@ -131,7 +131,7 @@ async function MonthlySummaryView({ companyId }: { companyId: number }) {
         <div className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center p-3">
           <div className="flex-1">Particulars (Month)</div>
           <div className="w-32 text-center">Vouchers</div>
-          <div className="w-40 text-right">Debit (Sales)</div>
+          <div className="w-40 text-right">Credit (Sales)</div>
         </div>
         <div className="divide-y divide-slate-100">
           {monthlyData.map((row) => (
@@ -220,6 +220,10 @@ async function VoucherRegisterView({
       .filter((e) => e.amount < 0)
       .forEach((e) => {
         const amt = Math.abs(e.amount);
+
+        // ✅ FIX: Safety check for ledger and group existence
+        if (!e.ledger || !e.ledger.group) return;
+
         const groupName = e.ledger.group.name.toLowerCase();
         if (groupName.includes("duties") || groupName.includes("tax")) {
           taxAmt += amt;
