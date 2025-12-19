@@ -5,9 +5,9 @@ import {
   Package,
   ArrowRight,
   TrendingUp,
-  Scale,
   FolderOpen,
   FileText,
+  BookOpen, // ✅ Imported BookOpen icon
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -62,6 +62,13 @@ export default async function ReportsPage({
       color: "bg-blue-600",
     },
     {
+      name: "Sales Register", // ✅ Added Sales Register
+      desc: "Monthly sales summary & detailed breakdown.",
+      href: `/companies/${companyId}/reports/sales-register`,
+      icon: BookOpen,
+      color: "bg-indigo-600",
+    },
+    {
       name: "Trial Balance",
       desc: "Consolidated debit/credit balances.",
       href: `/companies/${companyId}/reports/trial-balance`,
@@ -92,7 +99,7 @@ export default async function ReportsPage({
     {
       name: "Daybook Register",
       desc: "Chronological daily transaction log.",
-      href: `/companies/${companyId}/vouchers`, // Usually reuses the voucher list
+      href: `/companies/${companyId}/vouchers`,
       icon: FolderOpen,
       color: "bg-pink-600",
     },

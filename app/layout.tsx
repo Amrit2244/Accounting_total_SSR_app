@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
+// ✅ IMPORT STEP: Default import (no curly braces)
+import CommandPalette from "@/components/global/command-palette";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,6 +25,8 @@ export default function RootLayout({
           and forced a smaller base text size across the app 
       */}
       <body className={`${inter.className} antialiased text-slate-900 text-sm`}>
+        {/* ✅ COMPONENT STEP: Placed here so it is available globally */}
+        <CommandPalette />
         {children}
       </body>
     </html>
