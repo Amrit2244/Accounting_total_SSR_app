@@ -99,13 +99,21 @@ export default function InventoryTable({
                 return (
                   <tr
                     key={item.id}
-                    className={`hover:bg-slate-50 transition-colors ${
+                    onClick={() =>
+                      router.push(
+                        `/companies/${companyId}/inventory/${item.id}`
+                      )
+                    } // ✅ Row Click Navigation
+                    className={`hover:bg-slate-50 transition-colors cursor-pointer group ${
                       isSelected ? "bg-blue-50/40" : ""
                     }`}
                   >
                     <td className="py-2 px-4 text-center">
                       <button
-                        onClick={() => toggleSelect(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation(); // ✅ Prevent row click
+                          toggleSelect(item.id);
+                        }}
                         className="text-slate-400 hover:text-blue-600"
                       >
                         {isSelected ? (
@@ -115,7 +123,7 @@ export default function InventoryTable({
                         )}
                       </button>
                     </td>
-                    <td className="py-2 px-4 font-bold text-slate-900">
+                    <td className="py-2 px-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
                       {item.name}
                     </td>
                     <td className="py-2 px-4 text-[10px] uppercase font-bold text-slate-500">
@@ -130,12 +138,16 @@ export default function InventoryTable({
                     <td className="py-2 px-4 flex justify-end gap-2">
                       <Link
                         href={`/companies/${companyId}/inventory/${item.id}/edit`}
+                        onClick={(e) => e.stopPropagation()} // ✅ Prevent row click
                         className="text-blue-500 hover:text-blue-700 p-1"
                       >
                         <Edit size={14} />
                       </Link>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation(); // ✅ Prevent row click
+                          handleDelete(item.id);
+                        }}
                         disabled={isPending}
                         className="text-slate-300 hover:text-red-600 p-1"
                       >

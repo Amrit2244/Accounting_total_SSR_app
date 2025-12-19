@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { Command } from "cmdk";
+
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Calculator,
@@ -13,12 +14,13 @@ import {
   LayoutDashboard,
   Box,
   Search,
-  BookOpen, // ✅ Added Icon
+  BookOpen,
 } from "lucide-react";
 
 export default function CommandPalette() {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
+  const params = useParams(); // ✅ Get params to fix the Settings link
 
   // Toggle the menu when ⌘K or Ctrl+K is pressed
   React.useEffect(() => {
@@ -90,9 +92,13 @@ export default function CommandPalette() {
 
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
-                  onSelect={() =>
-                    runCommand(() => router.push("/companies/1/inventory"))
-                  }
+                  onSelect={() => {
+                    if (params.id) {
+                      runCommand(() =>
+                        router.push(`/companies/${params.id}/inventory`)
+                      );
+                    }
+                  }}
                 >
                   <Box
                     size={14}
@@ -102,14 +108,17 @@ export default function CommandPalette() {
                   <Shortcut>I</Shortcut>
                 </Command.Item>
 
-                {/* ✅ ADDED: Sales Register */}
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
-                  onSelect={() =>
-                    runCommand(() =>
-                      router.push("/companies/1/reports/sales-register")
-                    )
-                  }
+                  onSelect={() => {
+                    if (params.id) {
+                      runCommand(() =>
+                        router.push(
+                          `/companies/${params.id}/reports/sales-register`
+                        )
+                      );
+                    }
+                  }}
                 >
                   <BookOpen
                     size={14}
@@ -120,11 +129,13 @@ export default function CommandPalette() {
 
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
-                  onSelect={() =>
-                    runCommand(() =>
-                      router.push("/companies/1/vouchers/verify")
-                    )
-                  }
+                  onSelect={() => {
+                    if (params.id) {
+                      runCommand(() =>
+                        router.push(`/companies/${params.id}/vouchers/verify`)
+                      );
+                    }
+                  }}
                 >
                   <CreditCard
                     size={14}
@@ -143,11 +154,15 @@ export default function CommandPalette() {
               >
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-emerald-50 aria-selected:text-emerald-700 group"
-                  onSelect={() =>
-                    runCommand(() =>
-                      router.push("/companies/1/vouchers/create?type=SALES")
-                    )
-                  }
+                  onSelect={() => {
+                    if (params.id) {
+                      runCommand(() =>
+                        router.push(
+                          `/companies/${params.id}/vouchers/create?type=SALES`
+                        )
+                      );
+                    }
+                  }}
                 >
                   <FileText
                     size={14}
@@ -159,11 +174,15 @@ export default function CommandPalette() {
 
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-emerald-50 aria-selected:text-emerald-700 group"
-                  onSelect={() =>
-                    runCommand(() =>
-                      router.push("/companies/1/vouchers/create?type=PAYMENT")
-                    )
-                  }
+                  onSelect={() => {
+                    if (params.id) {
+                      runCommand(() =>
+                        router.push(
+                          `/companies/${params.id}/vouchers/create?type=PAYMENT`
+                        )
+                      );
+                    }
+                  }}
                 >
                   <Calculator
                     size={14}
@@ -181,13 +200,21 @@ export default function CommandPalette() {
                 heading="System"
                 className="text-[10px] font-black uppercase text-slate-400 px-2 py-1.5 mb-1 mt-2 tracking-widest"
               >
+                {/* ✅ CORRECTED SETTINGS LINK */}
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-slate-100"
-                  onSelect={() => runCommand(() => router.push("/settings"))}
+                  onSelect={() => {
+                    if (params.id) {
+                      runCommand(() =>
+                        router.push(`/companies/${params.id}/edit`)
+                      );
+                    }
+                  }}
                 >
                   <Settings size={14} className="text-slate-400" />
                   <span>Settings</span>
                 </Command.Item>
+
                 <Command.Item
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-slate-100"
                   onSelect={() => runCommand(() => router.push("/profile"))}
