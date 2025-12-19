@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Scale } from "lucide-react";
+import { ArrowLeft, Scale, AlertTriangle } from "lucide-react";
+import ReportPrintBtn from "@/components/reports/ReportPrintBtn"; // ✅ Import the client component
+
+const fmt = (n: number) =>
+  n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export default async function TrialBalancePage({
   params,
@@ -16,7 +23,7 @@ export default async function TrialBalancePage({
     include: {
       group: { select: { name: true } },
       entries: {
-        where: { voucher: { status: "APPROVED" } }, // ONLY Verified Vouchers
+        where: { voucher: { status: "APPROVED" } },
         select: { amount: true },
       },
     },
@@ -26,18 +33,17 @@ export default async function TrialBalancePage({
   // 2. Calculate Net Balances
   let totalDr = 0;
   let totalCr = 0;
+  let openingDiff = 0;
 
   const reportData = ledgers
     .map((ledger) => {
-      // Sum of transactions
       const txnTotal = ledger.entries.reduce(
         (sum, entry) => sum + entry.amount,
         0
       );
+      const netBalance = (ledger.openingBalance || 0) + txnTotal;
 
-      // Net Balance = Opening + Transactions
-      // (Positive = Debit, Negative = Credit)
-      const netBalance = ledger.openingBalance + txnTotal;
+      openingDiff += ledger.openingBalance || 0;
 
       if (netBalance > 0) totalDr += netBalance;
       if (netBalance < 0) totalCr += Math.abs(netBalance);
@@ -49,106 +55,122 @@ export default async function TrialBalancePage({
         balance: netBalance,
       };
     })
-    .filter((l) => Math.abs(l.balance) > 0.01); // Hide zero balance accounts
+    .filter((l) => Math.abs(l.balance) > 0.01);
+
+  const diff = totalDr - totalCr;
+  const isBalanced = Math.abs(diff) < 0.01;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-50px)] bg-slate-100">
-      {/* 1. REPORT HEADER */}
-      <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center shadow-md shrink-0">
-        <div>
-          <h1 className="text-lg font-bold flex items-center gap-2">
-            <Scale size={18} /> TRIAL BALANCE
-          </h1>
-          <p className="text-[11px] text-blue-200 uppercase tracking-wider">
-            Consolidated view of all ledger balances
-          </p>
+    <div className="max-w-[1600px] mx-auto space-y-3 animate-in fade-in duration-500 flex flex-col h-[calc(100vh-64px)] print:h-auto">
+      {/* HEADER */}
+      <div className="flex items-center justify-between shrink-0 print:hidden">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-slate-900 rounded text-white shadow-sm">
+            <Scale size={16} />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">
+              Trial Balance
+            </h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+              Consolidated Ledger Balances
+            </p>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <button className="text-xs font-bold bg-[#004b8d] hover:bg-blue-800 px-3 py-1.5 rounded transition-colors">
-            PRINT / PDF
-          </button>
+        <div className="flex items-center gap-2">
+          {/* ✅ REPLACED: Using Client Component here */}
+          <ReportPrintBtn />
+
           <Link
             href={`/companies/${companyId}/reports`}
-            className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"
+            className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 transition-all border border-slate-200 px-3 py-1.5 rounded-lg bg-white shadow-sm"
           >
-            <ArrowLeft size={12} /> BACK
+            <ArrowLeft size={14} /> Back
           </Link>
         </div>
       </div>
 
-      {/* 2. REPORT CONTENT */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto bg-white border border-gray-300 shadow-sm min-h-[600px] flex flex-col">
-          {/* Table Headers */}
-          <div className="grid grid-cols-12 bg-gray-100 border-b-2 border-gray-300 text-[11px] font-bold text-[#003366] uppercase py-3 px-4 sticky top-0">
-            <div className="col-span-6">Particulars</div>
-            <div className="col-span-3 text-right">Debit Balance</div>
-            <div className="col-span-3 text-right">Credit Balance</div>
+      {/* REPORT TABLE */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1 print:shadow-none print:border-none">
+        <div className="grid grid-cols-12 bg-slate-900 text-white text-[9px] font-black uppercase tracking-[0.1em] py-2 px-4 sticky top-0 z-10 print:bg-slate-200 print:text-black">
+          <div className="col-span-6 flex items-center">Ledger Account</div>
+          <div className="col-span-3 text-right border-l border-white/10 px-2">
+            Debit (Dr)
           </div>
+          <div className="col-span-3 text-right border-l border-white/10 px-2">
+            Credit (Cr)
+          </div>
+        </div>
 
-          {/* Table Body */}
-          <div className="divide-y divide-gray-200 flex-1">
-            {reportData.map((row) => (
+        <div className="flex-1 overflow-y-auto custom-scrollbar print:overflow-visible">
+          {reportData.length === 0 ? (
+            <div className="p-10 text-center text-slate-400 text-xs font-bold uppercase tracking-widest italic">
+              No ledger balances found.
+            </div>
+          ) : (
+            reportData.map((row) => (
               <div
                 key={row.id}
-                className="grid grid-cols-12 py-2 px-4 hover:bg-blue-50 transition-colors text-xs text-slate-700"
+                className="grid grid-cols-12 text-[11px] py-1.5 px-4 border-b border-slate-50 hover:bg-blue-50/50 transition-colors items-center group break-inside-avoid"
               >
-                {/* Name & Group */}
-                <div className="col-span-6">
-                  <div className="font-bold text-slate-900">{row.name}</div>
-                  <div className="text-[10px] text-slate-500 italic">
-                    {row.groupName}
-                  </div>
+                <div className="col-span-6 flex flex-col">
+                  <span className="font-bold text-slate-700 uppercase tracking-tighter truncate">
+                    {row.name}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
+                    Under {row.groupName}
+                  </span>
                 </div>
-
-                {/* Debit Column */}
-                <div className="col-span-3 text-right font-mono font-medium">
-                  {row.balance > 0
-                    ? row.balance.toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })
-                    : ""}
+                <div className="col-span-3 text-right px-2 font-mono font-bold text-slate-900">
+                  {row.balance > 0 ? fmt(row.balance) : "—"}
                 </div>
-
-                {/* Credit Column */}
-                <div className="col-span-3 text-right font-mono font-medium">
-                  {row.balance < 0
-                    ? Math.abs(row.balance).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })
-                    : ""}
+                <div className="col-span-3 text-right px-2 font-mono font-bold text-slate-900">
+                  {row.balance < 0 ? fmt(Math.abs(row.balance)) : "—"}
                 </div>
               </div>
-            ))}
-
-            {reportData.length === 0 && (
-              <div className="p-10 text-center text-gray-400 italic">
-                No balances found. Record transactions to generate report.
-              </div>
-            )}
-          </div>
-
-          {/* Footer Totals */}
-          <div className="grid grid-cols-12 bg-[#003366] text-white py-3 px-4 border-t-2 border-[#002244] text-sm font-bold sticky bottom-0">
-            <div className="col-span-6 text-right pr-4 uppercase">
-              Grand Total:
-            </div>
-            <div className="col-span-3 text-right font-mono text-yellow-300">
-              {totalDr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-            </div>
-            <div className="col-span-3 text-right font-mono text-yellow-300">
-              {totalCr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-            </div>
-          </div>
-
-          {/* Diff Checker (If totals don't match) */}
-          {Math.abs(totalDr - totalCr) > 0.01 && (
-            <div className="bg-red-100 text-red-700 text-center text-xs font-bold py-1 border-t border-red-200">
-              DIFFERENCE IN BOOKS: {Math.abs(totalDr - totalCr).toFixed(2)}
-            </div>
+            ))
           )}
         </div>
+
+        {/* TOTALS */}
+        <div
+          className={`grid grid-cols-12 py-3 px-4 border-t-2 mt-auto shadow-lg print:border-black ${
+            isBalanced
+              ? "bg-emerald-600 text-white border-slate-900 print:bg-white print:text-black"
+              : "bg-rose-600 text-white border-rose-900"
+          }`}
+        >
+          <div className="col-span-6 text-right pr-6 text-[11px] font-black uppercase tracking-widest flex items-center justify-end gap-2">
+            Grand Total
+          </div>
+          <div className="col-span-3 text-right font-mono text-sm font-black border-l border-white/20 px-2">
+            {fmt(totalDr)}
+          </div>
+          <div className="col-span-3 text-right font-mono text-sm font-black border-l border-white/20 px-2">
+            {fmt(totalCr)}
+          </div>
+        </div>
       </div>
+
+      {/* ERROR DIAGNOSTICS */}
+      {!isBalanced && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 flex items-start gap-3 print:hidden">
+          <AlertTriangle className="text-rose-600 shrink-0" size={18} />
+          <div>
+            <p className="text-xs font-black text-rose-700 uppercase">
+              Trial Balance Mismatch of ₹ {fmt(Math.abs(diff))}
+            </p>
+            <p className="text-[10px] text-rose-600 mt-1">
+              Possible Cause:
+              {Math.abs(openingDiff) > 0.01
+                ? ` Your manual Opening Balances do not match. (Diff: ${fmt(
+                    Math.abs(openingDiff)
+                  )}). Check your Ledger Masters.`
+                : " Data corruption or non-double-entry record found."}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

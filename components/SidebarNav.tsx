@@ -14,9 +14,8 @@ import {
   UserCog,
   ShieldCheck,
   Cpu,
-  RefreshCcw,
-  Beaker, // ✅ Added missing icon
-  Factory, // ✅ Added missing icon
+  Beaker,
+  Factory,
 } from "lucide-react";
 import clsx from "clsx";
 import packageJson from "@/package.json";
@@ -66,7 +65,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           icon: Package,
         },
         {
-          name: "Production Recipes (BOM)",
+          name: "Production Recipes",
           href: `/companies/${companyId}/inventory/bom`,
           icon: Beaker,
         },
@@ -97,7 +96,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
         },
         {
           name: "Settings",
-          href: `/companies/edit/${companyId}`,
+          href: `/companies/${companyId}/edit`,
           icon: Settings,
         },
       ],
@@ -106,14 +105,14 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
 
   return (
     <div className="flex flex-col h-full bg-[#0f172a] text-slate-300 select-none">
-      <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
         {menuGroups.map((group, idx) => (
-          <div key={idx} className="mb-8">
-            <h3 className="px-4 mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 opacity-60">
+          <div key={idx} className="mb-6">
+            <h3 className="px-3 mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">
               {group.label}
             </h3>
 
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {group.items.map((item) => {
                 const isActive = item.exact
                   ? pathname === item.href
@@ -124,22 +123,21 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
                     key={item.href}
                     href={item.href}
                     className={clsx(
-                      "relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-300 group",
+                      "relative flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-200 group",
                       isActive
-                        ? "bg-gradient-to-r from-blue-600/20 to-indigo-600/10 text-white shadow-[inset_0_0_20px_rgba(59,130,246,0.1)] border border-blue-500/20"
+                        ? "bg-blue-600/10 text-white border border-blue-500/20 shadow-[0_0_15px_rgba(37,99,235,0.1)]"
                         : "hover:bg-slate-800/50 hover:text-slate-100"
                     )}
                   >
                     {isActive && (
-                      <div className="absolute left-0 w-1 h-5 bg-blue-500 rounded-r-full shadow-[0_0_10px_#3b82f6]" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-r-full shadow-[0_0_8px_#3b82f6]" />
                     )}
-
                     <item.icon
-                      size={20}
+                      size={16}
                       className={clsx(
-                        "transition-all duration-300 group-hover:scale-110",
+                        "transition-transform duration-200 group-hover:scale-110",
                         isActive
-                          ? "text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                          ? "text-blue-400"
                           : "text-slate-500 group-hover:text-blue-400"
                       )}
                     />
@@ -152,26 +150,24 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
         ))}
       </div>
 
-      <div className="p-4 mx-4 mb-6 rounded-2xl bg-slate-800/40 border border-slate-700/50 backdrop-blur-sm">
+      <div className="p-4 mx-3 mb-4 rounded-xl bg-slate-800/40 border border-slate-700/50 backdrop-blur-sm">
         <div className="flex items-center justify-between mb-2">
-          <div className="p-1.5 bg-blue-500/10 rounded-lg">
-            <Cpu size={14} className="text-blue-400" />
+          <div className="p-1 bg-blue-500/10 rounded flex items-center justify-center">
+            <Cpu size={12} className="text-blue-400" />
           </div>
-          <div className="flex items-center gap-1 text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-            <ShieldCheck size={10} />
-            Secure
+          <div className="flex items-center gap-1 text-[8px] font-black text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full uppercase tracking-tighter border border-emerald-500/20">
+            <ShieldCheck size={8} /> Secure
           </div>
         </div>
-
-        <p className="text-[10px] text-slate-500 font-medium mb-1">
-          Application Version
+        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">
+          System Version
         </p>
         <div className="flex items-end justify-between">
-          <span className="text-lg font-mono font-black text-white leading-none">
+          <span className="text-sm font-mono font-black text-white leading-none">
             {appVersion}
           </span>
-          <span className="text-[8px] text-slate-600 font-bold uppercase tracking-widest italic">
-            Stable Branch
+          <span className="text-[8px] text-slate-600 font-bold uppercase tracking-widest">
+            Stable
           </span>
         </div>
       </div>

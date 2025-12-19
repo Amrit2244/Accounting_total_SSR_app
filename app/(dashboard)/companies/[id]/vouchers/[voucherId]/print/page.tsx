@@ -11,38 +11,29 @@ export default async function PrintVoucherPage({
   const { id, voucherId } = await params;
   const vId = parseInt(voucherId);
 
-  // 1. Fetch Voucher Details with all necessary relations
   const voucher = await prisma.voucher.findUnique({
     where: { id: vId },
     include: {
       company: true,
       entries: { include: { ledger: true } },
-      inventory: {
-        include: {
-          stockItem: {
-            include: { unit: true },
-          },
-        },
-      },
-      createdBy: true, // ✅ Included for Audit Trail
-      verifiedBy: true, // ✅ Included for Audit Trail
+      inventory: { include: { stockItem: { include: { unit: true } } } },
+      createdBy: true,
+      verifiedBy: true,
     },
   });
 
   if (!voucher) return notFound();
 
-  // 2. Logic to determine Grand Total
   const isStockJournal = voucher.type === "STOCK_JOURNAL";
   let grandTotal = 0;
 
   if (isStockJournal) {
-    const productionTotal = voucher.inventory
-      .filter((i) => i.isProduction === true)
+    const prodTotal = voucher.inventory
+      .filter((i) => i.isProduction)
       .reduce((sum, i) => sum + i.amount, 0);
-
     grandTotal =
-      productionTotal > 0
-        ? productionTotal
+      prodTotal > 0
+        ? prodTotal
         : voucher.inventory.reduce((sum, i) => sum + i.amount, 0) / 2;
   } else {
     grandTotal = voucher.entries
@@ -50,169 +41,130 @@ export default async function PrintVoucherPage({
       .reduce((sum, e) => sum + e.amount, 0);
   }
 
-  // Helper: Find Primary Party for the header
   const primaryParty =
     voucher.entries.find(
       (e) =>
-        !e.ledger.name.toLowerCase().includes("cash") &&
-        !e.ledger.name.toLowerCase().includes("bank") &&
-        Math.abs(e.amount) > 0
+        !["cash", "bank"].some((k) =>
+          e.ledger.name.toLowerCase().includes(k)
+        ) && Math.abs(e.amount) > 0
     )?.ledger.name || "Cash / Counterparty";
-
   const fmt = (n: number) =>
-    n.toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
+    n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
   const fmtDate = (date: Date) =>
     date.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
-
   const isInventory = voucher.inventory.length > 0;
 
   return (
-    <div className="bg-slate-100 min-h-screen flex justify-center p-8 print:p-0 print:bg-white">
-      <div className="fixed top-6 right-6 no-print z-50">
+    <div className="bg-slate-100 min-h-screen flex justify-center p-4 print:p-0 print:bg-white">
+      <div className="fixed top-4 right-4 no-print z-50">
         <PrintTriggerButton />
       </div>
 
       <div
         id="printable-area"
-        className="w-[210mm] min-h-[297mm] bg-white p-12 shadow-2xl text-slate-900 print:shadow-none print:w-full print:p-8"
+        className="w-[210mm] min-h-[297mm] bg-white p-8 shadow-xl text-slate-900 print:shadow-none print:w-full"
       >
-        {/* 1. HEADER SECTION */}
-        <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
+        {/* HEADER */}
+        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
           <div>
-            <h1 className="text-3xl font-black uppercase tracking-wide text-slate-900">
+            <h1 className="text-xl font-black uppercase tracking-wide text-slate-900">
               {voucher.company.name}
             </h1>
-            <div className="text-sm mt-2 text-slate-600 whitespace-pre-line leading-relaxed max-w-[400px]">
+            <div className="text-xs mt-1 text-slate-600 whitespace-pre-line leading-snug max-w-[350px]">
               {voucher.company.address || "Address Not Provided"}
             </div>
-            <div className="text-sm mt-3 font-bold bg-slate-100 inline-block px-2 py-1 rounded">
+            <div className="text-[10px] mt-2 font-bold bg-slate-100 inline-block px-1.5 py-0.5 rounded">
               GSTIN: {voucher.company.gstin || "N/A"}
             </div>
           </div>
-
           <div className="text-right">
-            <h2 className="text-4xl font-black uppercase text-slate-200 leading-none mb-4">
+            <h2 className="text-2xl font-black uppercase text-slate-300 leading-none mb-2">
               {voucher.type.replace("_", " ")}
             </h2>
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">
-                Voucher No.
+            <div className="text-xs space-y-0.5">
+              <p className="font-bold text-slate-500">
+                Voucher No:{" "}
+                <span className="text-slate-900 font-mono text-sm">
+                  {voucher.voucherNo}
+                </span>
               </p>
-              <p className="text-xl font-black font-mono">
-                {voucher.voucherNo}
+              <p className="font-bold text-slate-500">
+                Date:{" "}
+                <span className="text-slate-900">{fmtDate(voucher.date)}</span>
               </p>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest pt-2">
-                Date
-              </p>
-              <p className="text-lg font-bold">{fmtDate(voucher.date)}</p>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest pt-2">
-                Reference ID
-              </p>
-              <p className="text-sm font-mono text-slate-600">
+              <p className="font-mono text-[10px] text-slate-400">
                 {voucher.transactionCode}
               </p>
             </div>
           </div>
         </div>
 
-        {/* 2. PARTY / NARRATION BLOCK */}
-        <div className="mb-8">
-          {isStockJournal ? (
-            <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-              <p className="text-[10px] font-bold uppercase text-blue-500 mb-1">
-                Process Narration:
-              </p>
-              <p className="text-sm font-bold text-blue-900 italic">
-                "{voucher.narration || "Stock transfer/manufacturing record"}"
-              </p>
-            </div>
-          ) : isInventory ? (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl w-2/3">
-              <p className="text-[10px] font-bold uppercase text-slate-500 mb-1">
-                Account Particulars:
-              </p>
-              <p className="text-xl font-black text-slate-900">
-                {primaryParty}
-              </p>
-            </div>
-          ) : (
-            <div className="w-full">
-              <p className="text-[10px] font-bold uppercase text-slate-500 mb-1">
-                Narration:
-              </p>
-              <p className="text-sm font-medium italic text-slate-700 border-b border-dashed border-slate-300 pb-2">
-                "
-                {voucher.narration || "Being amount recorded as per details..."}
-                "
-              </p>
-            </div>
-          )}
+        {/* NARRATION */}
+        <div className="mb-6 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs italic text-slate-700">
+          <span className="font-bold not-italic text-slate-500 uppercase mr-2 text-[10px]">
+            Narration:
+          </span>
+          {voucher.narration || "Being transaction recorded..."}
         </div>
 
-        {/* 3. MAIN CONTENT TABLE */}
+        {/* INVENTORY TABLE */}
         {isInventory ? (
-          <table className="w-full mb-8 border-collapse">
-            <thead className="bg-slate-900 text-white print:bg-slate-100 print:text-black">
+          <table className="w-full mb-6 border-collapse text-xs">
+            <thead className="bg-slate-900 text-white">
               <tr>
-                <th className="p-3 text-left text-xs uppercase tracking-widest">
+                <th className="p-2 text-left uppercase tracking-widest font-bold">
                   Item Description
                 </th>
-                <th className="p-3 text-right text-xs uppercase tracking-widest w-24">
+                <th className="p-2 text-right uppercase tracking-widest w-20 font-bold">
                   Qty
                 </th>
-                <th className="p-3 text-center text-xs uppercase tracking-widest w-20">
+                <th className="p-2 text-center uppercase tracking-widest w-16 font-bold">
                   Unit
                 </th>
-                <th className="p-3 text-right text-xs uppercase tracking-widest w-32">
+                <th className="p-2 text-right uppercase tracking-widest w-24 font-bold">
                   Rate
                 </th>
-                <th className="p-3 text-right text-xs uppercase tracking-widest w-40">
+                <th className="p-2 text-right uppercase tracking-widest w-32 font-bold">
                   Amount
                 </th>
               </tr>
             </thead>
-            <tbody className="text-sm divide-y divide-slate-200 border-b-2 border-slate-900">
+            <tbody className="divide-y divide-slate-200 border-b-2 border-slate-900">
               {voucher.inventory.map((item, idx) => (
                 <tr
                   key={idx}
                   className={
                     isStockJournal && item.isProduction
-                      ? "bg-emerald-50/30 print:bg-transparent"
+                      ? "bg-emerald-50/50 print:bg-transparent"
                       : ""
                   }
                 >
-                  <td className="p-4 font-bold text-slate-800">
-                    <div className="flex items-center gap-2">
-                      {item.stockItem?.name || item.itemName}
-                      {isStockJournal && (
-                        <span
-                          className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${
-                            item.isProduction
-                              ? "bg-emerald-100 border-emerald-200 text-emerald-700"
-                              : "bg-orange-100 border-orange-200 text-orange-700"
-                          }`}
-                        >
-                          {item.isProduction ? "IN" : "OUT"}
-                        </span>
-                      )}
-                    </div>
+                  <td className="p-2 font-bold text-slate-800 flex items-center gap-2">
+                    {item.stockItem?.name || item.itemName}
+                    {isStockJournal && (
+                      <span
+                        className={`text-[8px] font-black px-1 rounded border ${
+                          item.isProduction
+                            ? "bg-emerald-100 border-emerald-200 text-emerald-700"
+                            : "bg-orange-100 border-orange-200 text-orange-700"
+                        }`}
+                      >
+                        {item.isProduction ? "IN" : "OUT"}
+                      </span>
+                    )}
                   </td>
-                  <td className="p-4 text-right font-mono">
+                  <td className="p-2 text-right font-mono">
                     {Math.abs(item.quantity)}
                   </td>
-                  <td className="p-4 text-center text-xs text-slate-500 font-bold">
+                  <td className="p-2 text-center text-[10px] text-slate-500 font-bold">
                     {item.stockItem?.unit?.symbol || "NOS"}
                   </td>
-                  <td className="p-4 text-right font-mono">{fmt(item.rate)}</td>
-                  <td className="p-4 text-right font-black font-mono text-slate-900">
+                  <td className="p-2 text-right font-mono">{fmt(item.rate)}</td>
+                  <td className="p-2 text-right font-black font-mono text-slate-900">
                     {fmt(item.amount)}
                   </td>
                 </tr>
@@ -220,32 +172,33 @@ export default async function PrintVoucherPage({
             </tbody>
           </table>
         ) : (
-          <table className="w-full mb-8 border-collapse">
-            <thead className="bg-slate-100 text-slate-800 border-y-2 border-slate-900">
+          <table className="w-full mb-6 border-collapse text-xs">
+            <thead className="bg-slate-100 border-y-2 border-slate-900">
               <tr>
-                <th className="p-3 text-left text-xs uppercase tracking-widest">
+                <th className="p-2 text-left uppercase font-bold">
                   Ledger Account
                 </th>
-                <th className="p-3 text-right text-xs uppercase tracking-widest w-44">
+                <th className="p-2 text-right uppercase font-bold w-32">
                   Debit
                 </th>
-                <th className="p-3 text-right text-xs uppercase tracking-widest w-44">
+                <th className="p-2 text-right uppercase font-bold w-32">
                   Credit
                 </th>
               </tr>
             </thead>
-            <tbody className="text-sm divide-y divide-slate-200 border-b-2 border-slate-900">
+            <tbody className="divide-y divide-slate-200 border-b-2 border-slate-900">
               {voucher.entries.map((entry, idx) => (
                 <tr key={idx}>
-                  <td className="p-4">
-                    <span className="font-bold text-slate-800 uppercase">
-                      {entry.ledger.name}
+                  <td className="p-2 font-bold text-slate-800">
+                    {entry.ledger.name}
+                    <span className="block text-[9px] text-slate-400 font-black uppercase">
+                      {entry.ledger.group?.name}
                     </span>
                   </td>
-                  <td className="p-4 text-right font-mono font-bold">
+                  <td className="p-2 text-right font-mono font-bold">
                     {entry.amount > 0 ? fmt(entry.amount) : ""}
                   </td>
-                  <td className="p-4 text-right font-mono font-bold">
+                  <td className="p-2 text-right font-mono font-bold">
                     {entry.amount < 0 ? fmt(Math.abs(entry.amount)) : ""}
                   </td>
                 </tr>
@@ -254,83 +207,43 @@ export default async function PrintVoucherPage({
           </table>
         )}
 
-        {/* 4. TOTALS SECTION */}
-        <div className="flex justify-end mb-16">
-          <div className="bg-slate-900 text-white p-6 w-80 rounded-2xl shadow-xl print:bg-slate-100 print:text-black print:border-2 print:border-black">
-            <p className="text-[10px] font-black uppercase text-slate-400 mb-1 tracking-[0.2em]">
+        {/* TOTALS */}
+        <div className="flex justify-end mb-8">
+          <div className="bg-slate-900 text-white p-4 w-64 rounded-xl shadow-lg print:border-2 print:border-black print:bg-white print:text-black">
+            <p className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest print:text-slate-600">
               Grand Total
             </p>
-            <p className="text-4xl font-black tracking-tight flex items-center justify-end">
-              <IndianRupee
-                size={28}
-                className="mr-2 text-blue-400 print:text-black"
-              />
+            <p className="text-2xl font-black flex items-center justify-end">
+              <IndianRupee size={18} className="mr-1" />
               {fmt(Math.abs(grandTotal))}
             </p>
           </div>
         </div>
 
-        {/* ✅ FEATURE 5: AUDIT TRAIL SECTION */}
-        <div className="mt-12 pt-8 border-t border-slate-100 space-y-3 no-print-background">
-          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-            Voucher Audit Trail
-          </h4>
-          <div className="flex items-center gap-8 text-[11px] text-slate-600">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900">Maker:</span>{" "}
-              {voucher.createdBy?.name || "System"}
-              <span className="text-slate-400 italic">
-                ({new Date(voucher.createdAt).toLocaleString("en-IN")})
+        {/* AUDIT TRAIL & FOOTER */}
+        <div className="mt-8 pt-4 border-t border-slate-200 grid grid-cols-2 gap-8 text-[10px]">
+          <div>
+            <p className="font-bold text-slate-900 uppercase mb-2">Audit Log</p>
+            <p>
+              Maker:{" "}
+              <span className="font-bold">
+                {voucher.createdBy?.name || "System"}
               </span>
-            </div>
+            </p>
             {voucher.verifiedBy && (
-              <div className="flex items-center gap-2 border-l pl-8 border-slate-200">
-                <span className="font-bold text-emerald-600">Verified By:</span>{" "}
-                {voucher.verifiedBy?.name}
-                <span className="text-slate-400 italic">
-                  ({new Date(voucher.updatedAt).toLocaleString("en-IN")})
+              <p>
+                Verifier:{" "}
+                <span className="font-bold text-emerald-600">
+                  {voucher.verifiedBy.name}
                 </span>
-              </div>
+              </p>
             )}
           </div>
-        </div>
-
-        {/* 5. FOOTER SECTION */}
-        <div className="grid grid-cols-2 gap-12 border-t border-slate-200 pt-8 mt-12">
-          <div className="space-y-4">
-            <p className="text-xs font-black uppercase text-slate-900 tracking-widest">
-              Terms & Conditions
+          <div className="text-right flex flex-col justify-between h-20">
+            <p className="font-bold uppercase">For {voucher.company.name}</p>
+            <p className="font-black uppercase tracking-widest border-t border-slate-900 inline-block pt-1">
+              Authorized Signatory
             </p>
-            <ul className="text-[10px] text-slate-500 space-y-1.5 list-disc pl-4">
-              <li>
-                This is a computer-generated document and requires no physical
-                signature.
-              </li>
-              <li>Verify all quantities and rates upon receipt.</li>
-              <li>
-                Subject to{" "}
-                {voucher.company.address?.split(",").pop()?.trim() || "Local"}{" "}
-                Jurisdiction.
-              </li>
-            </ul>
-          </div>
-
-          <div className="text-right flex flex-col justify-between">
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
-                For
-              </p>
-              <p className="font-black text-slate-900 uppercase text-lg leading-tight">
-                {voucher.company.name}
-              </p>
-            </div>
-            <div className="mt-12">
-              <div className="inline-block border-t-2 border-slate-900 pt-2 px-8">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">
-                  Authorized Signatory
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       </div>

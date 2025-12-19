@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,6 +13,7 @@ import {
   Package,
 } from "lucide-react";
 import { deleteBulkVouchers } from "@/app/actions/masters";
+import { useRouter } from "next/navigation";
 
 export default function VoucherTable({
   vouchers = [],
@@ -23,7 +24,8 @@ export default function VoucherTable({
 }) {
   const [searchId, setSearchId] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleting, startTransition] = useTransition();
+  const router = useRouter();
 
   const filteredVouchers = useMemo(() => {
     if (!searchId.trim()) return vouchers;
@@ -34,24 +36,26 @@ export default function VoucherTable({
     );
   }, [vouchers, searchId]);
 
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredVouchers.length) setSelectedIds([]);
-    else setSelectedIds(filteredVouchers.map((v: any) => v.id));
-  };
-
-  const toggleSelectOne = (id: number) => {
+  const toggleSelectAll = () =>
+    setSelectedIds(
+      selectedIds.length === filteredVouchers.length
+        ? []
+        : filteredVouchers.map((v: any) => v.id)
+    );
+  const toggleSelectOne = (id: number) =>
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
-  };
 
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedIds.length} vouchers permanently?`)) return;
-    setIsDeleting(true);
-    const res = await deleteBulkVouchers(selectedIds, companyId);
-    if (res.success) setSelectedIds([]);
-    else alert("Error: " + (res.message || "Could not delete"));
-    setIsDeleting(false);
+    startTransition(async () => {
+      const res = await deleteBulkVouchers(selectedIds, companyId);
+      if (res.success) {
+        setSelectedIds([]);
+        router.refresh();
+      } else alert("Error: " + (res.message || "Could not delete"));
+    });
   };
 
   const formatMoney = (amount: number | null) =>
@@ -60,65 +64,53 @@ export default function VoucherTable({
     );
 
   return (
-    <div className="relative">
+    <div className="relative font-sans">
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-4">
-          <div className="flex items-center gap-3 border-r border-slate-700 pr-6">
-            <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
-              {selectedIds.length}
-            </span>
-            <span className="text-sm font-medium">Vouchers Selected</span>
-          </div>
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-2">
+          <span className="text-[10px] font-black uppercase tracking-widest">
+            {selectedIds.length} Selected
+          </span>
           <button
             onClick={handleBulkDelete}
             disabled={isDeleting}
-            className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold text-sm disabled:opacity-50"
+            className="flex items-center gap-1 text-red-400 hover:text-white font-bold text-[10px] uppercase transition-colors"
           >
-            {isDeleting ? (
-              "Deleting..."
-            ) : (
-              <>
-                <Trash2 size={18} /> Delete Selected
-              </>
-            )}
+            <Trash2 size={12} /> {isDeleting ? "..." : "Delete"}
           </button>
-          <button
-            onClick={() => setSelectedIds([])}
-            className="p-1 hover:bg-slate-800 rounded-full"
-          >
-            <X size={20} />
+          <button onClick={() => setSelectedIds([])}>
+            <X size={14} className="text-slate-500 hover:text-white" />
           </button>
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
-        <div className="p-5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-          <div className="relative max-w-md w-full">
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col h-[calc(100vh-200px)]">
+        <div className="p-3 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <div className="relative w-64">
             <Search
-              size={18}
+              size={14}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
             <input
               type="text"
-              placeholder="Search by ID or Voucher No..."
+              placeholder="Search ID or Vch No..."
               value={searchId}
               onChange={(e) => setSearchId(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="pl-9 pr-3 py-1.5 w-full text-[11px] font-bold border border-slate-200 rounded-lg outline-none focus:border-blue-500 transition-all uppercase placeholder:normal-case"
             />
           </div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            Daybook entries
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+            {filteredVouchers.length} Entries
           </p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left border-separate border-spacing-0">
-            <thead className="bg-slate-800 text-slate-200 font-bold uppercase text-[10px] tracking-widest sticky top-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse text-[11px]">
+            <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
               <tr>
-                <th className="p-4 border-b w-10 text-center">
+                <th className="p-3 w-10 text-center">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 rounded accent-blue-600"
+                    className="accent-blue-600 cursor-pointer"
                     checked={
                       selectedIds.length === filteredVouchers.length &&
                       filteredVouchers.length > 0
@@ -126,24 +118,24 @@ export default function VoucherTable({
                     onChange={toggleSelectAll}
                   />
                 </th>
-                <th className="p-4 border-b">Date</th>
-                <th className="p-4 border-b">Trans ID</th>
-                <th className="p-4 border-b">Vch No</th>
-                <th className="p-4 border-b text-center">Status</th>
-                <th className="p-4 border-b">Ledger Particulars</th>
-                <th className="p-4 border-b text-right">Debit (₹)</th>
-                <th className="p-4 border-b text-right">Credit (₹)</th>
-                <th className="p-4 border-b text-center">Action</th>
+                <th className="p-3">Date</th>
+                <th className="p-3">ID</th>
+                <th className="p-3">Vch No</th>
+                <th className="p-3 text-center">Status</th>
+                <th className="p-3">Particulars</th>
+                <th className="p-3 text-right">Debit (₹)</th>
+                <th className="p-3 text-right">Credit (₹)</th>
+                <th className="p-3 text-center w-16">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
               {filteredVouchers.length === 0 ? (
                 <tr>
                   <td
                     colSpan={9}
-                    className="p-20 text-center text-slate-400 italic"
+                    className="p-10 text-center text-slate-400 italic text-xs font-bold uppercase"
                   >
-                    No vouchers found.
+                    No vouchers found
                   </td>
                 </tr>
               ) : (
@@ -151,8 +143,6 @@ export default function VoucherTable({
                   const isPending = voucher.status === "PENDING";
                   const isSelected = selectedIds.includes(voucher.id);
                   const isStockJournal = voucher.type === "STOCK_JOURNAL";
-
-                  // Logic to handle row display for Stock Journals (which have no entries)
                   const rowsToRender = isStockJournal
                     ? [{ id: `sj-${voucher.id}`, isSJ: true }]
                     : voucher.entries;
@@ -162,29 +152,29 @@ export default function VoucherTable({
                       {rowsToRender.map((row: any, index: number) => (
                         <tr
                           key={row.id}
-                          className={`transition-all ${
+                          className={`group transition-colors ${
                             isSelected
-                              ? "bg-blue-50"
+                              ? "bg-blue-50/60"
                               : isPending
-                              ? "bg-red-50/40"
-                              : "bg-white hover:bg-slate-50"
+                              ? "bg-red-50/30"
+                              : "hover:bg-slate-50"
                           }`}
                         >
                           {index === 0 && (
                             <>
                               <td
-                                className="p-4 text-center border-r border-slate-50"
+                                className="p-3 text-center border-r border-slate-50 align-top"
                                 rowSpan={rowsToRender.length}
                               >
                                 <input
                                   type="checkbox"
-                                  className="w-4 h-4 rounded accent-blue-600"
+                                  className="accent-blue-600 cursor-pointer"
                                   checked={isSelected}
                                   onChange={() => toggleSelectOne(voucher.id)}
                                 />
                               </td>
                               <td
-                                className="p-4 font-bold text-slate-700"
+                                className="p-3 font-bold align-top"
                                 rowSpan={rowsToRender.length}
                               >
                                 {new Date(voucher.date).toLocaleDateString(
@@ -193,26 +183,26 @@ export default function VoucherTable({
                                 )}
                               </td>
                               <td
-                                className="p-4 font-mono text-xs text-blue-600"
+                                className="p-3 font-mono text-[10px] text-blue-600 align-top"
                                 rowSpan={rowsToRender.length}
                               >
                                 {voucher.transactionCode || "-"}
                               </td>
                               <td
-                                className="p-4 font-black text-slate-900 uppercase"
+                                className="p-3 font-black text-slate-900 uppercase align-top"
                                 rowSpan={rowsToRender.length}
                               >
                                 {voucher.voucherNo}
                               </td>
                               <td
-                                className="p-4 text-center"
+                                className="p-3 text-center align-top"
                                 rowSpan={rowsToRender.length}
                               >
                                 <div
-                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black border uppercase ${
                                     isPending
-                                      ? "bg-red-100 text-red-700 border-red-200 animate-pulse"
-                                      : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                                      ? "bg-red-50 text-red-600 border-red-100"
+                                      : "bg-emerald-50 text-emerald-600 border-emerald-100"
                                   }`}
                                 >
                                   {isPending ? (
@@ -225,67 +215,47 @@ export default function VoucherTable({
                               </td>
                             </>
                           )}
-
-                          {/* Particulars Logic */}
                           <td
-                            className={`p-4 font-medium border-l border-slate-50 ${
+                            className={`p-3 border-l border-slate-50 ${
                               isPending ? "text-red-700" : "text-slate-600"
                             }`}
                           >
                             {isStockJournal ? (
-                              <div className="flex items-center gap-2">
-                                <Package size={14} className="text-blue-500" />
-                                <span className="font-bold">
-                                  Stock Journal / Manufacturing
-                                </span>
+                              <div className="flex items-center gap-1 font-bold text-[10px] uppercase text-blue-600">
+                                <Package size={12} /> Stock Journal
                               </div>
                             ) : (
-                              <>
+                              <span className="text-[10px] uppercase font-bold">
                                 {index > 0 && (
                                   <ArrowRight
                                     size={10}
-                                    className="inline mr-2 text-slate-300"
+                                    className="inline mr-1 text-slate-300"
                                   />
                                 )}
-                                {row.ledger?.name || "Unknown Ledger"}
-                              </>
+                                {row.ledger?.name || "Unknown"}
+                              </span>
                             )}
                           </td>
-
-                          {/* Amount Logic */}
-                          <td
-                            className={`p-4 text-right font-mono font-bold ${
-                              isPending ? "text-red-600" : "text-slate-900"
-                            }`}
-                          >
-                            {isStockJournal
-                              ? "-"
-                              : row.amount > 0
+                          <td className="p-3 text-right font-mono font-bold text-[10px]">
+                            {!isStockJournal && row.amount > 0
                               ? formatMoney(row.amount)
                               : ""}
                           </td>
-                          <td
-                            className={`p-4 text-right font-mono font-bold ${
-                              isPending ? "text-red-600" : "text-slate-900"
-                            }`}
-                          >
-                            {isStockJournal
-                              ? formatMoney(voucher.totalAmount)
-                              : row.amount < 0
+                          <td className="p-3 text-right font-mono font-bold text-[10px]">
+                            {!isStockJournal && row.amount < 0
                               ? formatMoney(row.amount)
                               : ""}
                           </td>
-
                           {index === 0 && (
                             <td
-                              className="p-4 text-center border-l border-slate-50"
+                              className="p-3 text-center border-l border-slate-50 align-top"
                               rowSpan={rowsToRender.length}
                             >
                               <Link
                                 href={`/companies/${companyId}/vouchers/${voucher.id}/edit`}
-                                className="p-2 inline-block rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 transition-all"
+                                className="text-slate-400 hover:text-blue-600 transition-colors p-1 inline-block"
                               >
-                                <FileEdit size={16} />
+                                <FileEdit size={14} />
                               </Link>
                             </td>
                           )}

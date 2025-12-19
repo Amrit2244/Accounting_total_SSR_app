@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import StockJournalForm from "@/components/forms/StockJournalForm";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export default async function StockJournalPage({
   params,
@@ -15,17 +17,28 @@ export default async function StockJournalPage({
   });
 
   return (
-    <div className="max-w-7xl mx-auto py-10 px-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
-          Stock Journal
-        </h1>
-        <p className="text-slate-500 font-medium">
-          Transfer materials or record manufacturing production.
-        </p>
+    <div className="max-w-[1400px] mx-auto space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+            Stock Journal
+          </h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+            Manufacturing & Transfers
+          </p>
+        </div>
+        <Link
+          href={`/companies/${companyId}/inventory`}
+          className="text-[10px] font-black text-slate-400 hover:text-slate-900 flex items-center gap-1 uppercase"
+        >
+          <ArrowLeft size={14} /> Back
+        </Link>
       </div>
 
-      <StockJournalForm companyId={companyId} stockItems={stockItems} />
+      {/* High-density Form Component */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+        <StockJournalForm companyId={companyId} stockItems={stockItems} />
+      </div>
     </div>
   );
 }

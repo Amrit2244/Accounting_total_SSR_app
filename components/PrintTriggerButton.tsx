@@ -4,20 +4,19 @@ import { Printer, ArrowLeft } from "lucide-react";
 
 export default function PrintTriggerButton() {
   return (
-    <>
+    <div className="flex gap-2">
       <button
         onClick={() => window.print()}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
+        className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-lg font-black text-[10px] uppercase shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 border border-slate-700"
       >
-        <Printer size={20} /> Print Invoice
+        <Printer size={14} /> Print Document
       </button>
-
       <button
         onClick={() => window.history.back()}
-        className="bg-white hover:bg-gray-100 text-slate-700 px-4 py-3 rounded-full font-bold shadow flex items-center gap-2"
+        className="bg-white hover:bg-slate-50 text-slate-600 px-3 py-2 rounded-lg font-black text-[10px] uppercase shadow-md flex items-center gap-2 transition-all border border-slate-200"
       >
-        <ArrowLeft size={20} /> Back
+        <ArrowLeft size={14} /> Back
       </button>
-    </>
+    </div>
   );
 }

@@ -61,7 +61,6 @@ export default async function LedgerReportPage({
     const ledger = await prisma.ledger.findUnique({ where: { id: lid } });
 
     if (ledger) {
-      // 1. Calculate Opening Balance
       const prevEntries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
@@ -76,7 +75,6 @@ export default async function LedgerReportPage({
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
       openingBalance = (ledger.openingBalance || 0) + (prevDr - prevCr);
 
-      // 2. Fetch Entries with full relational data
       entries = await prisma.voucherEntry.findMany({
         where: {
           ledgerId: lid,
@@ -108,90 +106,91 @@ export default async function LedgerReportPage({
   let runningBalance = openingBalance;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans print:hidden">
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 no-print">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
-              <Scale className="text-white" size={20} />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">
-                Ledger Explorer
-              </h1>
-              <p className="text-xs text-slate-500 font-medium">
-                Internal Audit & Reporting
-              </p>
-            </div>
+    <div className="flex flex-col h-[calc(100vh-48px)] bg-slate-50 font-sans print:bg-white overflow-hidden">
+      {/* COMPACT TOP NAV */}
+      <div className="bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between shrink-0 no-print shadow-sm z-10">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 bg-slate-900 rounded-lg text-white shadow-md">
+            <Scale size={16} />
           </div>
-          <div className="flex items-center gap-6">
-            <LedgerSearchFilter
-              companyId={companyId}
-              ledgers={ledgers}
-              defaultLedgerId={ledgerId}
-              defaultFrom={defaultFrom}
-              defaultTo={defaultTo}
-            />
-            <div className="h-8 w-px bg-slate-200 ml-2" />
-            <ReportActionButtons
-              ledgerName={reportData?.name}
-              entries={entries}
-              openingBalance={openingBalance}
-            />
+          <div>
+            <h1 className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none">
+              Ledger Explorer
+            </h1>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+              Audit & Analysis
+            </p>
           </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <LedgerSearchFilter
+            companyId={companyId}
+            ledgers={ledgers}
+            defaultLedgerId={ledgerId}
+            defaultFrom={defaultFrom}
+            defaultTo={defaultTo}
+          />
+          <div className="h-6 w-px bg-slate-200" />
+          <ReportActionButtons
+            ledgerName={reportData?.name}
+            entries={entries}
+            openingBalance={openingBalance}
+          />
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-6 mt-8">
+      <main className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         {reportData ? (
-          <div className="grid grid-cols-12 gap-8">
-            {/* SIDEBAR SUMMARY */}
-            <div className="col-span-12 lg:col-span-3 space-y-4 no-print">
+          <div className="grid grid-cols-12 gap-4 max-w-[1600px] mx-auto">
+            {/* COMPACT SIDEBAR SUMMARY */}
+            <div className="col-span-12 lg:col-span-2 space-y-3 no-print">
               <SummaryTile
-                label="Opening Balance"
+                label="Opening"
                 amount={openingBalance}
-                icon={<ArrowDownLeft size={16} />}
+                icon={<ArrowDownLeft size={12} />}
               />
               <SummaryTile
-                label="Total Debit"
+                label="Total Dr"
                 amount={periodTotalDr}
-                color="text-red-600"
-                icon={<ArrowUpRight size={16} />}
+                color="text-rose-600"
+                icon={<ArrowUpRight size={12} />}
               />
               <SummaryTile
-                label="Total Credit"
+                label="Total Cr"
                 amount={periodTotalCr}
                 color="text-emerald-600"
-                icon={<ArrowDownLeft size={16} />}
+                icon={<ArrowDownLeft size={12} />}
               />
-              <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-2xl">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  Net Closing
+
+              <div className="p-4 bg-slate-900 rounded-xl text-white shadow-lg border border-white/5">
+                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                  Closing Balance
                 </p>
-                <p className="text-3xl font-mono font-bold mt-2 truncate">
-                  {fmt(Math.abs(closingBalance))}
+                <p className="text-lg font-mono font-black mt-1 truncate">
+                  ₹ {fmt(Math.abs(closingBalance))}
                 </p>
-                <p className="text-sm font-medium text-slate-400 mt-1 italic">
-                  Balance Type:{" "}
-                  {closingBalance >= 0 ? "Debit (Dr)" : "Credit (Cr)"}
+                <p
+                  className={`text-[9px] font-bold mt-1 px-1.5 py-0.5 rounded inline-block ${
+                    closingBalance >= 0
+                      ? "bg-white/10 text-blue-300"
+                      : "bg-white/10 text-rose-300"
+                  }`}
+                >
+                  {closingBalance >= 0 ? "DEBIT" : "CREDIT"}
                 </p>
               </div>
             </div>
 
-            {/* MAIN STATEMENT */}
-            <div className="col-span-12 lg:col-span-9">
-              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-10 py-12 border-b border-slate-100 flex justify-between items-end">
-                  <div className="space-y-2">
-                    <span className="px-3 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-full">
-                      Official Statement
-                    </span>
-                    <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">
-                      {reportData.name}
-                    </h2>
-                  </div>
-                  <div className="text-right flex items-center gap-3 text-slate-500 font-medium text-sm">
-                    <CalendarDays size={18} />
+            {/* MAIN DATA TABLE */}
+            <div className="col-span-12 lg:col-span-10">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                {/* Statement Header */}
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                  <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                    {reportData.name}
+                  </h2>
+                  <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-widest">
+                    <CalendarDays size={14} className="text-slate-400" />
                     <span>
                       {fmtDate(new Date(defaultFrom))} —{" "}
                       {fmtDate(new Date(defaultTo))}
@@ -200,81 +199,53 @@ export default async function LedgerReportPage({
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-slate-50/50 text-slate-400 font-bold uppercase tracking-widest text-[9px]">
-                        <th className="px-6 py-4 text-left border-b border-slate-100">
-                          Date
+                  <table className="w-full border-collapse">
+                    <thead className="sticky top-0 bg-white z-10">
+                      <tr className="bg-slate-100/50 text-slate-500 font-black uppercase tracking-tighter text-[9px] border-b border-slate-200">
+                        <th className="px-4 py-2 text-left">Date</th>
+                        <th className="px-2 py-2 text-left">Code</th>
+                        <th className="px-4 py-2 text-left">
+                          Particulars / Party
                         </th>
-                        <th className="px-4 py-4 text-left border-b border-slate-100">
-                          TXID
-                        </th>
-                        <th className="px-6 py-4 text-left border-b border-slate-100 w-[180px]">
-                          Particulars
-                        </th>
-                        <th className="px-6 py-4 text-left border-b border-slate-100 min-w-[150px]">
-                          Party / Account
-                        </th>
-                        <th className="px-6 py-4 text-right border-b border-slate-100">
-                          Debit
-                        </th>
-                        <th className="px-6 py-4 text-right border-b border-slate-100">
-                          Credit
-                        </th>
-                        <th className="px-10 py-4 text-right border-b border-slate-100">
-                          Balance
-                        </th>
+                        <th className="px-4 py-2 text-right">Debit (Dr)</th>
+                        <th className="px-4 py-2 text-right">Credit (Cr)</th>
+                        <th className="px-6 py-2 text-right">Running Bal</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
+                    <tbody className="divide-y divide-slate-100">
                       {/* OPENING ROW */}
-                      <tr className="bg-slate-50/30 italic text-xs">
-                        <td className="px-6 py-5 text-slate-300 font-mono italic">
-                          Start
+                      <tr className="bg-slate-50/80 italic text-[10px]">
+                        <td className="px-4 py-1.5 text-slate-400 font-mono">
+                          B/F
                         </td>
-                        <td className="px-4 py-5 text-slate-300 font-mono">
-                          —
+                        <td className="px-2 py-1.5 text-slate-300">—</td>
+                        <td className="px-4 py-1.5 text-slate-500 font-bold uppercase tracking-tight">
+                          Opening Balance Brought Forward
                         </td>
-                        <td
-                          className="px-6 py-5 text-slate-500 font-medium"
-                          colSpan={2}
-                        >
-                          Opening Balance Forwarded
-                        </td>
-                        <td className="px-6 py-5 text-right font-mono text-slate-400">
+                        <td className="px-4 py-1.5 text-right font-mono text-slate-400">
                           {openingBalance > 0 ? fmt(openingBalance) : "—"}
                         </td>
-                        <td className="px-6 py-5 text-right font-mono text-slate-400">
+                        <td className="px-4 py-1.5 text-right font-mono text-slate-400">
                           {openingBalance < 0
                             ? fmt(Math.abs(openingBalance))
                             : "—"}
                         </td>
-                        <td className="px-10 py-5 text-right font-mono font-bold text-slate-400">
+                        <td className="px-6 py-1.5 text-right font-mono font-bold text-slate-400">
                           {fmt(Math.abs(openingBalance))}{" "}
-                          <span className="text-[8px]">
-                            {openingBalance >= 0 ? "Dr" : "Cr"}
-                          </span>
+                          {openingBalance >= 0 ? "Dr" : "Cr"}
                         </td>
                       </tr>
 
-                      {/* DATA ROWS */}
                       {entries.map((entry) => {
                         runningBalance += entry.amount;
-
-                        // ROBUST PARTY LOGIC:
-                        // We find all ledgers in this voucher that ARE NOT the current ledger being viewed
                         const oppositeEntries = entry.voucher.entries.filter(
                           (vch: any) => vch.ledgerId !== entry.ledgerId
                         );
-
-                        // FIX: Use optional chaining and fallback to ledgerName string to avoid "Self Account"
                         const partyNames = Array.from(
                           new Set(
                             oppositeEntries.map(
                               (oe: any) =>
-                                oe.ledger?.name ||
-                                oe.ledgerName ||
-                                "Account Adjustment"
+                                oe.ledger?.name || oe.ledgerName || "Adjustment"
                             )
                           )
                         ).join(", ");
@@ -282,48 +253,37 @@ export default async function LedgerReportPage({
                         return (
                           <tr
                             key={entry.id}
-                            className="hover:bg-slate-50/80 transition-all duration-200 group"
+                            className="hover:bg-blue-50/30 transition-colors text-[11px] group"
                           >
-                            <td className="px-6 py-4 text-xs text-slate-900 font-bold whitespace-nowrap">
+                            <td className="px-4 py-1.5 text-slate-900 font-bold whitespace-nowrap">
                               {fmtDate(entry.voucher.date)}
                             </td>
-                            <td className="px-4 py-4">
-                              <div className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-mono text-[9px] font-black uppercase">
-                                <Hash size={8} />{" "}
-                                {entry.voucher.transactionCode}
+                            <td className="px-2 py-1.5">
+                              <span className="text-[9px] font-black font-mono text-blue-600 bg-blue-50 px-1 rounded">
+                                #{entry.voucher.transactionCode.slice(-4)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-1.5">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-blue-900 uppercase tracking-tighter truncate max-w-[300px]">
+                                  {partyNames || "Self Account"}
+                                </span>
+                                <span className="text-[9px] text-slate-400 italic line-clamp-1 group-hover:line-clamp-none">
+                                  {entry.voucher.narration || "No narration"}
+                                </span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 max-w-[180px]">
-                              <div className="text-[10px] text-slate-500 font-medium leading-tight italic line-clamp-2">
-                                {entry.voucher.narration || "Entry Post"}
-                              </div>
-                              <div className="text-[8px] text-slate-400 uppercase mt-0.5 font-bold tracking-tighter">
-                                {entry.voucher.type} #{entry.voucher.voucherNo}
-                              </div>
-                            </td>
-                            {/* FIXED PARTY COLUMN */}
-                            <td className="px-6 py-4">
-                              <div className="text-[10px] font-bold text-blue-800 uppercase tracking-tight bg-blue-50/50 px-2 py-1 rounded border border-blue-100 italic break-words whitespace-normal">
-                                {partyNames || "Self Account / Adjustment"}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right font-mono text-[11px] font-bold text-red-600">
+                            <td className="px-4 py-1.5 text-right font-mono font-bold text-rose-600">
                               {entry.amount > 0 ? fmt(entry.amount) : ""}
                             </td>
-                            <td className="px-6 py-4 text-right font-mono text-[11px] font-bold text-emerald-600">
+                            <td className="px-4 py-1.5 text-right font-mono font-bold text-emerald-600">
                               {entry.amount < 0
                                 ? fmt(Math.abs(entry.amount))
                                 : ""}
                             </td>
-                            <td className="px-10 py-4 text-right font-mono font-black text-slate-900 text-[11px]">
-                              {fmt(Math.abs(runningBalance))}
-                              <span
-                                className={`ml-2 text-[8px] px-1 py-0.5 rounded ${
-                                  runningBalance >= 0
-                                    ? "bg-slate-100 text-slate-700"
-                                    : "bg-slate-800 text-slate-100"
-                                }`}
-                              >
+                            <td className="px-6 py-1.5 text-right font-mono font-black text-slate-900">
+                              {fmt(Math.abs(runningBalance))}{" "}
+                              <span className="text-[8px] font-bold opacity-50">
                                 {runningBalance >= 0 ? "DR" : "CR"}
                               </span>
                             </td>
@@ -334,17 +294,17 @@ export default async function LedgerReportPage({
                   </table>
                 </div>
 
-                <div className="p-10 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em]">
-                    End of Statement
+                <div className="px-6 py-3 bg-slate-900 text-white flex justify-between items-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.4em] opacity-50 italic">
+                    Account Summary Closed
                   </p>
                   <div className="text-right">
-                    <p className="text-[10px] text-slate-400 font-black uppercase">
-                      Final Balance
-                    </p>
-                    <p className="text-2xl font-mono font-black text-slate-900">
-                      {fmt(Math.abs(closingBalance))}{" "}
-                      {closingBalance >= 0 ? "Dr" : "Cr"}
+                    <span className="text-[8px] font-black uppercase opacity-60">
+                      Net Ledger Balance
+                    </span>
+                    <p className="text-base font-mono font-black leading-none">
+                      ₹ {fmt(Math.abs(closingBalance))}{" "}
+                      {closingBalance >= 0 ? "DR" : "CR"}
                     </p>
                   </div>
                 </div>
@@ -361,33 +321,29 @@ export default async function LedgerReportPage({
 
 function SummaryTile({ label, amount, icon, color = "text-slate-900" }: any) {
   return (
-    <div className="p-6 bg-white rounded-3xl border border-slate-200/60 shadow-sm flex items-center justify-between">
+    <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
       <div>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">
           {label}
         </p>
-        <p className={`text-xl font-mono font-bold mt-1 ${color}`}>
+        <p className={`text-sm font-mono font-bold mt-1 ${color}`}>
           {fmt(Math.abs(amount))}
         </p>
       </div>
-      <div className="w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-        {icon}
-      </div>
+      <div className="text-slate-300">{icon}</div>
     </div>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="h-[60vh] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-200 shadow-sm text-center p-10">
-      <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-        <FileText className="text-slate-300" size={40} />
-      </div>
-      <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-        Financial Records
+    <div className="h-[60vh] flex flex-col items-center justify-center bg-white rounded-3xl border border-slate-200 text-center p-10 max-w-4xl mx-auto">
+      <FileText className="text-slate-100 mb-4" size={60} />
+      <h2 className="text-lg font-black text-slate-900 uppercase">
+        Select Account
       </h2>
-      <p className="text-slate-500 mt-2 max-w-sm font-medium">
-        Please select a ledger account from the navigator above.
+      <p className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-widest">
+        Choose a ledger to generate financial history
       </p>
     </div>
   );

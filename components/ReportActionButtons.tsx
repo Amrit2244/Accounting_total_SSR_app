@@ -7,7 +7,6 @@ import {
   FileCode,
   FileType,
   FileJson,
-  Download,
 } from "lucide-react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useState } from "react";
@@ -27,10 +26,8 @@ export default function ReportActionButtons({
   const searchParams = useSearchParams();
   const params = useParams();
   const [isExportOpen, setIsExportOpen] = useState(false);
-
   const companyId = params.id;
 
-  // Prepare data for non-PDF exports
   const prepareExportData = () => {
     let runningBal = openingBalance;
     return entries.map((e: any) => {
@@ -41,7 +38,6 @@ export default function ReportActionButtons({
       const partyNames = Array.from(
         new Set(oppositeEntries.map((oe: any) => oe.ledger.name))
       ).join(", ");
-
       return {
         Date: new Date(e.voucher.date).toLocaleDateString("en-IN"),
         TXID: e.voucher.transactionCode,
@@ -60,30 +56,30 @@ export default function ReportActionButtons({
   const handlePrint = () => {
     const ledgerId = searchParams.get("ledgerId");
     if (!ledgerId) {
-      alert("Please select a ledger account first.");
+      alert("Select a ledger first.");
       return;
     }
-    const currentParams = searchParams.toString();
-    const printUrl = `/print/ledger/${companyId}?${currentParams}`;
-    window.open(printUrl, "_blank");
+    window.open(
+      `/companies/${companyId}/reports/ledger/print?${searchParams.toString()}`,
+      "_blank"
+    );
   };
 
-  const downloadFile = (content: string, type: string, extension: string) => {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Ledger_${ledgerName}_${new Date().toLocaleDateString()}.${extension}`;
-    link.click();
+  const downloadFile = (content: string, type: string, ext: string) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = `Ledger_${ledgerName}_${
+      new Date().toISOString().split("T")[0]
+    }.${ext}`;
+    a.click();
   };
 
-  const exportActions = {
+  const exports = {
     excel: () => {
-      const data = prepareExportData();
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Ledger");
-      XLSX.writeFile(workbook, `Ledger_${ledgerName}.xlsx`);
+      const ws = XLSX.utils.json_to_sheet(prepareExportData());
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Ledger");
+      XLSX.writeFile(wb, `Ledger_${ledgerName}.xlsx`);
     },
     csv: () => {
       const data = prepareExportData();
@@ -97,14 +93,15 @@ export default function ReportActionButtons({
         .join("\n");
       downloadFile(`${headers}\n${rows}`, "text/csv", "csv");
     },
-    json: () => {
-      const data = prepareExportData();
-      downloadFile(JSON.stringify(data, null, 2), "application/json", "json");
-    },
+    json: () =>
+      downloadFile(
+        JSON.stringify(prepareExportData(), null, 2),
+        "application/json",
+        "json"
+      ),
     xml: () => {
-      const data = prepareExportData();
       let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<LedgerStatement ledger="${ledgerName}">\n`;
-      data.forEach((row) => {
+      prepareExportData().forEach((row) => {
         xml += `  <Entry>\n`;
         Object.entries(row).forEach(([key, val]) => {
           xml += `    <${key}>${val}</${key}>\n`;
@@ -117,67 +114,60 @@ export default function ReportActionButtons({
   };
 
   return (
-    <div className="flex gap-3 no-print relative">
-      <div className="relative group">
+    <div className="flex gap-2 no-print relative">
+      <div className="relative">
         <button
-          type="button"
           onClick={() => setIsExportOpen(!isExportOpen)}
-          className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+          className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-sm"
         >
-          <FileDown size={16} /> EXPORT
+          <FileDown size={14} /> EXPORT
         </button>
-
         {isExportOpen && (
-          <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 min-w-[200px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-2 grid gap-1">
-              <button
-                onClick={() => {
-                  exportActions.excel();
-                  setIsExportOpen(false);
-                }}
-                className="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors"
-              >
-                <FileSpreadsheet size={16} className="text-emerald-600" /> Excel
-                Spreadsheet (.xlsx)
-              </button>
-              <button
-                onClick={() => {
-                  exportActions.csv();
-                  setIsExportOpen(false);
-                }}
-                className="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition-colors"
-              >
-                <FileType size={16} className="text-blue-600" /> CSV (Comma
-                Separated)
-              </button>
-              <button
-                onClick={() => {
-                  exportActions.xml();
-                  setIsExportOpen(false);
-                }}
-                className="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-700 hover:bg-orange-50 hover:text-orange-700 rounded-xl transition-colors"
-              >
-                <FileCode size={16} className="text-orange-600" /> XML Document
-              </button>
-              <button
-                onClick={() => {
-                  exportActions.json();
-                  setIsExportOpen(false);
-                }}
-                className="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
-              >
-                <FileJson size={16} /> JSON Data
-              </button>
-            </div>
+          <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-50 min-w-[160px] overflow-hidden animate-in fade-in zoom-in-95 duration-200 p-1">
+            <button
+              onClick={() => {
+                exports.excel();
+                setIsExportOpen(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg uppercase"
+            >
+              <FileSpreadsheet size={14} /> Excel (.xlsx)
+            </button>
+            <button
+              onClick={() => {
+                exports.csv();
+                setIsExportOpen(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg uppercase"
+            >
+              <FileType size={14} /> CSV
+            </button>
+            <button
+              onClick={() => {
+                exports.xml();
+                setIsExportOpen(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg uppercase"
+            >
+              <FileCode size={14} /> XML
+            </button>
+            <button
+              onClick={() => {
+                exports.json();
+                setIsExportOpen(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 rounded-lg uppercase"
+            >
+              <FileJson size={14} /> JSON
+            </button>
           </div>
         )}
       </div>
-
       <button
         onClick={handlePrint}
-        className="bg-slate-900 hover:bg-blue-600 text-white px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-slate-200 hover:shadow-blue-100"
+        className="bg-slate-900 hover:bg-black text-white px-4 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-md"
       >
-        <Printer size={16} /> PRINT STATEMENT
+        <Printer size={14} /> PRINT
       </button>
     </div>
   );

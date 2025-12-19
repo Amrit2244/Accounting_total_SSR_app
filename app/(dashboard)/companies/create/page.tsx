@@ -14,191 +14,222 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle,
+  ChevronRight,
+  Globe,
 } from "lucide-react";
 
 export default function CreateCompanyPage() {
   const [state, action, isPending] = useActionState(createCompany, undefined);
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-4">
-      <div className="bg-white p-8 rounded-xl shadow-2xl border border-slate-200">
-        <h1 className="text-2xl font-extrabold mb-8 text-slate-900 flex items-center gap-3">
-          <Building2 className="text-blue-600" /> Setup New Company
-        </h1>
+    <div className="max-w-xl mx-auto py-8 px-4 font-sans">
+      {/* COMPACT HEADER */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+            <span className="text-slate-500">System Setup</span>
+            <ChevronRight size={10} />
+            <span className="text-slate-900">Onboarding</span>
+          </div>
+          <h1 className="text-lg font-black text-slate-900 flex items-center gap-2 uppercase tracking-tight">
+            <div className="p-1.5 bg-blue-600 rounded text-white shadow-sm">
+              <Building2 size={16} />
+            </div>
+            Setup New Company
+          </h1>
+        </div>
+        <Link
+          href="/"
+          className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 rounded-lg transition-all shadow-sm"
+        >
+          <ArrowLeft size={16} />
+        </Link>
+      </div>
 
-        {/* Error/Success Feedback */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        {/* STATUS MESSAGES */}
         {state?.error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 font-medium p-4 rounded-lg mb-6 flex items-center gap-3 text-sm">
-            <AlertCircle size={18} /> {state.error}
+          <div className="bg-red-50 border border-red-100 text-red-600 px-3 py-2 rounded-lg mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-tight animate-in fade-in">
+            <AlertCircle size={14} /> {state.error}
           </div>
         )}
         {state?.success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 font-medium p-4 rounded-lg mb-6 flex items-center gap-3 text-sm">
-            <CheckCircle size={18} /> Company created successfully!
+          <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 px-3 py-2 rounded-lg mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-tight animate-in fade-in">
+            <CheckCircle size={14} /> Company created successfully!
             Redirecting...
           </div>
         )}
 
-        <form action={action} className="space-y-6">
-          {/* Name Section */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">
+        <form action={action} className="space-y-4">
+          {/* 1. IDENTITY SECTION */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
               Company Name <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <Building2
-                size={18}
+                size={14}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               />
               <input
                 name="name"
                 type="text"
                 required
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all placeholder:text-slate-400 font-medium"
-                placeholder="e.g. ABC Pvt Ltd"
+                className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-xs font-bold focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-400"
+                placeholder="e.g. ACME Corp Pvt Ltd"
               />
             </div>
           </div>
 
-          {/* Address Section */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
+          {/* 2. LOCATION GRID */}
+          <div className="grid grid-cols-12 gap-4">
+            <div className="col-span-12 space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
                 Mailing Address
               </label>
               <textarea
                 name="address"
                 rows={2}
-                className="w-full border border-slate-300 p-3 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all shadow-sm"
-                placeholder="Street, Area, Building"
+                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-xs font-medium focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all resize-none"
+                placeholder="Street, Building, Area..."
               ></textarea>
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
+
+            <div className="col-span-7 space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
                 State
               </label>
               <div className="relative">
                 <MapPin
-                  size={18}
+                  size={14}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
                 <input
                   name="state"
                   type="text"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all shadow-sm"
-                  placeholder="e.g. Maharashtra"
+                  className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
+                  placeholder="State"
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
+
+            <div className="col-span-5 space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
                 Pincode
               </label>
-              <input
-                name="pincode"
-                type="text"
-                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all shadow-sm"
-              />
+              <div className="relative">
+                <Globe
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  name="pincode"
+                  type="text"
+                  className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
+                  placeholder="Zip"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Contact & Tax */}
+          {/* 3. COMPLIANCE GRID */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
-                Email
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
+                Official Email
               </label>
               <div className="relative">
                 <Mail
-                  size={18}
+                  size={14}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
                 <input
                   name="email"
                   type="email"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all shadow-sm"
+                  className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
+                  placeholder="accounts@company.com"
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
-                GSTIN / Tax No
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
+                GSTIN / Tax ID
               </label>
               <div className="relative">
                 <Tag
-                  size={18}
+                  size={14}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
                 <input
                   name="gstin"
                   type="text"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all shadow-sm uppercase"
-                  placeholder="27ABCDE1234F1Z5"
+                  className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold uppercase focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder:normal-case"
+                  placeholder="Optional"
                 />
               </div>
             </div>
           </div>
 
-          {/* Fiscal Year Section (Highlighted) */}
-          <div className="bg-blue-50/50 p-5 rounded-xl grid grid-cols-2 gap-6 border border-blue-200">
-            <div className="space-y-1.5">
-              <label className="block text-sm font-extrabold text-blue-800">
+          {/* 4. FISCAL YEAR CONFIG (High Contrast Box) */}
+          <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 grid grid-cols-2 gap-4 mt-2">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-blue-700 ml-1">
                 Financial Year From <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Calendar
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400"
                 />
                 <input
                   name="financialYearFrom"
                   type="date"
                   defaultValue={new Date().getFullYear() + "-04-01"}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-blue-300 bg-white text-slate-900 font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
+                  className="w-full h-9 pl-9 pr-3 rounded-lg border border-blue-200 bg-white text-slate-900 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-extrabold text-blue-800">
-                Books Beginning From <span className="text-red-500">*</span>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-blue-700 ml-1">
+                Books Begin From <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Calendar
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400"
                 />
                 <input
                   name="booksBeginFrom"
                   type="date"
                   defaultValue={new Date().getFullYear() + "-04-01"}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-blue-300 bg-white text-slate-900 font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
+                  className="w-full h-9 pl-9 pr-3 rounded-lg border border-blue-200 bg-white text-slate-900 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                 />
               </div>
             </div>
           </div>
 
-          {/* Buttons */}
-          <div className="flex gap-4 pt-4">
+          {/* ACTION FOOTER */}
+          <div className="flex gap-3 pt-2">
             <Link
               href="/"
-              className="w-32 py-3 border border-slate-300 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 text-sm"
+              className="flex-1 h-10 flex items-center justify-center border border-slate-200 rounded-xl text-slate-500 font-black uppercase tracking-widest text-[10px] hover:bg-slate-50 transition-all"
             >
-              <ArrowLeft size={16} /> Cancel
+              Cancel
             </Link>
             <button
               disabled={isPending}
               type="submit"
-              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/30 disabled:opacity-50 transition-all flex items-center justify-center gap-2 text-sm"
+              className="flex-[2] h-10 bg-[#003366] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-black shadow-lg shadow-blue-900/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
               {isPending ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" /> Creating...
+                  <Loader2 size={14} className="animate-spin" /> Creating...
                 </>
               ) : (
                 <>
-                  <Save size={18} /> Save Company
+                  <Save size={14} /> Initialize Company
                 </>
               )}
             </button>

@@ -16,8 +16,7 @@ export default function DeleteButton({ id, companyId, action }: Props) {
   const [isPending, startTransition] = useTransition();
 
   const handleDelete = () => {
-    if (!confirm("Are you sure? This action cannot be undone.")) return;
-
+    if (!confirm("Confirm deletion? This cannot be undone.")) return;
     startTransition(async () => {
       const res = await action(id, companyId);
       if (res.error) alert(res.error);
@@ -28,12 +27,13 @@ export default function DeleteButton({ id, companyId, action }: Props) {
     <button
       onClick={handleDelete}
       disabled={isPending}
-      className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+      className="text-slate-300 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+      title="Delete Record"
     >
       {isPending ? (
-        <Loader2 size={16} className="animate-spin" />
+        <Loader2 size={14} className="animate-spin" />
       ) : (
-        <Trash2 size={16} />
+        <Trash2 size={14} />
       )}
     </button>
   );

@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { ShieldCheck, Clock, CheckCircle } from "lucide-react";
+import {
+  ShieldCheck,
+  Clock,
+  CheckCircle,
+  ArrowLeft,
+  ChevronRight,
+} from "lucide-react";
 import VoucherTable from "@/components/VoucherTable";
+import Link from "next/link";
 
 export default async function VerificationQueuePage({
   params,
@@ -17,7 +24,6 @@ export default async function VerificationQueuePage({
       status: "PENDING",
     },
     include: {
-      // Include ledgers to prevent the "null name" error in the table
       entries: {
         include: {
           ledger: {
@@ -32,45 +38,72 @@ export default async function VerificationQueuePage({
   });
 
   return (
-    <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
-      {/* Header Section */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-amber-100 rounded-3xl flex items-center justify-center text-amber-600 shadow-inner">
-            <ShieldCheck size={32} />
+    <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500">
+      {/* COMPACT HEADER */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg shadow-sm border border-amber-200">
+            <ShieldCheck size={20} />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
-              Verification Queue
+            <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-blue-600 transition-colors"
+              >
+                Workspace
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">Verification</span>
+            </div>
+            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">
+              Approval Queue
             </h1>
-            <p className="text-slate-500 font-medium">
-              Authorise or Reject pending transactions.
-            </p>
           </div>
         </div>
 
-        <div className="px-6 py-3 bg-slate-900 rounded-2xl text-white flex items-center gap-3 shadow-xl">
-          <Clock size={20} className="text-amber-400" />
-          <span className="font-bold">
-            {pendingVouchers.length} Awaiting Review
-          </span>
+        <div className="flex items-center gap-3">
+          {pendingVouchers.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg shadow-md">
+              <Clock size={14} className="text-amber-400" />
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {pendingVouchers.length} Pending
+              </span>
+            </div>
+          )}
+          <Link
+            href={`/companies/${companyId}/vouchers`}
+            className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 rounded-lg transition-all"
+            title="Back to Daybook"
+          >
+            <ArrowLeft size={16} />
+          </Link>
         </div>
       </div>
 
+      {/* CONTENT AREA */}
       {pendingVouchers.length > 0 ? (
-        <VoucherTable vouchers={pendingVouchers} companyId={companyId} />
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <VoucherTable vouchers={pendingVouchers} companyId={companyId} />
+        </div>
       ) : (
-        <div className="bg-white border border-dashed border-slate-300 rounded-[3rem] p-20 flex flex-col items-center text-center">
-          <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
-            <CheckCircle size={40} />
+        <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 flex flex-col items-center text-center">
+          <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mb-3 shadow-sm">
+            <CheckCircle size={24} />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 uppercase">
-            All Caught Up!
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">
+            Queue Cleared
           </h2>
-          <p className="text-slate-500 max-w-sm mt-2 font-medium">
-            There are no pending vouchers requiring your attention at the
+          <p className="text-xs text-slate-500 mt-1 font-medium max-w-xs">
+            There are no pending vouchers requiring your authorization at this
             moment.
           </p>
+          <Link
+            href={`/companies/${companyId}/vouchers/create`}
+            className="mt-4 text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-tight"
+          >
+            Create New Entry →
+          </Link>
         </div>
       )}
     </div>

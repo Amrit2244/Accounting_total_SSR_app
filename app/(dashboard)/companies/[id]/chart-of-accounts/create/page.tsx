@@ -10,144 +10,92 @@ export default async function CreateLedgerPage({
 }) {
   const { id } = await params;
   const companyId = parseInt(id);
-
-  // Fetch Groups to populate the dropdown
-  // We include 'nature' to show helpful context (Asset, Liability, etc.)
-  const groups = await prisma.accountGroup.findMany({
+  const groups = await prisma.Group.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
   });
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
-      {/* 1. Header Section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-          <Link
-            href={`/companies/${companyId}/chart-of-accounts`}
-            className="hover:text-blue-600 transition-colors"
-          >
-            Chart of Accounts
-          </Link>
-          <span>/</span>
-          <span className="text-slate-900 font-medium">New Ledger</span>
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <BookOpen className="text-blue-600" /> Create New Ledger
+    <div className="max-w-xl mx-auto py-4">
+      <div className="mb-4">
+        <h1 className="text-lg font-black text-slate-900 uppercase flex items-center gap-2">
+          <BookOpen className="text-blue-600" size={20} /> New Ledger Entry
         </h1>
-        <p className="text-slate-500 mt-1">
-          Add a new account head (e.g. Bank Account, Sales, Vendor) to your
-          books.
-        </p>
       </div>
 
-      {/* 2. Main Form Card */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <form action={createLedger} className="p-6 md:p-8 space-y-6">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+        <form action={createLedger} className="p-5 space-y-4">
           <input type="hidden" name="companyId" value={companyId} />
 
-          {/* Ledger Name */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">
-              Ledger Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="name"
-              type="text"
-              required
-              placeholder="e.g. HDFC Bank, Office Rent, ABC Traders"
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all placeholder:text-slate-400"
-            />
-          </div>
-
-          {/* Group Selection */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">
-              Under Group <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Layers
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                size={18}
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                Ledger Name *
+              </label>
+              <input
+                name="name"
+                type="text"
+                required
+                placeholder="HDFC Bank, Sales A/c, etc."
+                className="w-full px-3 py-2 rounded border border-slate-200 text-xs font-bold focus:ring-1 focus:ring-blue-600 outline-none"
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                Under Group *
+              </label>
               <select
                 name="groupId"
                 required
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none cursor-pointer"
+                className="w-full px-3 py-2 rounded border border-slate-200 text-xs font-bold focus:ring-1 focus:ring-blue-600 outline-none bg-slate-50"
               >
-                <option value="" disabled selected>
-                  Select an Account Group...
-                </option>
+                <option value="">Select Group...</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.name} &mdash; ({g.nature})
+                    {g.name} ({g.nature})
                   </option>
                 ))}
               </select>
-              {/* Custom dropdown arrow */}
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </div>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Correct grouping ensures accurate financial reports (Balance Sheet
-              / P&L).
-            </p>
           </div>
 
-          <hr className="border-slate-100" />
-
-          {/* Opening Balance Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
-                Opening Balance (₹)
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                Opening Bal (₹)
               </label>
               <input
                 name="openingBalance"
                 type="number"
                 step="0.01"
                 defaultValue="0"
-                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-900 font-mono text-right focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                className="w-full px-3 py-2 rounded border border-slate-200 text-xs font-mono font-bold text-right outline-none"
               />
             </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">
-                Dr / Cr
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                Type
               </label>
               <select
                 name="balanceType"
-                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none cursor-pointer"
+                className="w-full px-3 py-2 rounded border border-slate-200 text-xs font-bold outline-none"
               >
-                <option value="Dr">Dr (Debit) - Assets/Expenses</option>
-                <option value="Cr">Cr (Credit) - Liabilities/Income</option>
+                <option value="Dr">Debit</option>
+                <option value="Cr">Credit</option>
               </select>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4">
             <Link
               href={`/companies/${companyId}/chart-of-accounts`}
-              className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
             >
-              <ArrowLeft size={16} /> Cancel
+              Cancel
             </Link>
-            <button className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center gap-2">
-              <Check size={18} /> Save Ledger
+            <button className="px-6 py-2 bg-[#003366] text-white text-[10px] font-black uppercase rounded shadow-lg hover:bg-black transition-all flex items-center gap-2">
+              <Check size={14} /> Save Ledger
             </button>
           </div>
         </form>

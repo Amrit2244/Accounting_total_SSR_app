@@ -7,12 +7,11 @@ import {
   TrendingUp,
   Scale,
   FolderOpen,
+  FileText,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
-// Utility component for the Scale/Trial Balance icon
 function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
-  // Reusing the correct path for ScaleIcon
   return (
     <svg
       {...props}
@@ -36,7 +35,6 @@ function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-// Define the Report Card Structure
 type Report = {
   name: string;
   desc: string;
@@ -57,87 +55,96 @@ export default async function ReportsPage({
 
   const reports: Report[] = [
     {
-      name: "Ledger Statement",
-      desc: "Detailed transaction history of a specific account (e.g., Bank, Party, Expense).",
+      name: "Ledger Explorer",
+      desc: "Detailed transaction history & running balance.",
       href: `/companies/${companyId}/reports/ledger`,
       icon: Book,
       color: "bg-blue-600",
     },
     {
       name: "Trial Balance",
-      desc: "Summary of all debit and credit account balances to ensure books are balanced.",
+      desc: "Consolidated debit/credit balances.",
       href: `/companies/${companyId}/reports/trial-balance`,
       icon: ScaleIcon,
       color: "bg-purple-600",
     },
     {
       name: "Profit & Loss A/c",
-      desc: "Statement calculating Net Profit/Loss by summarizing revenue and expenses.",
+      desc: "Income vs Expenses & Net Profit analysis.",
       href: `/companies/${companyId}/reports/profit-loss`,
       icon: TrendingUp,
       color: "bg-teal-600",
     },
     {
       name: "Balance Sheet",
-      desc: "Statement of Assets, Liabilities, and Capital at a specific point in time.",
+      desc: "Financial position: Assets vs Liabilities.",
       href: `/companies/${companyId}/reports/balance-sheet`,
       icon: PieChart,
-      color: "bg-green-600",
+      color: "bg-emerald-600",
     },
     {
       name: "Stock Summary",
-      desc: "Current inventory levels, including quantity and total value of stock.",
-      href: `/companies/${companyId}/reports/stock`,
+      desc: "Inventory valuation & closing stock.",
+      href: `/companies/${companyId}/reports/stock-summary`,
       icon: Package,
       color: "bg-orange-600",
     },
     {
-      name: "Journal Book / Daybook",
-      desc: "Chronological listing of all financial transactions recorded on a particular day.",
-      href: `/companies/${companyId}/reports/journal`,
+      name: "Daybook Register",
+      desc: "Chronological daily transaction log.",
+      href: `/companies/${companyId}/vouchers`, // Usually reuses the voucher list
       icon: FolderOpen,
       color: "bg-pink-600",
     },
   ];
 
   return (
-    <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
-      {/* HEADER */}
-      <div className="border-b border-slate-200 pb-4">
-        <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2 tracking-tight">
-          Financial & Inventory Reports
-        </h1>
-        <p className="text-slate-500 mt-2">
-          Select a report to analyze your company's financial performance and
-          position.
-        </p>
+    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in duration-500">
+      {/* COMPACT HEADER */}
+      <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
+        <div className="p-2 bg-slate-900 rounded-lg text-white shadow-md">
+          <FileText size={20} />
+        </div>
+        <div>
+          <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+            Financial Reports
+          </h1>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
+            Audit & Performance Analytics
+          </p>
+        </div>
       </div>
 
-      {/* REPORTS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* COMPACT GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {reports.map((report) => (
           <Link
             key={report.name}
             href={report.href}
-            className="group bg-white border border-slate-200 p-6 shadow-sm hover:shadow-lg hover:shadow-blue-500/10 transition-all flex items-start gap-4 rounded-xl hover:border-blue-300"
+            className="group bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all flex items-start gap-3 relative overflow-hidden"
           >
-            {/* Icon Circle */}
+            {/* Hover Effect Background */}
+            <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-8 -mt-8 transition-colors group-hover:bg-blue-50" />
+
             <div
-              className={`${report.color} text-white p-3 rounded-full shadow-md shadow-slate-300/50 transition-all group-hover:scale-[1.05]`}
+              className={`${report.color} text-white p-2.5 rounded-lg shadow-sm shrink-0 z-10 group-hover:scale-110 transition-transform`}
             >
-              <report.icon size={24} />
+              <report.icon size={18} />
             </div>
 
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+            <div className="flex-1 z-10">
+              <h3 className="text-sm font-black text-slate-900 group-hover:text-blue-700 transition-colors uppercase tracking-tight">
                 {report.name}
               </h3>
-              <p className="text-sm text-slate-500 mt-1">{report.desc}</p>
-
-              <span className="text-xs font-bold text-blue-600 mt-3 inline-flex items-center gap-1 transition-transform group-hover:translate-x-1">
-                VIEW REPORT <ArrowRight size={12} />
-              </span>
+              <p className="text-[10px] text-slate-500 font-medium mt-1 leading-tight">
+                {report.desc}
+              </p>
             </div>
+
+            <ArrowRight
+              size={14}
+              className="text-slate-300 absolute bottom-4 right-4 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"
+            />
           </Link>
         ))}
       </div>

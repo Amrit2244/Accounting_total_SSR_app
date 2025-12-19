@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Inter } from "next/font/google";
 
-import { Inter } from "next/font/google"; // Using a modern font
-
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "AS Core -Accounting Software Solutions",
+  title: "AS Core - ERP Solutions",
   description: "Next Gen ERP System",
 };
 
@@ -17,7 +19,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      {/* Added 'antialiased' for sharper text on laptops 
+          and forced a smaller base text size across the app 
+      */}
+      <body className={`${inter.className} antialiased text-slate-900 text-sm`}>
+        {children}
+      </body>
     </html>
   );
 }

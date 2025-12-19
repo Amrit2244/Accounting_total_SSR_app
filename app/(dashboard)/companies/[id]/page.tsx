@@ -6,16 +6,14 @@ import {
   Building2,
   TrendingUp,
   TrendingDown,
-  ArrowRight,
   Plus,
   Landmark,
   Package,
   Book,
-  CreditCard,
   ArrowUpRight,
   ArrowDownRight,
-  AlertCircle,
   TriangleAlert,
+  ArrowRight,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 
@@ -26,282 +24,223 @@ export default async function CompanyDashboard({
 }) {
   const { id } = await params;
   const companyId = parseInt(id);
-
-  if (isNaN(companyId)) return <div>Invalid Company ID</div>;
-
   const { cards, chart, recents } = await getDashboardMetrics(companyId);
 
-  // Fetch low stock items using the Prisma fields comparison
   const lowStockItems = await prisma.stockItem.findMany({
-    where: {
-      companyId,
-      // Logic: quantity <= minStock
-      quantity: { lte: prisma.stockItem.fields.minStock },
-    },
+    where: { companyId, quantity: { lte: prisma.stockItem.fields.minStock } },
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* 1. CRITICAL ALERTS SECTION (Feature 3) */}
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* 1. COMPACT REORDER ALERT */}
       {lowStockItems.length > 0 && (
-        <div className="bg-rose-50 border-l-4 border-rose-500 p-6 rounded-r-2xl flex items-center gap-6 shadow-sm animate-pulse">
-          <div className="p-3 bg-rose-500 text-white rounded-xl shadow-lg shadow-rose-200">
-            <TriangleAlert size={24} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-rose-900 font-black uppercase tracking-widest text-xs">
-              Inventory Reorder Alert
-            </h3>
-            <p className="text-rose-700 text-sm font-medium mt-1">
-              Critical levels reached for:{" "}
-              <span className="font-bold underline">
-                {lowStockItems.map((item) => item.name).join(", ")}
+        <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-rose-500 text-white rounded-lg shadow-sm">
+              <TriangleAlert size={18} />
+            </div>
+            <p className="text-rose-900 text-xs font-bold uppercase tracking-tight">
+              Low Stock Alert:{" "}
+              <span className="underline decoration-rose-300 font-black">
+                {lowStockItems.map((i) => i.name).join(", ")}
               </span>
-              . Please replenish stock soon.
             </p>
           </div>
           <Link
             href={`/companies/${companyId}/inventory`}
-            className="px-4 py-2 bg-rose-900 text-white text-xs font-bold rounded-lg hover:bg-black transition-colors"
+            className="px-3 py-1.5 bg-rose-900 text-white text-[10px] font-black uppercase rounded-lg hover:bg-black transition-colors"
           >
             Manage Stock
           </Link>
         </div>
       )}
 
-      {/* 2. HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {/* 2. COMPACT HEADER */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 uppercase">
+          <h1 className="text-xl font-black tracking-tight text-slate-900 uppercase">
             Executive Overview
           </h1>
-          <p className="text-slate-500 font-medium">
-            Financial performance for FY {new Date().getFullYear()} -{" "}
-            {new Date().getFullYear() + 1}
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+            Financial Summary FY {new Date().getFullYear()}
           </p>
         </div>
-        <div className="flex gap-3">
-          <Link
-            href={`/companies/${companyId}/vouchers/create`}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl font-bold text-sm shadow-xl shadow-slate-200 transition-all active:scale-95"
+        <Link
+          href={`/companies/${companyId}/vouchers/create`}
+          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-200"
+        >
+          <Plus size={14} /> New Entry
+        </Link>
+      </div>
+
+      {/* 3. METRIC GRID (Smaller Padding) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Cash in Hand",
+            val: cards.totalCash,
+            icon: Wallet,
+            color: "emerald",
+          },
+          {
+            label: "Bank Balance",
+            val: cards.totalBank,
+            icon: Building2,
+            color: "blue",
+          },
+          {
+            label: "Receivables",
+            val: cards.totalDebtors,
+            icon: TrendingUp,
+            color: "orange",
+          },
+          {
+            label: "Payables",
+            val: cards.totalCreditors,
+            icon: TrendingDown,
+            color: "rose",
+          },
+        ].map((c) => (
+          <div
+            key={c.label}
+            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-500 transition-all group"
           >
-            <Plus size={18} /> New Voucher
-          </Link>
-        </div>
-      </div>
-
-      {/* 3. METRIC CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-              <Wallet size={20} />
-            </div>
-            <span className="flex items-center text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-              +12% <ArrowUpRight size={10} className="ml-1" />
-            </span>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-            Cash in Hand
-          </p>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono">
-            ₹
-            {cards.totalCash.toLocaleString("en-IN", {
-              minimumFractionDigits: 2,
-            })}
-          </h3>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-blue-100 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
-              <Building2 size={20} />
-            </div>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-            Bank Balance
-          </p>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono">
-            ₹
-            {cards.totalBank.toLocaleString("en-IN", {
-              minimumFractionDigits: 2,
-            })}
-          </h3>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-orange-100 text-orange-600 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
-              <TrendingUp size={20} />
-            </div>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-            Receivables
-          </p>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono text-orange-600">
-            ₹
-            {cards.totalDebtors.toLocaleString("en-IN", {
-              minimumFractionDigits: 2,
-            })}
-          </h3>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-rose-100 text-rose-600 rounded-xl group-hover:bg-rose-600 group-hover:text-white transition-colors">
-              <TrendingDown size={20} />
-            </div>
-          </div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-            Payables
-          </p>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono text-rose-600">
-            ₹
-            {cards.totalCreditors.toLocaleString("en-IN", {
-              minimumFractionDigits: 2,
-            })}
-          </h3>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* 4. MAIN CHART AREA (Feature 4: Visual Analytics) */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3 className="font-black text-slate-900 uppercase tracking-widest text-xs">
-                Revenue Analytics
-              </h3>
-              <p className="text-slate-400 text-xs mt-1">
-                Cash Inflow vs Outflow
+            <div className="flex items-center gap-3 mb-2">
+              <div
+                className={`p-2 bg-${c.color}-50 text-${c.color}-600 rounded-lg group-hover:bg-${c.color}-600 group-hover:text-white transition-colors`}
+              >
+                <c.icon size={16} />
+              </div>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                {c.label}
               </p>
             </div>
-            <select className="bg-slate-50 border border-slate-200 text-[10px] font-black uppercase rounded-lg py-2 px-3 outline-none">
-              <option>FY {new Date().getFullYear()}</option>
+            <h3
+              className={`text-lg font-black font-mono tracking-tighter ${
+                c.color === "rose" || c.color === "orange"
+                  ? `text-${c.color}-600`
+                  : "text-slate-900"
+              }`}
+            >
+              ₹{c.val.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            </h3>
+          </div>
+        ))}
+      </div>
+
+      {/* 4. ANALYTICS & QUICK ACTIONS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-black text-slate-900 uppercase tracking-widest text-[10px]">
+              Revenue Analytics
+            </h3>
+            <select className="bg-slate-50 border-none text-[9px] font-black uppercase rounded py-1 px-2 outline-none">
+              <option>Current Year</option>
             </select>
           </div>
-          <DashboardCharts data={chart} />
+          <div className="h-[240px]">
+            <DashboardCharts data={chart} />
+          </div>
         </div>
 
-        {/* 5. QUICK ACTIONS */}
-        <div className="space-y-4">
-          <h3 className="font-black text-slate-400 uppercase tracking-[0.2em] text-[10px] ml-4">
+        <div className="space-y-3">
+          <h3 className="font-black text-slate-400 uppercase tracking-widest text-[9px] ml-2">
             Quick Access
           </h3>
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid gap-2">
             {[
               {
-                label: "Bank Reconciliation",
-                sub: "Match statements",
-                icon: Landmark,
-                color: "violet",
-                href: "banking/brs",
-              },
-              {
                 label: "Ledger Master",
-                sub: "Manage accounts",
                 icon: Book,
                 color: "amber",
                 href: "ledgers",
               },
               {
                 label: "Inventory Manager",
-                sub: "Stock levels",
                 icon: Package,
                 color: "cyan",
                 href: "inventory",
+              },
+              {
+                label: "Bank Reco",
+                icon: Landmark,
+                color: "violet",
+                href: "banking/brs",
               },
             ].map((item) => (
               <Link
                 key={item.label}
                 href={`/companies/${companyId}/${item.href}`}
-                className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl transition-all group"
+                className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-blue-400 transition-all group"
               >
                 <div
-                  className={`bg-${item.color}-100 text-${item.color}-600 p-3 rounded-xl group-hover:bg-${item.color}-600 group-hover:text-white transition-all`}
+                  className={`p-2 bg-${item.color}-50 text-${item.color}-600 rounded-lg group-hover:bg-${item.color}-600 group-hover:text-white transition-all`}
                 >
-                  <item.icon size={20} />
+                  <item.icon size={16} />
                 </div>
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm">
-                    {item.label}
-                  </h4>
-                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">
-                    {item.sub}
-                  </p>
-                </div>
+                <span className="text-xs font-bold text-slate-700">
+                  {item.label}
+                </span>
               </Link>
             ))}
           </div>
         </div>
       </div>
 
-      {/* 6. RECENT TRANSACTIONS TABLE */}
+      {/* 5. RECENT ACTIVITIES TABLE */}
       <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <h3 className="font-black text-slate-900 uppercase tracking-widest text-xs">
-            Recent Activities
-          </h3>
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center font-black uppercase tracking-widest text-[10px]">
+          <span>Recent Postings</span>
           <Link
             href={`/companies/${companyId}/vouchers`}
-            className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1 uppercase tracking-widest"
+            className="text-blue-600 hover:underline"
           >
-            View Daybook <ArrowRight size={14} />
+            View Daybook
           </Link>
         </div>
-
-        <div className="divide-y divide-slate-50">
+        <div className="divide-y divide-slate-100">
           {recents.map((v) => (
             <div
               key={v.id}
-              className="px-8 py-5 flex items-center justify-between hover:bg-slate-50 transition-colors group"
+              className="px-6 py-3 flex items-center justify-between hover:bg-blue-50/20 transition-colors"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div
-                  className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                  className={`h-8 w-8 rounded-lg flex items-center justify-center ${
                     v.type === "SALES"
-                      ? "bg-emerald-100 text-emerald-600"
-                      : "bg-slate-100 text-slate-500"
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-slate-50 text-slate-400"
                   }`}
                 >
                   {v.type === "SALES" ? (
-                    <ArrowUpRight size={18} />
+                    <ArrowUpRight size={14} />
                   ) : (
-                    <ArrowDownRight size={18} />
+                    <ArrowDownRight size={14} />
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                    {v.entries[0]?.ledger?.name || "Unidentified Party"}
+                  <p className="text-xs font-bold text-slate-900 leading-none">
+                    {v.entries[0]?.ledger?.name || "Draft Entry"}
                   </p>
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                    <span className="font-mono">#{v.voucherNo}</span>
-                    <span>•</span>
-                    <span>{new Date(v.date).toLocaleDateString()}</span>
-                  </div>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-tighter">
+                    #{v.voucherNo} • {v.type}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-sm font-black text-slate-900 font-mono">
-                  ₹
-                  {v.entries
-                    .reduce(
-                      (acc, curr) => acc + (curr.amount > 0 ? curr.amount : 0),
-                      0
-                    )
-                    .toFixed(2)}
+                <p className="text-xs font-black font-mono">
+                  ₹{v.entries[0]?.amount.toFixed(2)}
                 </p>
-                <div className="mt-1">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                      v.status === "APPROVED"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}
-                  >
-                    {v.status === "APPROVED" ? "Verified" : "Pending"}
-                  </span>
-                </div>
+                <span
+                  className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
+                    v.status === "APPROVED"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {v.status === "APPROVED" ? "Posted" : "Draft"}
+                </span>
               </div>
             </div>
           ))}

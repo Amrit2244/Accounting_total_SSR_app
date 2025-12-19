@@ -23,12 +23,9 @@ export default function ExportHub({ companyId }: { companyId: number }) {
     setLoading(true);
     const result = await getFullCompanyData(companyId);
     if (result.success) {
-      const fileName = `Backup_Company_${companyId}_${
-        new Date().toISOString().split("T")[0]
-      }.json`;
       downloadFile(
         JSON.stringify(result.data, null, 2),
-        fileName,
+        `Backup_${companyId}_${new Date().toISOString().split("T")[0]}.json`,
         "application/json"
       );
     }
@@ -40,73 +37,78 @@ export default function ExportHub({ companyId }: { companyId: number }) {
     const result = await getFullCompanyData(companyId);
     if (result.success && result.data) {
       const d = result.data;
-      // Basic Tally XML Structure for Masters
-      let xml = `<?xml version="1.0"?>\n<ENVELOPE>\n  <HEADER>\n    <TALLYREQUEST>Import Data</TALLYREQUEST>\n  </HEADER>\n  <BODY>\n    <IMPORTDATA>\n      <REQUESTDESC>\n        <REPORTNAME>All Masters</REPORTNAME>\n      </REQUESTDESC>\n      <REQUESTDATA>\n`;
-
-      // Map Ledgers to Tally Format
+      let xml = `<?xml version="1.0"?>\n<ENVELOPE>\n<HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC><REPORTNAME>All Masters</REPORTNAME></REQUESTDESC>\n<REQUESTDATA>\n`;
       d.ledgers.forEach((l: any) => {
-        xml += `        <TALLYMESSAGE xmlns:UDF="TallyUDF">\n          <LEDGER NAME="${
+        xml += `<TALLYMESSAGE xmlns:UDF="TallyUDF">\n<LEDGER NAME="${
           l.name
-        }" RESERVEDNAME="">\n            <NAME>${
-          l.name
-        }</NAME>\n            <PARENT>${
+        }" RESERVEDNAME="">\n<NAME>${l.name}</NAME>\n<PARENT>${
           l.groupId || "Suspense Account"
-        }</PARENT>\n            <OPENINGBALANCE>${
+        }</PARENT>\n<OPENINGBALANCE>${
           l.openingBalance
-        }</OPENINGBALANCE>\n          </LEDGER>\n        </TALLYMESSAGE>\n`;
+        }</OPENINGBALANCE>\n</LEDGER>\n</TALLYMESSAGE>\n`;
       });
-
-      xml += `      </REQUESTDATA>\n    </IMPORTDATA>\n  </BODY>\n</ENVELOPE>`;
-
-      const fileName = `Tally_Import_${d.name.replace(/\s+/g, "_")}.xml`;
-      downloadFile(xml, fileName, "text/xml");
+      xml += `</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>`;
+      downloadFile(
+        xml,
+        `Tally_Sync_${d.name.replace(/\s+/g, "_")}.xml`,
+        "text/xml"
+      );
     }
     setLoading(false);
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Backup Option */}
-      <div className="p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm hover:shadow-xl transition-all group">
-        <Database
-          className="text-slate-400 group-hover:text-blue-600 mb-4 transition-colors"
-          size={40}
-        />
-        <h2 className="text-xl font-bold text-slate-900">Full System Backup</h2>
-        <p className="text-slate-500 text-sm mt-2 mb-6">
-          Generates a JSON file containing all Ledgers, Groups, and Vouchers.
-        </p>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all group flex flex-col justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+              <Database size={20} />
+            </div>
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+              System Backup
+            </h2>
+          </div>
+          <p className="text-[10px] text-slate-500 font-medium mb-4">
+            Download complete JSON dump of Ledgers, Groups & Vouchers.
+          </p>
+        </div>
         <button
           onClick={handleBackup}
           disabled={loading}
-          className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
+          className="w-full h-9 bg-slate-900 text-white rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
         >
           {loading ? (
-            <Loader2 className="animate-spin" size={18} />
+            <Loader2 className="animate-spin" size={14} />
           ) : (
-            "Download JSON Backup"
+            "Download JSON"
           )}
         </button>
       </div>
 
-      {/* Tally XML Option */}
-      <div className="p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm hover:shadow-xl transition-all group">
-        <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
-          <FileCode className="text-orange-600" size={20} />
+      <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all group flex flex-col justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-orange-50 group-hover:text-orange-600 transition-colors">
+              <FileCode size={20} />
+            </div>
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+              Tally Prime Sync
+            </h2>
+          </div>
+          <p className="text-[10px] text-slate-500 font-medium mb-4">
+            Export masters in XML format compatible with Tally import.
+          </p>
         </div>
-        <h2 className="text-xl font-bold text-slate-900">Tally Prime Sync</h2>
-        <p className="text-slate-500 text-sm mt-2 mb-6">
-          Export masters and daybook entries in Tally-compatible XML format.
-        </p>
         <button
           onClick={handleTallyXML}
           disabled={loading}
-          className="w-full py-3 border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+          className="w-full h-9 border border-slate-300 text-slate-600 rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
         >
           {loading ? (
-            <Loader2 className="animate-spin" size={18} />
+            <Loader2 className="animate-spin" size={14} />
           ) : (
-            "Generate Tally XML"
+            "Generate XML"
           )}
         </button>
       </div>

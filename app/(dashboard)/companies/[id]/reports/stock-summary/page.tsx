@@ -19,6 +19,7 @@ export default async function StockSummaryPage({
 
   if (isNaN(companyId)) notFound();
 
+  // 1. Fetch Items with APPROVED inventory entries
   const items = await prisma.stockItem.findMany({
     where: { companyId },
     include: {
@@ -30,22 +31,34 @@ export default async function StockSummaryPage({
     orderBy: { name: "asc" },
   });
 
+  // 2. Calculate WAC (Weighted Average Cost)
   const stockData = items.map((item) => {
-    let inwardQty = item.quantity || 0;
-    let inwardValue = item.openingValue || 0;
+    let inwardQty = item.quantity || 0; // Opening Qty
+    let inwardValue = item.openingValue || 0; // Opening Value
     let outwardQty = 0;
 
     item.inventoryEntries.forEach((e) => {
+      // Inwards: Purchases, Stock Journal Production, Sales Returns (if handled)
       if (e.quantity > 0) {
         inwardQty += e.quantity;
         inwardValue += e.amount;
-      } else {
+      }
+      // Outwards: Sales, Consumption
+      else {
         outwardQty += Math.abs(e.quantity);
       }
     });
 
     const closingQty = inwardQty - outwardQty;
+
+    // WAC Logic: Total Cost / Total Inward Qty
     let avgRate = inwardQty > 0 ? inwardValue / inwardQty : 0;
+
+    // Fallback: If no inwards but we have opening rate, use that
+    if (avgRate === 0 && item.openingRate) {
+      avgRate = item.openingRate;
+    }
+
     const closingValue = closingQty * avgRate;
 
     return {
@@ -135,11 +148,15 @@ export default async function StockSummaryPage({
 
                 {/* Closing Group (Blue Highlight) */}
                 <div className="col-span-4 grid grid-cols-4 px-2 items-center">
-                  <div className="col-span-1 text-right font-mono font-black text-slate-900">
+                  <div
+                    className={`col-span-1 text-right font-mono font-black ${
+                      row.closingQty < 0 ? "text-red-600" : "text-slate-900"
+                    }`}
+                  >
                     {row.closingQty}
                   </div>
                   <div className="col-span-1 text-center text-[9px] font-black text-slate-400">
-                    {row.unit}
+                    {row.unit || "-"}
                   </div>
                   <div className="col-span-1 text-right font-mono text-slate-500">
                     {row.closingRate.toFixed(2)}
