@@ -11,7 +11,16 @@ export default function AutoLogout() {
 
     const performAutoLogout = async () => {
       console.log("User inactive. Logging out...");
-      await logout();
+      try {
+        // 1. Clear the session on the server
+        await logout();
+      } catch (error) {
+        console.error("Logout failed", error);
+      } finally {
+        // 2. Force the browser to redirect to the login page
+        // This ensures the user is actually moved away from the sensitive data
+        window.location.href = "/login";
+      }
     };
 
     const resetTimer = () => {
@@ -19,9 +28,18 @@ export default function AutoLogout() {
       logoutTimer = setTimeout(performAutoLogout, TIMEOUT_MS);
     };
 
-    const events = ["click", "mousemove", "keypress", "scroll", "touchstart"];
+    // Listen for these interactions to consider the user "active"
+    const events = [
+      "mousedown",
+      "mousemove",
+      "keypress",
+      "scroll",
+      "touchstart",
+    ];
 
     events.forEach((event) => window.addEventListener(event, resetTimer));
+
+    // Initial start of the timer
     resetTimer();
 
     return () => {
