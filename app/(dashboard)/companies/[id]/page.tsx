@@ -17,7 +17,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { getAccountingContext } from "@/lib/session";
+
 import { redirect } from "next/navigation";
 
 export default async function CompanyDashboard({

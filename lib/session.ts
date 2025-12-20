@@ -6,6 +6,8 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
+// --- 1. Session Management (Login/Logout) ---
+
 export async function createSession(userId: string) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const session = await new SignJWT({ userId })
@@ -17,14 +19,24 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set("session", session, {
     httpOnly: true,
-    secure: false, // Set to false for HTTP IP access
+    secure: false, // False for IP/HTTP access
     expires: expiresAt,
     sameSite: "lax",
     path: "/",
   });
 }
 
-// ✅ UPDATED: Helper to get selected FY context
+export async function deleteSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete("session");
+  cookieStore.delete("selected_company_id");
+  cookieStore.delete("active_fy_start");
+  cookieStore.delete("active_fy_end");
+}
+
+// --- 2. Accounting Context (Financial Year & Company) ---
+
+// ✅ Helper to get selected FY context
 export async function getAccountingContext() {
   const cookieStore = await cookies();
   const companyId = cookieStore.get("selected_company_id")?.value;
@@ -40,7 +52,7 @@ export async function getAccountingContext() {
   };
 }
 
-// ✅ UPDATED: Helper to set context (Matches Middleware Cookie Name)
+// ✅ Helper to set context (Matches Middleware Cookie Name)
 export async function setAccountingContext(
   companyId: string,
   start: string,
@@ -49,7 +61,7 @@ export async function setAccountingContext(
   const cookieStore = await cookies();
   const options = {
     httpOnly: true,
-    secure: false, // Set to false for HTTP IP access
+    secure: false, // False for IP/HTTP access
     path: "/",
     maxAge: 60 * 60 * 24, // 1 Day
   };
@@ -57,12 +69,4 @@ export async function setAccountingContext(
   cookieStore.set("selected_company_id", companyId, options);
   cookieStore.set("active_fy_start", start, options);
   cookieStore.set("active_fy_end", end, options);
-}
-
-export async function deleteSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete("session");
-  cookieStore.delete("selected_company_id");
-  cookieStore.delete("active_fy_start");
-  cookieStore.delete("active_fy_end");
 }
