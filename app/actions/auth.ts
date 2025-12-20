@@ -30,6 +30,7 @@ async function createSession(userId: string) {
   cookieStore.set("session", session, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
+    sameSite: "lax", // ✅ Added for better browser compatibility
     maxAge: 60 * 60 * 24 * 7, // 7 Days
     path: "/",
   });
@@ -52,8 +53,6 @@ export async function register(prevState: any, formData: FormData) {
   }
 
   const { username, password, name } = result.data;
-
-  // Define variable to hold company ID for redirect
   let newCompanyId = 1;
 
   try {
@@ -72,17 +71,14 @@ export async function register(prevState: any, formData: FormData) {
         username,
         password: hashedPassword,
         name: name || username,
-        role: "ADMIN", // Default role
+        role: "ADMIN",
       },
     });
 
-    // ✅ FIX: Calculate default dates (April 1st of current year)
     const today = new Date();
     const currentYear = today.getFullYear();
-    const fyStart = new Date(currentYear, 3, 1); // Month is 0-indexed (3 = April)
+    const fyStart = new Date(currentYear, 3, 1);
 
-    // ✅ FIX: Removed 'createdById' (not in schema)
-    // ✅ FIX: Added required date fields
     const company = await prisma.company.create({
       data: {
         name: "My Company",
@@ -92,14 +88,12 @@ export async function register(prevState: any, formData: FormData) {
     });
 
     newCompanyId = company.id;
-
     await createSession(user.id.toString());
   } catch (error) {
     console.error("Registration Error:", error);
     return { error: "Registration failed. Database error." };
   }
 
-  // ✅ FIX: Redirect to the actual created company ID
   redirect(`/companies/${newCompanyId}`);
 }
 
@@ -114,8 +108,6 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   const { username, password } = result.data;
-
-  // Define variable for redirect
   let companyIdToRedirect = 1;
 
   try {
@@ -129,7 +121,6 @@ export async function login(prevState: any, formData: FormData) {
 
     await createSession(user.id.toString());
 
-    // Optional: Find the first company to redirect to
     const firstCompany = await prisma.company.findFirst();
     if (firstCompany) {
       companyIdToRedirect = firstCompany.id;
@@ -138,7 +129,6 @@ export async function login(prevState: any, formData: FormData) {
     return { error: "Login failed. Database error." };
   }
 
-  // ✅ REDIRECT TO DASHBOARD
   redirect(`/companies/${companyIdToRedirect}`);
 }
 
@@ -147,5 +137,7 @@ export async function login(prevState: any, formData: FormData) {
 // ==========================================
 export async function logout() {
   await deleteSession();
-  redirect("/login");
+  // ✅ For AutoLogout component, we return a signal that it finished
+  // The client component will handle the window.location.href redirect
+  return { success: true };
 }
