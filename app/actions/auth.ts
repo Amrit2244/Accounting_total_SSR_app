@@ -27,9 +27,11 @@ async function createSession(userId: string) {
     .sign(encodedKey);
 
   const cookieStore = await cookies();
+
+  // FIX: Changed secure to false so login works on IP address (HTTP)
   cookieStore.set("session", session, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: false,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 7, // 7 Days
     path: "/",
@@ -135,8 +137,7 @@ export async function login(prevState: any, formData: FormData) {
 // ==========================================
 // 3. LOGOUT ACTION
 // ==========================================
-// ✅ FIXED: Returns Promise<void> to satisfy TypeScript build requirements for forms
 export async function logout() {
   await deleteSession();
-  // No return statement means it returns void
+  redirect("/login");
 }
