@@ -1,5 +1,5 @@
 import "server-only";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose";
 import { cookies } from "next/headers";
 
 const secretKey =
@@ -17,14 +17,14 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set("session", session, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: false, // Set to false for HTTP IP access
     expires: expiresAt,
     sameSite: "lax",
     path: "/",
   });
 }
 
-// ✅ NEW: Helper to get selected FY context
+// ✅ UPDATED: Helper to get selected FY context
 export async function getAccountingContext() {
   const cookieStore = await cookies();
   const companyId = cookieStore.get("selected_company_id")?.value;
@@ -40,7 +40,7 @@ export async function getAccountingContext() {
   };
 }
 
-// ✅ NEW: Helper to set context when company/year is selected
+// ✅ UPDATED: Helper to set context (Matches Middleware Cookie Name)
 export async function setAccountingContext(
   companyId: string,
   start: string,
@@ -49,8 +49,9 @@ export async function setAccountingContext(
   const cookieStore = await cookies();
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: false, // Set to false for HTTP IP access
     path: "/",
+    maxAge: 60 * 60 * 24, // 1 Day
   };
 
   cookieStore.set("selected_company_id", companyId, options);

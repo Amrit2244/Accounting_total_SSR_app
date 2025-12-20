@@ -1,5 +1,7 @@
 import { getDashboardMetrics } from "@/app/actions/dashboard";
 import DashboardCharts from "@/components/DashboardCharts";
+import { getAccountingContext } from "@/lib/session";
+
 import Link from "next/link";
 import {
   Wallet,
