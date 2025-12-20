@@ -13,7 +13,6 @@ export default async function EditCompanyPage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // 1. Fetch existing data
   const company = await prisma.company.findUnique({
     where: { id: companyId },
   });
@@ -22,7 +21,6 @@ export default async function EditCompanyPage({
     return notFound();
   }
 
-  // 2. Prepare initial data for the form
   const initialCompanyData = {
     id: company.id,
     name: company.name,
@@ -31,14 +29,13 @@ export default async function EditCompanyPage({
     pincode: company.pincode || "",
     email: company.email || "",
     gstin: company.gstin || "",
-    // Format dates to YYYY-MM-DD for HTML input[type="date"]
+    // ✅ Formatted for <input type="date" />
     financialYearFrom: company.financialYearFrom.toISOString().split("T")[0],
     booksBeginFrom: company.booksBeginFrom.toISOString().split("T")[0],
   };
 
   return (
     <div className="max-w-xl mx-auto py-8 px-4 font-sans animate-in fade-in duration-500">
-      {/* COMPACT HEADER */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
@@ -61,13 +58,11 @@ export default async function EditCompanyPage({
         <Link
           href={`/companies/${companyId}`}
           className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 rounded-lg transition-all shadow-sm"
-          title="Cancel & Go Back"
         >
           <ArrowLeft size={16} />
         </Link>
       </div>
 
-      {/* FORM CONTAINER */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <EditCompanyForm
           initialCompany={initialCompanyData}

@@ -1,5 +1,5 @@
 import "server-only";
-import { SignJWT } from "jose";
+import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
 const secretKey =
@@ -7,7 +7,7 @@ const secretKey =
 const encodedKey = new TextEncoder().encode(secretKey);
 
 export async function createSession(userId: string) {
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const session = await new SignJWT({ userId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -17,14 +17,51 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set("session", session, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     expires: expiresAt,
     sameSite: "lax",
     path: "/",
   });
 }
 
+// ✅ NEW: Helper to get selected FY context
+export async function getAccountingContext() {
+  const cookieStore = await cookies();
+  const companyId = cookieStore.get("selected_company_id")?.value;
+  const fyStart = cookieStore.get("active_fy_start")?.value;
+  const fyEnd = cookieStore.get("active_fy_end")?.value;
+
+  if (!companyId || !fyStart || !fyEnd) return null;
+
+  return {
+    companyId: parseInt(companyId),
+    startDate: new Date(fyStart),
+    endDate: new Date(fyEnd),
+  };
+}
+
+// ✅ NEW: Helper to set context when company/year is selected
+export async function setAccountingContext(
+  companyId: string,
+  start: string,
+  end: string
+) {
+  const cookieStore = await cookies();
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  };
+
+  cookieStore.set("selected_company_id", companyId, options);
+  cookieStore.set("active_fy_start", start, options);
+  cookieStore.set("active_fy_end", end, options);
+}
+
 export async function deleteSession() {
   const cookieStore = await cookies();
   cookieStore.delete("session");
+  cookieStore.delete("selected_company_id");
+  cookieStore.delete("active_fy_start");
+  cookieStore.delete("active_fy_end");
 }

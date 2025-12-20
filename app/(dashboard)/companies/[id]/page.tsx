@@ -13,9 +13,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TriangleAlert,
-  ArrowRight,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getAccountingContext } from "@/lib/session";
+import { redirect } from "next/navigation";
 
 export default async function CompanyDashboard({
   params,
@@ -24,15 +25,74 @@ export default async function CompanyDashboard({
 }) {
   const { id } = await params;
   const companyId = parseInt(id);
-  const { cards, chart, recents } = await getDashboardMetrics(companyId);
+
+  // 1. Get the Financial Year context from cookies
+  const context = await getAccountingContext();
+
+  // 2. Safety Check: If no context or ID mismatch, redirect to selection
+  if (!context || context.companyId !== companyId) {
+    redirect("/");
+  }
+
+  // 3. Fetch Metrics filtered by the selected FY dates
+  const { cards, chart, recents } = await getDashboardMetrics(
+    companyId,
+    new Date(context.startDate),
+    new Date(context.endDate)
+  );
 
   const lowStockItems = await prisma.stockItem.findMany({
     where: { companyId, quantity: { lte: prisma.stockItem.fields.minStock } },
   });
 
+  // Color Mapping to fix Tailwind dynamic class compilation issues
+  const metricCards = [
+    {
+      label: "Cash in Hand",
+      val: cards.totalCash,
+      icon: Wallet,
+      bg: "bg-emerald-50",
+      text: "text-emerald-600",
+      hover: "group-hover:bg-emerald-600",
+    },
+    {
+      label: "Bank Balance",
+      val: cards.totalBank,
+      icon: Building2,
+      bg: "bg-blue-50",
+      text: "text-blue-600",
+      hover: "group-hover:bg-blue-600",
+    },
+    {
+      label: "Receivables",
+      val: cards.totalDebtors,
+      icon: TrendingUp,
+      bg: "bg-orange-50",
+      text: "text-orange-600",
+      hover: "group-hover:bg-orange-600",
+    },
+    {
+      label: "Payables",
+      val: cards.totalCreditors,
+      icon: TrendingDown,
+      bg: "bg-rose-50",
+      text: "text-rose-600",
+      hover: "group-hover:bg-rose-600",
+    },
+  ];
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 1. COMPACT REORDER ALERT */}
+      {/* 1. FINANCIAL YEAR BADGE */}
+      <div className="flex items-center gap-2">
+        <div className="px-3 py-1 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2">
+          <Calendar size={12} />
+          FY: {context.startDate.getFullYear()} -{" "}
+          {context.endDate.getFullYear()}
+        </div>
+      </div>
+
+      {/* 2. COMPACT REORDER ALERT */}
       {lowStockItems.length > 0 && (
         <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl flex items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-3">
@@ -55,14 +115,15 @@ export default async function CompanyDashboard({
         </div>
       )}
 
-      {/* 2. COMPACT HEADER */}
+      {/* 3. COMPACT HEADER */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-black tracking-tight text-slate-900 uppercase">
             Executive Overview
           </h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-            Financial Summary FY {new Date().getFullYear()}
+            Period: {context.startDate.toLocaleDateString()} —{" "}
+            {context.endDate.toLocaleDateString()}
           </p>
         </div>
         <Link
@@ -73,41 +134,16 @@ export default async function CompanyDashboard({
         </Link>
       </div>
 
-      {/* 3. METRIC GRID (Smaller Padding) */}
+      {/* 4. METRIC GRID */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Cash in Hand",
-            val: cards.totalCash,
-            icon: Wallet,
-            color: "emerald",
-          },
-          {
-            label: "Bank Balance",
-            val: cards.totalBank,
-            icon: Building2,
-            color: "blue",
-          },
-          {
-            label: "Receivables",
-            val: cards.totalDebtors,
-            icon: TrendingUp,
-            color: "orange",
-          },
-          {
-            label: "Payables",
-            val: cards.totalCreditors,
-            icon: TrendingDown,
-            color: "rose",
-          },
-        ].map((c) => (
+        {metricCards.map((c) => (
           <div
             key={c.label}
             className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-500 transition-all group"
           >
             <div className="flex items-center gap-3 mb-2">
               <div
-                className={`p-2 bg-${c.color}-50 text-${c.color}-600 rounded-lg group-hover:bg-${c.color}-600 group-hover:text-white transition-colors`}
+                className={`p-2 ${c.bg} ${c.text} rounded-lg ${c.hover} group-hover:text-white transition-colors`}
               >
                 <c.icon size={16} />
               </div>
@@ -116,11 +152,7 @@ export default async function CompanyDashboard({
               </p>
             </div>
             <h3
-              className={`text-lg font-black font-mono tracking-tighter ${
-                c.color === "rose" || c.color === "orange"
-                  ? `text-${c.color}-600`
-                  : "text-slate-900"
-              }`}
+              className={`text-lg font-black font-mono tracking-tighter text-slate-900`}
             >
               ₹{c.val.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
             </h3>
@@ -128,16 +160,16 @@ export default async function CompanyDashboard({
         ))}
       </div>
 
-      {/* 4. ANALYTICS & QUICK ACTIONS */}
+      {/* 5. ANALYTICS & QUICK ACTIONS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-black text-slate-900 uppercase tracking-widest text-[10px]">
               Revenue Analytics
             </h3>
-            <select className="bg-slate-50 border-none text-[9px] font-black uppercase rounded py-1 px-2 outline-none">
-              <option>Current Year</option>
-            </select>
+            <div className="text-[9px] font-black uppercase bg-slate-100 px-2 py-1 rounded text-slate-500">
+              Selected FY
+            </div>
           </div>
           <div className="h-[240px]">
             <DashboardCharts data={chart} />
@@ -153,19 +185,25 @@ export default async function CompanyDashboard({
               {
                 label: "Ledger Master",
                 icon: Book,
-                color: "amber",
+                bg: "bg-amber-50",
+                text: "text-amber-600",
+                hover: "hover:bg-amber-600",
                 href: "ledgers",
               },
               {
                 label: "Inventory Manager",
                 icon: Package,
-                color: "cyan",
+                bg: "bg-cyan-50",
+                text: "text-cyan-600",
+                hover: "hover:bg-cyan-600",
                 href: "inventory",
               },
               {
                 label: "Bank Reco",
                 icon: Landmark,
-                color: "violet",
+                bg: "bg-violet-50",
+                text: "text-violet-600",
+                hover: "hover:bg-violet-600",
                 href: "banking/brs",
               },
             ].map((item) => (
@@ -175,7 +213,7 @@ export default async function CompanyDashboard({
                 className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-blue-400 transition-all group"
               >
                 <div
-                  className={`p-2 bg-${item.color}-50 text-${item.color}-600 rounded-lg group-hover:bg-${item.color}-600 group-hover:text-white transition-all`}
+                  className={`p-2 ${item.bg} ${item.text} rounded-lg group-hover:${item.hover} group-hover:text-white transition-all`}
                 >
                   <item.icon size={16} />
                 </div>
@@ -188,10 +226,10 @@ export default async function CompanyDashboard({
         </div>
       </div>
 
-      {/* 5. RECENT ACTIVITIES TABLE */}
+      {/* 6. RECENT ACTIVITIES TABLE */}
       <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center font-black uppercase tracking-widest text-[10px]">
-          <span>Recent Postings</span>
+          <span>Recent Postings (FY Only)</span>
           <Link
             href={`/companies/${companyId}/vouchers`}
             className="text-blue-600 hover:underline"
@@ -230,7 +268,7 @@ export default async function CompanyDashboard({
               </div>
               <div className="text-right">
                 <p className="text-xs font-black font-mono">
-                  ₹{v.entries[0]?.amount.toFixed(2)}
+                  ₹{Math.abs(v.entries[0]?.amount || 0).toFixed(2)}
                 </p>
                 <span
                   className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
@@ -248,4 +286,9 @@ export default async function CompanyDashboard({
       </div>
     </div>
   );
+}
+
+// Simple Calendar icon for the badge
+function Calendar({ size }: { size: number }) {
+  return <Book size={size} />;
 }

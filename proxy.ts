@@ -1,4 +1,6 @@
+// middleware.ts
 import { NextResponse } from "next/server";
+// ✅ FIXED: Import from "next/server", not "next/request"
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
@@ -8,39 +10,41 @@ const encodedKey = new TextEncoder().encode(secretKey);
 
 export async function proxy(req: NextRequest) {
   const session = req.cookies.get("session")?.value;
+  const selectedCompany = req.cookies.get("selected_company_id")?.value;
+  const { pathname } = req.nextUrl;
 
-  // 1. If no session and trying to access protected routes, redirect to login
-  if (
-    !session &&
-    !req.nextUrl.pathname.startsWith("/login") &&
-    !req.nextUrl.pathname.startsWith("/register")
-  ) {
+  // 1. Allow Auth Pages (Login/Register)
+  if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
+    return NextResponse.next();
+  }
+
+  // 2. Protect All Other Pages
+  if (!session) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // 2. If session exists, verify it
-  if (session) {
-    try {
-      await jwtVerify(session, encodedKey);
-      // If user is logged in and tries to go to login page, send to dashboard
-      if (
-        req.nextUrl.pathname.startsWith("/login") ||
-        req.nextUrl.pathname.startsWith("/register")
-      ) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-    } catch (error) {
-      // If verification fails (tampered cookie), delete it and redirect
-      const response = NextResponse.redirect(new URL("/login", req.url));
-      response.cookies.delete("session");
-      return response;
-    }
-  }
+  try {
+    await jwtVerify(session, encodedKey);
 
-  return NextResponse.next();
+    // 3. FY Context Protection:
+    // If they try to go to a specific company page BUT haven't selected a company context yet,
+    // send them back to the root selection page (app/(dashboard)/page.tsx)
+    if (!selectedCompany && pathname.startsWith("/companies/")) {
+      // Allow them to go to the company creation page even without a context
+      if (pathname === "/companies/create") return NextResponse.next();
+
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    // If the JWT is invalid or expired, clear session and force login
+    const response = NextResponse.redirect(new URL("/login", req.url));
+    response.cookies.delete("session");
+    return response;
+  }
 }
 
 export const config = {
-  // Protect everything except static files and images
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

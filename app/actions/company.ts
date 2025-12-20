@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { DEFAULT_GROUPS, SUB_GROUPS } from "@/lib/constants";
+import { setAccountingContext } from "@/lib/session";
 
 // --- Validation Schema ---
 const CompanySchema = z.object({
@@ -18,11 +19,8 @@ const CompanySchema = z.object({
   booksBeginFrom: z.string(),
 });
 
-// Update schema is simpler (usually excludes FY dates to prevent data corruption)
-const UpdateCompanySchema = CompanySchema.omit({
-  financialYearFrom: true,
-  booksBeginFrom: true,
-}).extend({
+// ✅ UPDATED: Include dates in Update schema
+const UpdateCompanySchema = CompanySchema.extend({
   id: z.coerce.number(),
 });
 
@@ -40,6 +38,7 @@ export async function createCompany(prevState: any, formData: FormData) {
   }
 
   const data = result.data;
+  let cid: number;
 
   try {
     const newCompany = await prisma.company.create({
@@ -55,10 +54,15 @@ export async function createCompany(prevState: any, formData: FormData) {
       },
     });
 
-    const cid = newCompany.id;
+    cid = newCompany.id;
+
+    const startDate = new Date(data.financialYearFrom);
+    const endDate = new Date(startDate);
+    endDate.setFullYear(startDate.getFullYear() + 1);
+    endDate.setDate(endDate.getDate() - 1);
+
     const groupMap = new Map<string, number>();
 
-    // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
     for (const group of DEFAULT_GROUPS) {
       const created = await prisma.group.create({
         data: {
@@ -70,7 +74,6 @@ export async function createCompany(prevState: any, formData: FormData) {
       groupMap.set(group.name, created.id);
     }
 
-    // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
     for (const sub of SUB_GROUPS) {
       const parentId = groupMap.get(sub.parent);
       if (parentId) {
@@ -87,7 +90,6 @@ export async function createCompany(prevState: any, formData: FormData) {
       }
     }
 
-    // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
     const cashGroup = await prisma.group.findFirst({
       where: { name: "Cash-in-hand", companyId: cid },
     });
@@ -102,16 +104,51 @@ export async function createCompany(prevState: any, formData: FormData) {
         },
       });
     }
+
+    await setAccountingContext(
+      cid.toString(),
+      startDate.toISOString(),
+      endDate.toISOString()
+    );
   } catch (e) {
-    console.error(e);
+    console.error("Create Company Error:", e);
     return { error: "Failed to create company." };
   }
 
   revalidatePath("/");
-  redirect("/");
+  redirect(`/companies/${cid}`);
 }
 
-// --- 2. UPDATE COMPANY ---
+/**
+ * --- 2. SELECT COMPANY ACTION ---
+ * ✅ FIXED: Removed the return of { error } to satisfy TypeScript build.
+ * Form actions expect a return of void or Promise<void>.
+ */
+export async function selectCompanyAction(formData: FormData): Promise<void> {
+  const companyId = formData.get("companyId") as string;
+  const selectedYear = formData.get("fyYear") as string;
+
+  if (!companyId || !selectedYear) {
+    console.error("Selection failed: missing companyId or fyYear");
+    return;
+  }
+
+  const yearNum = parseInt(selectedYear);
+  const startDate = new Date(yearNum, 3, 1, 0, 0, 0);
+  const endDate = new Date(yearNum + 1, 2, 31, 23, 59, 59);
+
+  await setAccountingContext(
+    companyId,
+    startDate.toISOString(),
+    endDate.toISOString()
+  );
+
+  revalidatePath(`/companies/${companyId}`);
+  // redirect() returns 'never', which satisfies the Promise<void> requirement.
+  redirect(`/companies/${companyId}`);
+}
+
+// --- 3. UPDATE COMPANY ---
 export async function updateCompany(prevState: any, formData: FormData) {
   const result = UpdateCompanySchema.safeParse(Object.fromEntries(formData));
 
@@ -131,33 +168,31 @@ export async function updateCompany(prevState: any, formData: FormData) {
         pincode: data.pincode,
         email: data.email || null,
         gstin: data.gstin,
+        financialYearFrom: new Date(data.financialYearFrom),
+        booksBeginFrom: new Date(data.booksBeginFrom),
       },
     });
   } catch (e) {
-    console.error(e);
+    console.error("Update Company Error:", e);
     return { error: "Failed to update company." };
   }
 
   revalidatePath("/");
-  revalidatePath(`/companies/edit/${id}`);
-  redirect("/");
+  revalidatePath(`/companies/${id}`);
+  return { success: true };
 }
 
-// --- 3. DELETE COMPANY ---
+// --- 4. DELETE COMPANY ---
 export async function deleteCompany(id: number) {
   try {
     const voucherCount = await prisma.voucher.count({
       where: { companyId: id },
     });
-
-    if (voucherCount > 0) {
+    if (voucherCount > 0)
       return { error: "Cannot delete company. Vouchers exist." };
-    }
 
-    // Transaction to ensure all or nothing is deleted
     await prisma.$transaction([
       prisma.ledger.deleteMany({ where: { companyId: id } }),
-      // ✅ FIX: Changed 'prisma.accountGroup' to 'prisma.group'
       prisma.group.deleteMany({ where: { companyId: id } }),
       prisma.stockItem.deleteMany({ where: { companyId: id } }),
       prisma.stockGroup.deleteMany({ where: { companyId: id } }),
@@ -167,8 +202,9 @@ export async function deleteCompany(id: number) {
     ]);
 
     revalidatePath("/");
+    return { success: true };
   } catch (e) {
-    console.error("Delete failed", e);
+    console.error("Delete Company Error:", e);
     return { error: "Database error occurred." };
   }
 }
