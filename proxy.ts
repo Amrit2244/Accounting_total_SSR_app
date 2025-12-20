@@ -6,7 +6,7 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const session = req.cookies.get("session")?.value;
 
   // 1. If no session and trying to access protected routes, redirect to login

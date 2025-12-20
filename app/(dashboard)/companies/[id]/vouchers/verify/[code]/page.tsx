@@ -10,6 +10,7 @@ import {
   User,
   FileText,
   AlertTriangle,
+  Package,
 } from "lucide-react";
 
 async function getCurrentUserId() {
@@ -55,6 +56,7 @@ export default async function VerifyPage({
     );
 
   const isMaker = voucher.createdById === currentUserId;
+  const isInventoryVoucher = voucher.inventory && voucher.inventory.length > 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-4 py-6 font-sans">
@@ -91,7 +93,7 @@ export default async function VerifyPage({
           </div>
         </div>
 
-        {/* INFO GRID (Dense) */}
+        {/* INFO GRID */}
         <div className="p-4 grid grid-cols-4 gap-4 bg-slate-50 border-b border-slate-100">
           <InfoItem
             icon={<Calendar size={10} />}
@@ -127,8 +129,57 @@ export default async function VerifyPage({
           />
         </div>
 
+        {/* ✅ INVENTORY ITEMS SECTION (Show only if items exist) */}
+        {isInventoryVoucher && (
+          <div className="p-4 border-b border-slate-100">
+            <div className="flex items-center gap-2 mb-3 text-blue-600">
+              <Package size={14} />
+              <h3 className="text-[10px] font-black uppercase tracking-widest">
+                Inventory Details
+              </h3>
+            </div>
+            <table className="w-full text-left border border-slate-200 rounded-lg overflow-hidden text-[11px]">
+              <thead className="bg-slate-50 font-black text-slate-500 uppercase tracking-widest text-[9px]">
+                <tr>
+                  <th className="p-2 pl-3">Item Name</th>
+                  <th className="p-2 text-right">Quantity</th>
+                  <th className="p-2 text-right">Rate</th>
+                  <th className="p-2 text-right pr-3">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {voucher.inventory.map((inv: any) => (
+                  <tr
+                    key={inv.id}
+                    className="hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="p-2 pl-3 font-bold text-slate-800">
+                      {inv.stockItem?.name || inv.itemName}
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold text-slate-600">
+                      {Math.abs(inv.quantity).toFixed(2)}
+                    </td>
+                    <td className="p-2 text-right font-mono text-slate-500">
+                      {inv.rate.toFixed(2)}
+                    </td>
+                    <td className="p-2 text-right pr-3 font-mono font-black text-slate-900">
+                      {inv.amount.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* ENTRIES TABLE */}
         <div className="p-4">
+          <div className="flex items-center gap-2 mb-3 text-slate-500">
+            <Hash size={14} />
+            <h3 className="text-[10px] font-black uppercase tracking-widest">
+              Accounting Distribution
+            </h3>
+          </div>
           <table className="w-full text-left border border-slate-200 rounded-lg overflow-hidden text-[11px]">
             <thead className="bg-slate-100 font-black text-slate-500 uppercase tracking-widest text-[9px]">
               <tr>
@@ -159,6 +210,16 @@ export default async function VerifyPage({
             </tbody>
           </table>
         </div>
+
+        {/* NARRATION SECTION */}
+        {voucher.narration && (
+          <div className="px-6 py-3 bg-slate-50/50 border-t border-slate-100 italic text-slate-600 text-[11px]">
+            <span className="font-bold uppercase text-[9px] text-slate-400 not-italic block mb-1 tracking-widest">
+              Narration
+            </span>
+            &ldquo;{voucher.narration}&rdquo;
+          </div>
+        )}
 
         {/* FOOTER ACTIONS */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">

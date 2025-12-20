@@ -25,6 +25,7 @@ const VoucherSchema = z.object({
   ]),
   narration: z.string().optional(),
   reference: z.string().optional(),
+  voucherNo: z.string().optional(), // ✅ Added for manual numbering
   companyId: z.string(),
   rows: z.string().optional(),
   inventoryRows: z.string().optional(),
@@ -47,9 +48,6 @@ async function getCurrentUserId(): Promise<number | null> {
   }
 }
 
-// ==========================================
-// 1. FETCH VOUCHER (Fixed with Deep Includes)
-// ==========================================
 export async function getVoucherByCode(code: string, companyId: number) {
   return await prisma.voucher.findFirst({
     where: {
@@ -57,7 +55,6 @@ export async function getVoucherByCode(code: string, companyId: number) {
       companyId,
     },
     include: {
-      // ✅ Fetching entries AND ensuring ledger is included to stop the 'null' crash
       entries: {
         include: {
           ledger: {
@@ -73,9 +70,6 @@ export async function getVoucherByCode(code: string, companyId: number) {
   });
 }
 
-// ==========================================
-// 2. CREATE VOUCHER (Maker Logic)
-// ==========================================
 export async function createVoucher(prevState: any, formData: FormData) {
   const data = Object.fromEntries(formData);
   const result = VoucherSchema.safeParse(data);
@@ -89,6 +83,7 @@ export async function createVoucher(prevState: any, formData: FormData) {
     type,
     narration,
     reference,
+    voucherNo, // ✅ Manual voucher number from form
     companyId,
     rows,
     inventoryRows,
@@ -96,6 +91,7 @@ export async function createVoucher(prevState: any, formData: FormData) {
     salesPurchaseLedgerId,
     taxLedgerId,
   } = result.data;
+
   const cid = parseInt(companyId);
   const transactionCode = Math.floor(10000 + Math.random() * 90000).toString();
 
@@ -105,35 +101,43 @@ export async function createVoucher(prevState: any, formData: FormData) {
 
   try {
     const newVoucher = await prisma.$transaction(async (tx) => {
-      // Collision prevention logic
-      const lastV = await tx.voucher.findFirst({
-        where: { companyId: cid, type: type },
-        orderBy: { id: "desc" },
-        select: { voucherNo: true },
-      });
+      let finalVoucherNo = voucherNo?.trim();
 
-      let seq = await tx.voucherSequence.findUnique({
-        where: { companyId_voucherType: { companyId: cid, voucherType: type } },
-      });
-
-      if (!seq) {
-        seq = await tx.voucherSequence.create({
-          data: { companyId: cid, voucherType: type, lastNo: 0 },
+      // ✅ Only generate sequence if voucherNo wasn't provided manually
+      if (!finalVoucherNo) {
+        const lastV = await tx.voucher.findFirst({
+          where: { companyId: cid, type: type },
+          orderBy: { id: "desc" },
+          select: { voucherNo: true },
         });
+
+        let seq = await tx.voucherSequence.findUnique({
+          where: {
+            companyId_voucherType: { companyId: cid, voucherType: type },
+          },
+        });
+
+        if (!seq) {
+          seq = await tx.voucherSequence.create({
+            data: { companyId: cid, voucherType: type, lastNo: 0 },
+          });
+        }
+
+        const dbLastNo = lastV ? parseInt(lastV.voucherNo) : 0;
+        const nextNoInt = Math.max(seq.lastNo, dbLastNo) + 1;
+
+        await tx.voucherSequence.update({
+          where: { id: seq.id },
+          data: { lastNo: nextNoInt },
+        });
+
+        finalVoucherNo = nextNoInt.toString();
       }
-
-      const dbLastNo = lastV ? parseInt(lastV.voucherNo) : 0;
-      const nextNoInt = Math.max(seq.lastNo, dbLastNo) + 1;
-
-      await tx.voucherSequence.update({
-        where: { id: seq.id },
-        data: { lastNo: nextNoInt },
-      });
 
       const voucher = await tx.voucher.create({
         data: {
           date: new Date(date),
-          voucherNo: nextNoInt.toString(),
+          voucherNo: finalVoucherNo,
           transactionCode,
           type,
           narration,
@@ -145,27 +149,37 @@ export async function createVoucher(prevState: any, formData: FormData) {
         },
       });
 
-      // Entries logic
+      // ✅ Fixed Inventory Parsing logic to prevent String vs Float error
       if (type === "SALES" || type === "PURCHASE") {
         const items = JSON.parse(inventoryRows || "[]");
         let totalVal = 0;
         let totalTax = 0;
+
         for (const item of items) {
-          const lineVal = item.qty * item.rate;
+          // Force conversion to numbers to satisfy Prisma Float requirements
+          const qty = parseFloat(item.qty) || 0;
+          const rate = parseFloat(item.rate) || 0;
+          const gst = parseFloat(item.gst) || 0;
+
+          const lineVal = qty * rate;
           totalVal += lineVal;
-          totalTax += lineVal * (item.gst / 100);
+          totalTax += lineVal * (gst / 100);
+
           await tx.inventoryEntry.create({
             data: {
               voucherId: voucher.id,
               stockItemId: parseInt(item.itemId),
               itemName: "Item",
-              quantity: type === "SALES" ? -item.qty : item.qty,
-              rate: item.rate,
+              quantity: type === "SALES" ? -Math.abs(qty) : Math.abs(qty),
+              rate: rate, // Now explicitly a number
               amount: lineVal,
             },
           });
         }
+
         const taxVal = taxLedgerId ? totalTax : 0;
+
+        // Party Ledger Entry
         await tx.voucherEntry.create({
           data: {
             voucherId: voucher.id,
@@ -173,6 +187,8 @@ export async function createVoucher(prevState: any, formData: FormData) {
             amount: type === "SALES" ? totalVal + taxVal : -(totalVal + taxVal),
           },
         });
+
+        // Sales/Purchase Ledger Entry
         await tx.voucherEntry.create({
           data: {
             voucherId: voucher.id,
@@ -180,7 +196,9 @@ export async function createVoucher(prevState: any, formData: FormData) {
             amount: type === "SALES" ? -totalVal : totalVal,
           },
         });
-        if (taxLedgerId)
+
+        // Tax Ledger Entry
+        if (taxLedgerId) {
           await tx.voucherEntry.create({
             data: {
               voucherId: voucher.id,
@@ -188,6 +206,7 @@ export async function createVoucher(prevState: any, formData: FormData) {
               amount: type === "SALES" ? -taxVal : taxVal,
             },
           });
+        }
       } else if (rows) {
         const entries = JSON.parse(rows);
         for (const e of entries) {
@@ -196,7 +215,9 @@ export async function createVoucher(prevState: any, formData: FormData) {
               voucherId: voucher.id,
               ledgerId: parseInt(e.ledgerId),
               amount:
-                e.type === "Dr" ? Math.abs(e.amount) : -Math.abs(e.amount),
+                e.type === "Dr"
+                  ? Math.abs(parseFloat(e.amount))
+                  : -Math.abs(parseFloat(e.amount)),
             },
           });
         }
@@ -218,13 +239,11 @@ export async function createVoucher(prevState: any, formData: FormData) {
     revalidatePath(`/companies/${cid}/vouchers`);
     return { success: true, code: transactionCode, id: newVoucher.id };
   } catch (err) {
-    return { error: "Voucher Sync Error. Please try saving again." };
+    console.error("Voucher creation error:", err);
+    return { error: "Voucher Sync Error. Please check data and try again." };
   }
 }
 
-// ==========================================
-// 3. VERIFY VOUCHER (Checker Logic)
-// ==========================================
 export async function verifyVoucher(voucherId: number) {
   const userId = await getCurrentUserId();
   if (!userId) return { error: "Unauthorized" };
@@ -278,8 +297,6 @@ export async function deleteVoucher(voucherId: number) {
   }
 }
 
-// 4. REJECT VOUCHER (Checker)
-// ==========================================
 export async function rejectVoucher(voucherId: number, reason: string) {
   const userId = await getCurrentUserId();
   if (!userId) return { error: "Unauthorized" };
@@ -295,7 +312,6 @@ export async function rejectVoucher(voucherId: number, reason: string) {
       return { error: "You cannot reject your own entry." };
 
     await prisma.$transaction(async (tx) => {
-      // 1. Update Status to REJECTED
       await tx.voucher.update({
         where: { id: voucherId },
         data: {
@@ -305,7 +321,6 @@ export async function rejectVoucher(voucherId: number, reason: string) {
         },
       });
 
-      // 2. Record Audit Log
       const user = await tx.user.findUnique({ where: { id: userId } });
       await tx.auditLog.create({
         data: {
