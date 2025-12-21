@@ -1,11 +1,12 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "100mb", // ✅ This covers your Server Action uploads
+      bodySizeLimit: "50mb", // This correctly handles the size limit for Server Actions
     },
   },
-  // ✅ Removed serverRuntimeConfig as it is unrecognized in modern Next.js
+  // ✅ serverRuntimeConfig is REMOVED because it causes the build error
 };
 
 export default nextConfig;

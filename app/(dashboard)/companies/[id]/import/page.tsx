@@ -1,19 +1,19 @@
 "use client";
 
-import { useActionState, use } from "react";
-import { importTallyXML } from "@/app/actions/tally";
+import { useState, use } from "react";
 import {
   UploadCloud,
+  Loader2,
   FileCode,
   ArrowLeft,
-  Loader2,
   CheckCircle,
   AlertTriangle,
-  FileText,
   Database,
   ChevronRight,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function ImportPage({
   params,
@@ -21,11 +21,47 @@ export default function ImportPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [state, action, isPending] = useActionState(importTallyXML, undefined);
+  const router = useRouter();
+
+  // Local state instead of useActionState
+  const [isPending, setIsPending] = useState(false);
+  const [status, setStatus] = useState<{
+    type: "success" | "error";
+    msg: string;
+  } | null>(null);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsPending(true);
+    setStatus(null);
+
+    const formData = new FormData(e.currentTarget);
+
+    try {
+      // ✅ Fetch the API route to bypass size limit
+      const res = await fetch("/api/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Import failed");
+      }
+
+      setStatus({ type: "success", msg: data.message || "Import Successful!" });
+      router.refresh(); // Refresh dashboard data
+    } catch (err: any) {
+      setStatus({ type: "error", msg: err.message });
+    } finally {
+      setIsPending(false);
+    }
+  }
 
   return (
     <div className="max-w-3xl mx-auto py-6 px-4">
-      {/* 1. HEADER SECTION (Compact) */}
+      {/* HEADER */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
@@ -47,10 +83,9 @@ export default function ImportPage({
         </Link>
       </div>
 
-      {/* 2. MAIN CARD */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        {/* SUCCESS MESSAGE (High Density) */}
-        {state?.success && (
+        {/* SUCCESS MESSAGE */}
+        {status?.type === "success" && (
           <div className="bg-emerald-50 border-b border-emerald-100 p-4 flex items-center gap-4 animate-in fade-in">
             <CheckCircle className="text-emerald-600 shrink-0" size={24} />
             <div className="flex-1">
@@ -58,7 +93,7 @@ export default function ImportPage({
                 Success!
               </h3>
               <p className="text-emerald-700 text-[11px] font-medium leading-tight">
-                {state.message}
+                {status.msg}
               </p>
             </div>
             <Link
@@ -71,19 +106,19 @@ export default function ImportPage({
         )}
 
         {/* ERROR MESSAGE */}
-        {state?.error && (
+        {status?.type === "error" && (
           <div className="bg-rose-50 border-b border-rose-100 p-4 flex items-center gap-3 animate-in fade-in">
             <AlertTriangle className="text-rose-600 shrink-0" size={20} />
             <p className="text-rose-700 text-[11px] font-bold uppercase">
-              {state.error}
+              {status.msg}
             </p>
           </div>
         )}
 
-        {/* UPLOAD FORM (Tightened Spacing) */}
-        {!state?.success && (
+        {/* UPLOAD FORM */}
+        {status?.type !== "success" && (
           <div className="p-6">
-            <form action={action} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <input type="hidden" name="companyId" value={id} />
 
               <div className="relative group">
@@ -102,7 +137,7 @@ export default function ImportPage({
                     Select Tally Export File
                   </h3>
                   <p className="text-slate-400 text-[10px] mt-1 font-bold uppercase tracking-widest">
-                    XML or UTF-8 .txt formats
+                    Supports Large Files (50MB+)
                   </p>
                 </div>
               </div>
@@ -116,47 +151,18 @@ export default function ImportPage({
                 ) : (
                   <FileCode size={16} />
                 )}
-                {isPending ? "Parsing Data..." : "Execute Migration"}
+                {isPending ? "Uploading & Processing..." : "Execute Migration"}
               </button>
             </form>
           </div>
         )}
 
-        {/* COMPACT INSTRUCTIONS */}
+        {/* INSTRUCTIONS */}
         <div className="bg-slate-50 border-t border-slate-100 p-5">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
-            <FileText size={12} /> Sequential Steps
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <div className="shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
-                  1
-                </div>
-                <p className="text-[11px] text-slate-600 font-medium leading-tight">
-                  <strong className="text-slate-800">Masters:</strong> Upload
-                  "Groups & Ledgers" first to build hierarchy.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <div className="shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
-                  2
-                </div>
-                <p className="text-[11px] text-slate-600 font-medium leading-tight">
-                  <strong className="text-slate-800">Daybook:</strong> Upload
-                  "Transactions" second to populate entries.
-                </p>
-              </div>
-            </div>
-            <div className="bg-amber-100/50 border border-amber-200 p-3 rounded-xl">
-              <p className="text-[10px] text-amber-800 font-black uppercase mb-1 flex items-center gap-1">
-                <AlertTriangle size={12} /> Tech Tip:
-              </p>
-              <p className="text-[10px] text-amber-800 font-medium leading-tight italic">
-                If import fails, re-save your file from Notepad with encoding
-                set to <b>UTF-8</b>.
-              </p>
-            </div>
+          <div className="bg-amber-100/50 border border-amber-200 p-3 rounded-xl">
+            <p className="text-[10px] text-amber-800 font-medium leading-tight italic">
+              This new system supports large 11MB+ files automatically.
+            </p>
           </div>
         </div>
       </div>
