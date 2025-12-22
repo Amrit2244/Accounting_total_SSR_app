@@ -67,14 +67,16 @@ export default async function BRSPage({
       bankDate: entry.bankDate || null,
     });
 
+    // Replace the mapping block with this:
     transactions = [
-      ...sales.map((e) => formatEntry(e, "SALES", "salesVoucher")),
-      ...purchase.map((e) => formatEntry(e, "PURCHASE", "purchaseVoucher")),
-      ...payment.map((e) => formatEntry(e, "PAYMENT", "paymentVoucher")),
-      ...receipt.map((e) => formatEntry(e, "RECEIPT", "receiptVoucher")),
-      ...contra.map((e) => formatEntry(e, "CONTRA", "contraVoucher")),
-      ...journal.map((e) => formatEntry(e, "JOURNAL", "journalVoucher")),
-    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      ...sales.map((e: any) => formatEntry(e, "SALES", "salesVoucher")),
+      ...purchase.map((e: any) =>
+        formatEntry(e, "PURCHASE", "purchaseVoucher")
+      ),
+      ...payment.map((e: any) => formatEntry(e, "PAYMENT", "paymentVoucher")),
+      ...receipt.map((e: any) => formatEntry(e, "RECEIPT", "receiptVoucher")),
+      ...contra.map((e: any) => formatEntry(e, "CONTRA", "contraVoucher")),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
   return (
