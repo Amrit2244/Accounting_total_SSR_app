@@ -45,36 +45,25 @@ const GroupItem = ({ group, level = 0 }: { group: any; level?: number }) => {
         {group.ledgers?.map((ledger: any) => {
           // 1. Calculate Transactions Total
           const txTotal =
-            sumEntries(ledger.salesEntries) +
-            sumEntries(ledger.purchaseEntries) +
-            sumEntries(ledger.paymentEntries) +
-            sumEntries(ledger.receiptEntries) +
-            sumEntries(ledger.contraEntries) +
-            sumEntries(ledger.journalEntries);
+            sumEntries(ledger.salesEntries || []) +
+            sumEntries(ledger.purchaseEntries || []) +
+            sumEntries(ledger.paymentEntries || []) +
+            sumEntries(ledger.receiptEntries || []) +
+            sumEntries(ledger.contraEntries || []) +
+            sumEntries(ledger.journalEntries || []);
 
           // 2. Calculate Closing Balance
-          const closingBalance = ledger.openingBalance + txTotal;
+          const closingBalance = (ledger.openingBalance || 0) + txTotal;
 
           let balanceDisplay = "₹0.00";
-          let colorClass = "text-slate-400"; // Default
+          let colorClass = "text-slate-400";
 
           if (closingBalance !== 0) {
-            // ✅ FIX: Inverted Logic based on your requirement
-            // If the system shows Cr when it should be Dr, it means Negative is currently Dr in your DB.
-            // Assumption: DB has Neg = Debit, Pos = Credit (or flip this if needed)
-
-            // LOGIC A: Standard Accounting (Pos = Dr, Neg = Cr) -> If this was wrong, use Logic B
-            // LOGIC B: Inverted (Pos = Cr, Neg = Dr) -> Use this if your data is inverted
-
-            // Based on "A B TRADERS" example (Party is usually Dr):
-            // If it was showing Cr, it was Negative. You want it Dr. So Negative = Dr.
-
+            // Logic: Negative = Dr (Red), Positive = Cr (Green)
             if (closingBalance < 0) {
-              // Negative -> Dr -> Red
               balanceDisplay = `₹${Math.abs(closingBalance).toFixed(2)} Dr`;
               colorClass = "text-red-600 font-bold";
             } else {
-              // Positive -> Cr -> Green
               balanceDisplay = `₹${Math.abs(closingBalance).toFixed(2)} Cr`;
               colorClass = "text-green-600 font-bold";
             }
@@ -102,7 +91,7 @@ const GroupItem = ({ group, level = 0 }: { group: any; level?: number }) => {
           );
         })}
 
-        {/* Render Sub-groups */}
+        {/* Render Sub-groups recursively */}
         {group.children?.map((child: any) => (
           <GroupItem key={child.id} group={child} level={level + 1} />
         ))}
@@ -131,6 +120,7 @@ export default async function ChartOfAccountsPage({
     },
   };
 
+  // Fetch groups and nested structure
   const rootGroups = await prisma.group.findMany({
     where: { companyId, parentId: null },
     include: {
@@ -142,7 +132,12 @@ export default async function ChartOfAccountsPage({
             include: {
               ledgers: includeLedgers,
               children: {
-                include: { ledgers: includeLedgers },
+                include: {
+                  ledgers: includeLedgers,
+                  children: {
+                    include: { ledgers: includeLedgers },
+                  },
+                },
               },
             },
           },
@@ -176,7 +171,8 @@ export default async function ChartOfAccountsPage({
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 columns-1 md:columns-2 gap-8">
-          {rootGroups.map((group) => (
+          {/* ✅ FIXED: Parameter 'group' given explicit 'any' type for cloud build */}
+          {rootGroups.map((group: any) => (
             <div key={group.id} className="break-inside-avoid mb-4">
               <GroupItem group={group} level={0} />
             </div>
