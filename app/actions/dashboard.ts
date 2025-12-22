@@ -1,118 +1,230 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import {
+  startOfMonth,
+  endOfMonth,
+  eachMonthOfInterval,
+  format,
+  subMonths,
+} from "date-fns";
+
+// 1. Define Return Type
+export type DashboardMetrics = {
+  cards: {
+    totalCash: number;
+    totalBank: number;
+    totalDebtors: number;
+    totalCreditors: number;
+  };
+  revenue: number;
+  expense: number;
+  chart: { name: string; sales: number; purchases: number }[];
+  recents: any[];
+};
 
 export async function getDashboardMetrics(
   companyId: number,
   startDate: Date,
   endDate: Date
-) {
-  const allLedgers = await prisma.ledger.findMany({
-    where: { companyId },
-    include: {
-      group: true,
-      salesEntries: {
-        where: {
-          salesVoucher: {
-            status: "APPROVED",
-            date: { gte: startDate, lte: endDate },
+): Promise<DashboardMetrics> {
+  try {
+    // --- 1. CALCULATE CARD BALANCES (Your existing logic) ---
+    const allLedgers = await prisma.ledger.findMany({
+      where: { companyId },
+      include: {
+        group: true,
+        salesEntries: {
+          where: {
+            salesVoucher: {
+              status: "APPROVED",
+              date: { gte: startDate, lte: endDate },
+            },
           },
+          select: { amount: true },
         },
-        select: { amount: true },
-      },
-      purchaseEntries: {
-        where: {
-          purchaseVoucher: {
-            status: "APPROVED",
-            date: { gte: startDate, lte: endDate },
+        purchaseEntries: {
+          where: {
+            purchaseVoucher: {
+              status: "APPROVED",
+              date: { gte: startDate, lte: endDate },
+            },
           },
+          select: { amount: true },
         },
-        select: { amount: true },
-      },
-      paymentEntries: {
-        where: {
-          paymentVoucher: {
-            status: "APPROVED",
-            date: { gte: startDate, lte: endDate },
+        paymentEntries: {
+          where: {
+            paymentVoucher: {
+              status: "APPROVED",
+              date: { gte: startDate, lte: endDate },
+            },
           },
+          select: { amount: true },
         },
-        select: { amount: true },
-      },
-      receiptEntries: {
-        where: {
-          receiptVoucher: {
-            status: "APPROVED",
-            date: { gte: startDate, lte: endDate },
+        receiptEntries: {
+          where: {
+            receiptVoucher: {
+              status: "APPROVED",
+              date: { gte: startDate, lte: endDate },
+            },
           },
+          select: { amount: true },
         },
-        select: { amount: true },
-      },
-      contraEntries: {
-        where: {
-          contraVoucher: {
-            status: "APPROVED",
-            date: { gte: startDate, lte: endDate },
+        contraEntries: {
+          where: {
+            contraVoucher: {
+              status: "APPROVED",
+              date: { gte: startDate, lte: endDate },
+            },
           },
+          select: { amount: true },
         },
-        select: { amount: true },
-      },
-      journalEntries: {
-        where: {
-          journalVoucher: {
-            status: "APPROVED",
-            date: { gte: startDate, lte: endDate },
+        journalEntries: {
+          where: {
+            journalVoucher: {
+              status: "APPROVED",
+              date: { gte: startDate, lte: endDate },
+            },
           },
+          select: { amount: true },
         },
-        select: { amount: true },
       },
-    },
-  });
+    });
 
-  let totalCash = 0,
-    totalBank = 0,
-    totalDebtors = 0,
-    totalCreditors = 0;
+    let totalCash = 0,
+      totalBank = 0,
+      totalDebtors = 0,
+      totalCreditors = 0;
 
-  allLedgers.forEach((l) => {
-    const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
-    const balance =
-      l.openingBalance +
-      sum(l.salesEntries) +
-      sum(l.purchaseEntries) +
-      sum(l.paymentEntries) +
-      sum(l.receiptEntries) +
-      sum(l.contraEntries) +
-      sum(l.journalEntries);
-    const n = l.name.toLowerCase(),
-      g = l.group?.name.toLowerCase() || "";
+    allLedgers.forEach((l) => {
+      const sum = (arr: any[]) =>
+        arr.reduce((acc, curr) => acc + curr.amount, 0);
 
-    if (n.includes("cash")) totalCash += balance;
-    else if (g.includes("bank") || n.includes("bank")) totalBank += balance;
-    else if (g.includes("debtor")) totalDebtors += balance;
-    else if (g.includes("creditor")) totalCreditors += Math.abs(balance);
-  });
+      // Calculate closing balance based on schema logic
+      // Note: Verify if Debit/Credit logic (pos/neg) is consistent across all tables
+      const movement =
+        sum(l.salesEntries) +
+        sum(l.purchaseEntries) +
+        sum(l.paymentEntries) +
+        sum(l.receiptEntries) +
+        sum(l.contraEntries) +
+        sum(l.journalEntries);
 
-  const sales = await prisma.salesVoucher.aggregate({
-    where: {
-      companyId,
-      status: "APPROVED",
-      date: { gte: startDate, lte: endDate },
-    },
-    _sum: { totalAmount: true },
-  });
-  const purchase = await prisma.purchaseVoucher.aggregate({
-    where: {
-      companyId,
-      status: "APPROVED",
-      date: { gte: startDate, lte: endDate },
-    },
-    _sum: { totalAmount: true },
-  });
+      const balance = l.openingBalance + movement;
 
-  return {
-    cards: { totalCash, totalBank, totalDebtors, totalCreditors },
-    revenue: sales._sum.totalAmount || 0,
-    expense: purchase._sum.totalAmount || 0,
-    recents: [], // You can add recent voucher fetching logic here
-  };
+      const n = l.name.toLowerCase();
+      const g = l.group?.name.toLowerCase() || "";
+
+      if (n.includes("cash")) totalCash += balance;
+      else if (g.includes("bank") || n.includes("bank")) totalBank += balance;
+      else if (g.includes("debtor")) totalDebtors += balance;
+      else if (g.includes("creditor")) totalCreditors += Math.abs(balance);
+    });
+
+    // --- 2. CALCULATE REVENUE & EXPENSE ---
+    const salesAgg = await prisma.salesVoucher.aggregate({
+      where: {
+        companyId,
+        status: "APPROVED",
+        date: { gte: startDate, lte: endDate },
+      },
+      _sum: { totalAmount: true },
+    });
+    const purchaseAgg = await prisma.purchaseVoucher.aggregate({
+      where: {
+        companyId,
+        status: "APPROVED",
+        date: { gte: startDate, lte: endDate },
+      },
+      _sum: { totalAmount: true },
+    });
+
+    // --- 3. GENERATE CHART DATA (The Missing Piece!) ---
+    // Generates monthly totals for the last 6 months
+    const last6Months = eachMonthOfInterval({
+      start: subMonths(new Date(), 5),
+      end: new Date(),
+    });
+
+    const chart = await Promise.all(
+      last6Months.map(async (month) => {
+        const mStart = startOfMonth(month);
+        const mEnd = endOfMonth(month);
+
+        const [mSales, mPurchase] = await Promise.all([
+          prisma.salesVoucher.aggregate({
+            where: {
+              companyId,
+              date: { gte: mStart, lte: mEnd },
+              status: "APPROVED",
+            },
+            _sum: { totalAmount: true },
+          }),
+          prisma.purchaseVoucher.aggregate({
+            where: {
+              companyId,
+              date: { gte: mStart, lte: mEnd },
+              status: "APPROVED",
+            },
+            _sum: { totalAmount: true },
+          }),
+        ]);
+
+        return {
+          name: format(month, "MMM"),
+          sales: mSales._sum.totalAmount || 0,
+          purchases: mPurchase._sum.totalAmount || 0,
+        };
+      })
+    );
+
+    // --- 4. FETCH RECENTS ---
+    const [recentSales, recentPurchases] = await Promise.all([
+      prisma.salesVoucher.findMany({
+        where: { companyId, status: "APPROVED" },
+        take: 5,
+        orderBy: { date: "desc" },
+        include: { ledgerEntries: { include: { ledger: true } } },
+      }),
+      prisma.purchaseVoucher.findMany({
+        where: { companyId, status: "APPROVED" },
+        take: 5,
+        orderBy: { date: "desc" },
+        include: { ledgerEntries: { include: { ledger: true } } },
+      }),
+    ]);
+
+    const recents = [
+      ...recentSales.map((v) => ({
+        ...v,
+        type: "SALES",
+        entries: v.ledgerEntries,
+      })),
+      ...recentPurchases.map((v) => ({
+        ...v,
+        type: "PURCHASE",
+        entries: v.ledgerEntries,
+      })),
+    ]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5);
+
+    // --- 5. RETURN COMPLETE OBJECT ---
+    return {
+      cards: { totalCash, totalBank, totalDebtors, totalCreditors },
+      revenue: salesAgg._sum.totalAmount || 0,
+      expense: purchaseAgg._sum.totalAmount || 0,
+      chart, // ✅ Added
+      recents, // ✅ Populated
+    };
+  } catch (error) {
+    console.error("Metric Error", error);
+    return {
+      cards: { totalCash: 0, totalBank: 0, totalDebtors: 0, totalCreditors: 0 },
+      revenue: 0,
+      expense: 0,
+      chart: [],
+      recents: [],
+    };
+  }
 }

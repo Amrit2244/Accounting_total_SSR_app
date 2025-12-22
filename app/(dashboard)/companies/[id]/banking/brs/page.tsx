@@ -1,15 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import {
-  Landmark,
-  ArrowLeft,
-  Calendar,
-  AlertCircle,
-  CheckCircle,
-} from "lucide-react";
-import Link from "next/link";
-import BrsRow from "@/components/BrsRow";
+import { format } from "date-fns";
 
-export default async function BrsPage({
+export default async function BRSPage({
   params,
   searchParams,
 }: {
@@ -17,172 +9,173 @@ export default async function BrsPage({
   searchParams: Promise<{ ledgerId?: string }>;
 }) {
   const { id } = await params;
-  const { ledgerId } = await searchParams;
   const companyId = parseInt(id);
+  const sp = await searchParams;
+  const ledgerId = sp.ledgerId ? parseInt(sp.ledgerId) : null;
 
+  // 1. Fetch only Bank/Cash ledgers for the dropdown
   const bankLedgers = await prisma.ledger.findMany({
     where: {
       companyId,
-      group: { name: { contains: "Bank" } },
+      group: { name: { contains: "Bank" } }, // Adjust filter based on your group names
     },
+    orderBy: { name: "asc" },
   });
 
-  let entries: any[] = [];
-  let bookBalance = 0;
-  let bankBalance = 0;
+  let transactions: any[] = [];
 
   if (ledgerId) {
-    const lid = parseInt(ledgerId);
-    entries = await prisma.voucherEntry.findMany({
-      where: { ledgerId: lid, voucher: { status: "APPROVED" } },
-      include: { voucher: true },
-      orderBy: { voucher: { date: "asc" } },
+    // 2. Fetch from all 6 separate tables
+    const [sales, purchase, payment, receipt, contra, journal] =
+      await Promise.all([
+        prisma.salesLedgerEntry.findMany({
+          where: { ledgerId, salesVoucher: { status: "APPROVED" } },
+          include: { salesVoucher: true },
+        }),
+        prisma.purchaseLedgerEntry.findMany({
+          where: { ledgerId, purchaseVoucher: { status: "APPROVED" } },
+          include: { purchaseVoucher: true },
+        }),
+        prisma.paymentLedgerEntry.findMany({
+          where: { ledgerId, paymentVoucher: { status: "APPROVED" } },
+          include: { paymentVoucher: true },
+        }),
+        prisma.receiptLedgerEntry.findMany({
+          where: { ledgerId, receiptVoucher: { status: "APPROVED" } },
+          include: { receiptVoucher: true },
+        }),
+        prisma.contraLedgerEntry.findMany({
+          where: { ledgerId, contraVoucher: { status: "APPROVED" } },
+          include: { contraVoucher: true },
+        }),
+        prisma.journalLedgerEntry.findMany({
+          where: { ledgerId, journalVoucher: { status: "APPROVED" } },
+          include: { journalVoucher: true },
+        }),
+      ]);
+
+    // 3. Unify the data structure
+    const formatEntry = (entry: any, type: string, vKey: string) => ({
+      id: entry.id,
+      date: entry[vKey].date,
+      voucherNo: entry[vKey].voucherNo,
+      type: type,
+      amount: entry.amount,
+      narration: entry[vKey].narration,
+      // Add BRS specific fields if they exist in your schema,
+      // or set as null if you plan to add bankDate later
+      bankDate: entry.bankDate || null,
     });
 
-    const ledger = await prisma.ledger.findUnique({ where: { id: lid } });
-    const opening = ledger?.openingBalance || 0;
-
-    const totalDr = entries.reduce(
-      (sum, e) => sum + (e.amount > 0 ? e.amount : 0),
-      0
-    );
-    const totalCr = entries.reduce(
-      (sum, e) => sum + (e.amount < 0 ? Math.abs(e.amount) : 0),
-      0
-    );
-    bookBalance = opening + (totalDr - totalCr);
-
-    const reconciledEntries = entries.filter((e) => e.bankDate !== null);
-    const recDr = reconciledEntries.reduce(
-      (sum, e) => sum + (e.amount > 0 ? e.amount : 0),
-      0
-    );
-    const recCr = reconciledEntries.reduce(
-      (sum, e) => sum + (e.amount < 0 ? Math.abs(e.amount) : 0),
-      0
-    );
-    bankBalance = opening + (recDr - recCr);
+    transactions = [
+      ...sales.map((e) => formatEntry(e, "SALES", "salesVoucher")),
+      ...purchase.map((e) => formatEntry(e, "PURCHASE", "purchaseVoucher")),
+      ...payment.map((e) => formatEntry(e, "PAYMENT", "paymentVoucher")),
+      ...receipt.map((e) => formatEntry(e, "RECEIPT", "receiptVoucher")),
+      ...contra.map((e) => formatEntry(e, "CONTRA", "contraVoucher")),
+      ...journal.map((e) => formatEntry(e, "JOURNAL", "journalVoucher")),
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 
-  const fmt = (n: number) =>
-    n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
-  const diff = bookBalance - bankBalance;
-
   return (
-    <div className="space-y-4 max-w-[1600px] mx-auto">
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-1.5 bg-blue-600 rounded text-white shadow-sm">
-            <Landmark size={18} />
-          </div>
-          <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase">
-            Bank Reconciliation
-          </h1>
-        </div>
-        <Link
-          href={`/companies/${companyId}`}
-          className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 transition-all"
-        >
-          <ArrowLeft size={14} /> Dashboard
-        </Link>
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold tracking-tight">
+          Bank Reconciliation (BRS)
+        </h1>
       </div>
 
-      {/* BANK SELECTOR */}
-      <div className="bg-white p-3 border border-slate-200 rounded-xl shadow-sm">
-        <div className="flex items-center gap-4">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
-            Bank Ledger:
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {bankLedgers.map((l) => {
-              const isActive = ledgerId === l.id.toString();
-              return (
-                <Link
-                  key={l.id}
-                  href={`?ledgerId=${l.id}`}
-                  className={`px-3 py-1 rounded text-[11px] font-bold border transition-all ${
-                    isActive
-                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                      : "bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300"
-                  }`}
+      {/* Ledger Selector */}
+      <form className="flex gap-4 items-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-bold text-slate-500 uppercase">
+            Select Bank Account
+          </label>
+          <select
+            name="ledgerId"
+            defaultValue={ledgerId || ""}
+            className="border rounded-lg p-2 text-sm w-64 outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">-- Choose Ledger --</option>
+            {bankLedgers.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 transition-all">
+          View Transactions
+        </button>
+      </form>
+
+      {/* Transactions Table */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b">
+            <tr>
+              <th className="p-4">Date</th>
+              <th className="p-4">Vch Type</th>
+              <th className="p-4">Vch No</th>
+              <th className="p-4">Narration</th>
+              <th className="p-4 text-right">Debit</th>
+              <th className="p-4 text-right">Credit</th>
+              <th className="p-4 text-center">Bank Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {transactions.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="p-10 text-center text-slate-400 italic"
                 >
-                  {l.name}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {ledgerId && (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 items-start">
-          {/* TRANSACTION TABLE */}
-          <div className="xl:col-span-3 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <table className="w-full text-[12px] text-left">
-              <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-widest">
-                <tr>
-                  <th className="px-4 py-2.5">Date</th>
-                  <th className="px-4 py-2.5">Particulars</th>
-                  <th className="px-4 py-2.5 text-right">Debit (₹)</th>
-                  <th className="px-4 py-2.5 text-right">Credit (₹)</th>
-                  <th className="px-4 py-2.5 text-center bg-blue-800">
-                    Bank Date
-                  </th>
+                  {ledgerId
+                    ? "No transactions found"
+                    : "Select a bank ledger to begin reconciliation"}
+                </td>
+              </tr>
+            ) : (
+              transactions.map((tx) => (
+                <tr
+                  key={`${tx.type}-${tx.id}`}
+                  className="hover:bg-slate-50 transition-colors"
+                >
+                  <td className="p-4">
+                    {format(new Date(tx.date), "dd MMM yyyy")}
+                  </td>
+                  <td className="p-4">
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded border bg-slate-100">
+                      {tx.type}
+                    </span>
+                  </td>
+                  <td className="p-4 font-mono">{tx.voucherNo}</td>
+                  <td className="p-4 text-slate-500 truncate max-w-[200px]">
+                    {tx.narration || "-"}
+                  </td>
+                  <td className="p-4 text-right font-mono text-red-600">
+                    {tx.amount < 0 ? Math.abs(tx.amount).toFixed(2) : ""}
+                  </td>
+                  <td className="p-4 text-right font-mono text-emerald-600">
+                    {tx.amount > 0 ? Math.abs(tx.amount).toFixed(2) : ""}
+                  </td>
+                  <td className="p-4 text-center">
+                    <input
+                      type="date"
+                      className="border rounded px-2 py-1 text-xs"
+                      defaultValue={
+                        tx.bankDate
+                          ? format(new Date(tx.bankDate), "yyyy-MM-dd")
+                          : ""
+                      }
+                    />
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {entries.map((e) => (
-                  <BrsRow key={e.id} entry={e} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* COMPACT SUMMARY SIDEBAR */}
-          <div className="space-y-3">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                Book Balance
-              </p>
-              <h2 className="text-xl font-mono font-black text-slate-900">
-                ₹{fmt(bookBalance)}
-              </h2>
-            </div>
-
-            <div className="bg-emerald-600 p-4 rounded-xl shadow-md text-white">
-              <p className="text-[10px] font-black text-emerald-100 uppercase tracking-widest mb-1">
-                Bank Statement
-              </p>
-              <h2 className="text-xl font-mono font-black">
-                ₹{fmt(bankBalance)}
-              </h2>
-            </div>
-
-            <div
-              className={`p-4 rounded-xl border ${
-                diff === 0 ? "bg-white" : "bg-rose-50 border-rose-100"
-              }`}
-            >
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                Difference
-              </p>
-              <h2
-                className={`text-xl font-mono font-black ${
-                  diff === 0 ? "text-emerald-600" : "text-rose-600"
-                }`}
-              >
-                ₹{fmt(diff)}
-              </h2>
-              {diff !== 0 && (
-                <div className="mt-2 text-[10px] text-rose-700 font-bold uppercase flex items-center gap-1">
-                  <AlertCircle size={10} /> Discrepancy Found
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

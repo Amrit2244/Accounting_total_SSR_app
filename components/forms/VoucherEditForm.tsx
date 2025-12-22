@@ -5,52 +5,30 @@ import { useActionState } from "react";
 import {
   Save,
   Loader2,
-  ListPlus,
   Trash2,
   CheckCircle,
-  ShieldAlert,
-  Calendar,
-  Tag,
-  Package,
-  ArrowRightCircle,
-  Info,
   AlertTriangle,
 } from "lucide-react";
-import { updateVoucher } from "@/app/actions/voucher"; // ✅ Correct Import
+import { updateVoucher, State } from "@/app/actions/voucher";
 import confetti from "canvas-confetti";
 import { useRouter } from "next/navigation";
 
-// ✅ State Interface
-interface VoucherUpdateState {
-  success: boolean;
-  message?: string;
-  error?: string;
-}
-
-// ✅ Wrapper
+// Wrapper to match useActionState signature if needed
+// Note: We cast the return of updateVoucher to ensure type safety
 async function updateVoucherWrapper(
-  prevState: VoucherUpdateState,
+  prevState: State,
   formData: FormData
-): Promise<VoucherUpdateState> {
-  const result = await updateVoucher(prevState, formData);
-  return result as VoucherUpdateState;
+): Promise<State> {
+  return await updateVoucher(prevState, formData);
 }
 
-export default function VoucherEditForm({
-  companyId,
-  voucher,
-  ledgers,
-  stockItems,
-}: any) {
+export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
   const router = useRouter();
 
   const initialData = useMemo(
     () => ({
       date: new Date(voucher.date).toISOString().split("T")[0],
       narration: voucher.narration || "",
-      // Note: We are simplifying rows for the generic logic.
-      // If using complex logic, keep your existing JSON mapping.
-      // For now, let's assume we map standard entries.
     }),
     [voucher]
   );
@@ -58,9 +36,7 @@ export default function VoucherEditForm({
   const [date, setDate] = useState(initialData.date);
   const [narration, setNarration] = useState(initialData.narration);
 
-  // Flatten entries for simple editing (Generic Journal Style)
-  // If it is Sales/Purchase, you might want a specialized form,
-  // but for generic editing of ledger amounts:
+  // Flatten entries for simple editing
   const [entries, setEntries] = useState(
     (voucher.ledgerEntries || []).map((e: any) => ({
       ledgerId: e.ledgerId,
@@ -70,9 +46,11 @@ export default function VoucherEditForm({
     }))
   );
 
-  const [state, action, isPending] = useActionState(updateVoucherWrapper, {
-    success: false,
-  });
+  const initialState: State = { success: false };
+  const [state, action, isPending] = useActionState(
+    updateVoucherWrapper,
+    initialState
+  );
 
   // Calculations
   const totalDr = entries
@@ -81,6 +59,7 @@ export default function VoucherEditForm({
   const totalCr = entries
     .filter((e: any) => e.type === "Cr")
     .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+
   const isBalanced = Math.abs(totalDr - totalCr) < 0.01 && totalDr > 0;
 
   // Effects
@@ -90,7 +69,7 @@ export default function VoucherEditForm({
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ["#F59E0B", "#10B981"], // Amber/Green for update
+        colors: ["#F59E0B", "#10B981"],
       });
       setTimeout(() => {
         router.push(`/companies/${companyId}/vouchers`);
@@ -144,6 +123,12 @@ export default function VoucherEditForm({
         </div>
       </div>
 
+      {state.error && (
+        <div className="bg-rose-50 text-rose-600 p-4 rounded-xl text-sm font-bold border border-rose-200">
+          {state.error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
@@ -154,7 +139,7 @@ export default function VoucherEditForm({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full h-10 border rounded-lg px-3 font-bold text-sm"
+            className="w-full h-10 border rounded-lg px-3 font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -184,7 +169,7 @@ export default function VoucherEditForm({
               <select
                 value={entry.type}
                 onChange={(e) => updateEntry(idx, "type", e.target.value)}
-                className="col-span-2 h-9 border rounded px-2 text-xs font-bold"
+                className="col-span-2 h-9 border rounded px-2 text-xs font-bold outline-none focus:border-blue-500"
               >
                 <option value="Dr">Dr</option>
                 <option value="Cr">Cr</option>
@@ -192,7 +177,7 @@ export default function VoucherEditForm({
               <select
                 value={entry.ledgerId}
                 onChange={(e) => updateEntry(idx, "ledgerId", e.target.value)}
-                className="col-span-6 h-9 border rounded px-2 text-xs font-medium"
+                className="col-span-6 h-9 border rounded px-2 text-xs font-medium outline-none focus:border-blue-500"
               >
                 {ledgers.map((l: any) => (
                   <option key={l.id} value={l.id}>
@@ -204,14 +189,15 @@ export default function VoucherEditForm({
                 type="number"
                 value={entry.amount}
                 onChange={(e) => updateEntry(idx, "amount", e.target.value)}
-                className="col-span-3 h-9 border rounded px-2 text-right text-sm font-mono font-bold"
+                className="col-span-3 h-9 border rounded px-2 text-right text-sm font-mono font-bold outline-none focus:border-blue-500"
               />
               <div className="col-span-1 text-center">
                 <Trash2
                   size={16}
-                  className="text-slate-300 hover:text-red-500 cursor-pointer"
+                  className="text-slate-300 hover:text-red-500 cursor-pointer transition-colors"
+                  // ✅ FIXED: Added explicit type annotation for '_'
                   onClick={() =>
-                    setEntries(entries.filter((_, i) => i !== idx))
+                    setEntries(entries.filter((_: any, i: number) => i !== idx))
                   }
                 />
               </div>
@@ -231,7 +217,7 @@ export default function VoucherEditForm({
               },
             ])
           }
-          className="w-full py-2 bg-slate-50 text-xs font-bold text-blue-600 border-t"
+          className="w-full py-2 bg-slate-50 text-xs font-bold text-blue-600 border-t hover:bg-blue-50 transition-colors"
         >
           + Add Row
         </button>

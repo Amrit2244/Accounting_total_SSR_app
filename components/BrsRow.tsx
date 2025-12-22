@@ -16,12 +16,14 @@ export default function BrsRow({ entry }: Props) {
   const handleDateChange = async (newDate: string) => {
     setDate(newDate);
     setSaved(false);
+
+    // ✅ FIX: Pass 'entry.voucher.type' as the first argument
     if (newDate) {
-      await updateBankDate(entry.id, newDate);
+      await updateBankDate(entry.voucher.type, entry.id, newDate);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } else {
-      await updateBankDate(entry.id, null);
+      await updateBankDate(entry.voucher.type, entry.id, null);
     }
   };
 
@@ -61,7 +63,7 @@ export default function BrsRow({ entry }: Props) {
             type="date"
             value={date}
             onChange={(e) => handleDateChange(e.target.value)}
-            className={`h-7 w-28 px-1 text-[10px] font-bold border rounded bg-white outline-none focus:border-blue-500 transition-colors ${
+            className={`h-7 w-28 px-1 text-[10px] font-bold border rounded bg-white outline-none focus:border-blue-50 transition-colors ${
               date
                 ? "border-emerald-400 text-emerald-700"
                 : "border-slate-200 text-slate-400"

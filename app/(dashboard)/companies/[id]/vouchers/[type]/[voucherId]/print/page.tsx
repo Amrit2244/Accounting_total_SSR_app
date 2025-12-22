@@ -3,48 +3,47 @@ import { notFound } from "next/navigation";
 import PrintTriggerButton from "@/components/PrintTriggerButton";
 import { IndianRupee } from "lucide-react";
 
-// --- FETCH HELPER (Same logic as Details Page) ---
+// --- FETCH HELPER ---
 async function getVoucherForPrint(companyId: number, type: string, id: number) {
   const t = type.toUpperCase();
   const where = { id, companyId };
 
-  // Relations needed for printing
-  const rel = {
+  // 1. Common relations for ALL vouchers
+  const baseRel = {
     company: true,
     ledgerEntries: { include: { ledger: { include: { group: true } } } },
-    inventoryEntries: { include: { stockItem: { include: { unit: true } } } },
     createdBy: true,
     verifiedBy: true,
+  };
+
+  // 2. Relations specifically for Inventory vouchers (Sales/Purchase/Stock Jrnl)
+  const inventoryRel = {
+    ...baseRel,
+    inventoryEntries: { include: { stockItem: { include: { unit: true } } } },
   };
 
   // Adjust for specific tables
   switch (t) {
     case "SALES":
-      return prisma.salesVoucher.findUnique({ where, include: rel });
+      return prisma.salesVoucher.findUnique({ where, include: inventoryRel });
     case "PURCHASE":
-      return prisma.purchaseVoucher.findUnique({ where, include: rel });
-    case "PAYMENT":
-      return prisma.paymentVoucher.findUnique({
+      return prisma.purchaseVoucher.findUnique({
         where,
-        include: { ...rel, inventoryEntries: false },
-      }); // Payment has no inventory
-    case "RECEIPT":
-      return prisma.receiptVoucher.findUnique({
-        where,
-        include: { ...rel, inventoryEntries: false },
-      });
-    case "CONTRA":
-      return prisma.contraVoucher.findUnique({
-        where,
-        include: { ...rel, inventoryEntries: false },
-      });
-    case "JOURNAL":
-      return prisma.journalVoucher.findUnique({
-        where,
-        include: { ...rel, inventoryEntries: false },
+        include: inventoryRel,
       });
     case "STOCK_JOURNAL":
-      return prisma.stockJournal.findUnique({ where, include: rel }); // Stock Journal has inventory
+      return prisma.stockJournal.findUnique({ where, include: inventoryRel });
+
+    // Vouchers WITHOUT Inventory (Use baseRel only)
+    case "PAYMENT":
+      return prisma.paymentVoucher.findUnique({ where, include: baseRel });
+    case "RECEIPT":
+      return prisma.receiptVoucher.findUnique({ where, include: baseRel });
+    case "CONTRA":
+      return prisma.contraVoucher.findUnique({ where, include: baseRel });
+    case "JOURNAL":
+      return prisma.journalVoucher.findUnique({ where, include: baseRel });
+
     default:
       return null;
   }
@@ -69,7 +68,6 @@ export default async function PrintVoucherPage({
   let grandTotal = voucher.totalAmount || 0;
 
   // Use the correct field names from your schema
-  // Your schema uses 'ledgerEntries' and 'inventoryEntries'
   const entries = voucher.ledgerEntries || [];
   const inventory = voucher.inventoryEntries || [];
 
@@ -277,4 +275,3 @@ export default async function PrintVoucherPage({
     </div>
   );
 }
-``;

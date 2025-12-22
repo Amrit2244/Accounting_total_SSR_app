@@ -33,90 +33,20 @@ export default async function DaybookPage({
   const endDate = to ? new Date(to) : new Date(today);
 
   // Adjust time to cover full day
-  const startISO = new Date(startDate.setHours(0, 0, 0, 0));
-  const endISO = new Date(endDate.setHours(23, 59, 59, 999));
+  const startISO = new Date(startDate);
+  startISO.setHours(0, 0, 0, 0);
+
+  const endISO = new Date(endDate);
+  endISO.setHours(23, 59, 59, 999);
 
   // Build Where Clause
   const whereClause: any = {
     companyId,
     date: { gte: startISO, lte: endISO },
+    status: "APPROVED", // Ideally filter only approved/posted vouchers
   };
 
-  // ✅ NEW: Fetch from all 7 tables
-  const promises = [];
-
-  if (!type || type === "ALL" || type === "SALES") {
-    promises.push(
-      prisma.salesVoucher.findMany({
-        where: whereClause,
-        include: { ledgerEntries: { include: { ledger: true } } },
-      })
-    );
-  }
-  if (!type || type === "ALL" || type === "PURCHASE") {
-    promises.push(
-      prisma.purchaseVoucher.findMany({
-        where: whereClause,
-        include: { ledgerEntries: { include: { ledger: true } } },
-      })
-    );
-  }
-  if (!type || type === "ALL" || type === "PAYMENT") {
-    promises.push(
-      prisma.paymentVoucher.findMany({
-        where: whereClause,
-        include: { ledgerEntries: { include: { ledger: true } } },
-      })
-    );
-  }
-  if (!type || type === "ALL" || type === "RECEIPT") {
-    promises.push(
-      prisma.receiptVoucher.findMany({
-        where: whereClause,
-        include: { ledgerEntries: { include: { ledger: true } } },
-      })
-    );
-  }
-  if (!type || type === "ALL" || type === "CONTRA") {
-    promises.push(
-      prisma.contraVoucher.findMany({
-        where: whereClause,
-        include: { ledgerEntries: { include: { ledger: true } } },
-      })
-    );
-  }
-  if (!type || type === "ALL" || type === "JOURNAL") {
-    promises.push(
-      prisma.journalVoucher.findMany({
-        where: whereClause,
-        include: { ledgerEntries: { include: { ledger: true } } },
-      })
-    );
-  }
-  if (!type || type === "ALL" || type === "STOCK_JOURNAL") {
-    promises.push(prisma.stockJournal.findMany({ where: whereClause })); // Stock Journal has no ledger entries, handled separately
-  }
-
-  const results = await Promise.all(promises);
-  let allVouchers: any[] = [];
-
-  // Flatten and normalize
-  results.forEach((group: any[]) => {
-    group.forEach((v) => {
-      // Determine Type based on object keys (simplistic check)
-      let vType = "UNKNOWN";
-      if (v.ledgerEntries) {
-        // Try to deduce type or add type during query if Prisma supported it directly.
-        // Since we pushed in specific order or logic, we can map them if we fetched separately.
-        // But simpler is to rely on the table source.
-        // Actually, the 'type' field is missing in new schema models!
-        // We must inject it based on which table it came from.
-      }
-    });
-  });
-
-  // Since mapping flattened array back to type is hard without tracking index, let's redo fetch cleanly:
-
+  // ✅ OPTIMIZED FETCH: Run one efficient parallel query
   const [sales, purchase, payment, receipt, contra, journal, stock] =
     await Promise.all([
       !type || type === "ALL" || type === "SALES"
@@ -188,7 +118,7 @@ export default async function DaybookPage({
       type: "STOCK_JOURNAL",
       entries: [],
       totalAmount: 0,
-    })), // Stock Journal handling
+    })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Calculate Totals for the View
@@ -266,16 +196,20 @@ export default async function DaybookPage({
                   </td>
                 </tr>
               ) : (
-                vouchers.map((v) => {
+                vouchers.map((v: any) => {
+                  // Cast to 'any' allows accessing partyName safely
                   // Display Logic
-                  // For Sales/Purchase, Party is main ledger.
-                  // For others, usually the first ledger entry is good enough for summary.
                   const primaryEntry = v.entries?.[0];
+
+                  // Safe Access to partyName
+                  const pName = v.partyName ? v.partyName : null;
+
                   const ledgerName =
                     primaryEntry?.ledger?.name ||
-                    v.partyName ||
+                    pName ||
                     v.narration ||
                     "Unknown";
+
                   const amount = v.totalAmount || 0;
 
                   return (

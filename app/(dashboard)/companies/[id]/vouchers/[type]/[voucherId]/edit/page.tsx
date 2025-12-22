@@ -2,12 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileEdit } from "lucide-react";
-import SalesPurchaseEditForm from "@/components/forms/SalesPurchaseEditForm"; // See Step 3
+import SalesPurchaseEditForm from "@/components/forms/SalesPurchaseEditForm";
 
-// Reuse the fetch logic
+// Helper to fetch the correct voucher based on type
 async function getVoucherForEdit(companyId: number, type: string, id: number) {
   const t = type.toUpperCase();
   const where = { id, companyId };
+
+  // Relations to include for the form
   const rel = {
     ledgerEntries: { include: { ledger: true } },
     inventoryEntries: { include: { stockItem: true } },
@@ -18,7 +20,7 @@ async function getVoucherForEdit(companyId: number, type: string, id: number) {
       return prisma.salesVoucher.findUnique({ where, include: rel });
     case "PURCHASE":
       return prisma.purchaseVoucher.findUnique({ where, include: rel });
-    // Add others if needed
+    // Add other cases if you expand editing to Payment/Receipt later
     default:
       return null;
   }
@@ -33,10 +35,14 @@ export default async function EditVoucherPage({
   const companyId = parseInt(id);
   const vId = parseInt(voucherId);
 
+  // 1. Fetch Voucher Data
   const voucher: any = await getVoucherForEdit(companyId, type, vId);
-  if (!voucher) return notFound();
 
-  // Fetch Masters for Dropdowns
+  if (!voucher) {
+    return notFound();
+  }
+
+  // 2. Fetch Masters (Ledgers & Items) for Dropdowns
   const [ledgers, items] = await Promise.all([
     prisma.ledger.findMany({
       where: { companyId },
@@ -47,6 +53,12 @@ export default async function EditVoucherPage({
       select: { id: true, name: true, gstRate: true },
     }),
   ]);
+
+  // 3. Sanitize Ledgers to fix TypeScript "group is possibly null" error
+  const sanitizedLedgers = ledgers.map((l) => ({
+    ...l,
+    group: l.group || { name: "Uncategorized" },
+  }));
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 font-sans">
@@ -75,8 +87,8 @@ export default async function EditVoucherPage({
         <SalesPurchaseEditForm
           voucher={voucher}
           companyId={companyId}
-          type={type.toUpperCase()}
-          ledgers={ledgers}
+          type={type.toUpperCase()} // Passed explicitly now
+          ledgers={sanitizedLedgers}
           items={items}
         />
       </div>

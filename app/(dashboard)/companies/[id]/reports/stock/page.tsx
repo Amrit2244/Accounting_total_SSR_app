@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Package, IndianRupee, ChevronRight } from "lucide-react";
+import { ArrowLeft, Package } from "lucide-react";
 import { notFound } from "next/navigation";
 
 const formatCurrency = (value: number) =>
@@ -19,23 +19,71 @@ export default async function StockSummaryPage({
 
   if (isNaN(companyId)) notFound();
 
+  // 1. Fetch All Stock Items
   const items = await prisma.stockItem.findMany({
     where: { companyId },
     include: {
       unit: true,
-      inventoryEntries: {
-        where: { voucher: { status: "APPROVED" } },
-      },
+      // Note: We can no longer include 'inventoryEntries' because it doesn't exist.
+      // We will fetch entries separately below.
     },
     orderBy: { name: "asc" },
   });
 
+  // 2. Fetch All Movement Entries Separately (Optimization: Fetch all at once for the company)
+  // This avoids N+1 queries loop.
+  const [salesEntries, purchaseEntries, journalEntries] = await Promise.all([
+    prisma.salesItemEntry.findMany({
+      where: {
+        stockItem: { companyId },
+        salesVoucher: { status: "APPROVED" },
+      },
+    }),
+    prisma.purchaseItemEntry.findMany({
+      where: {
+        stockItem: { companyId },
+        purchaseVoucher: { status: "APPROVED" },
+      },
+    }),
+    prisma.stockJournalEntry.findMany({
+      where: {
+        stockItem: { companyId },
+        stockJournal: { status: "APPROVED" },
+      },
+    }),
+  ]);
+
+  // 3. Process Data In-Memory
   const stockData = items.map((item) => {
-    let inwardQty = item.quantity || 0;
+    let inwardQty = item.openingQty || 0;
     let inwardValue = item.openingValue || 0;
     let outwardQty = 0;
 
-    item.inventoryEntries.forEach((e) => {
+    // Filter entries for this specific item
+    const itemSales = salesEntries.filter((e) => e.stockItemId === item.id);
+    const itemPurchases = purchaseEntries.filter(
+      (e) => e.stockItemId === item.id
+    );
+    const itemJournals = journalEntries.filter(
+      (e) => e.stockItemId === item.id
+    );
+
+    // Process Purchases (Inward)
+    itemPurchases.forEach((e) => {
+      const qty = Math.abs(e.quantity);
+      inwardQty += qty;
+      inwardValue += e.amount;
+    });
+
+    // Process Sales (Outward)
+    itemSales.forEach((e) => {
+      outwardQty += Math.abs(e.quantity);
+      // Sales don't add to inward value cost, they reduce stock.
+      // Valuation typically uses Weighted Average Cost (WAC) calculated from Inwards.
+    });
+
+    // Process Journals (Can be Inward or Outward)
+    itemJournals.forEach((e) => {
       if (e.quantity > 0) {
         inwardQty += e.quantity;
         inwardValue += e.amount;
@@ -45,7 +93,11 @@ export default async function StockSummaryPage({
     });
 
     const closingQty = inwardQty - outwardQty;
+
+    // Weighted Average Cost Calculation
     let avgRate = inwardQty > 0 ? inwardValue / inwardQty : 0;
+
+    // Safety check: if stock is negative or zero, value is 0 or based on rate
     const closingValue = closingQty * avgRate;
 
     return {

@@ -12,7 +12,8 @@ import {
   X,
   Package,
 } from "lucide-react";
-import { deleteBulkVouchers } from "@/app/actions/masters";
+// Ensure this path matches where you defined deleteBulkVouchers (likely actions/voucher or actions/masters)
+import { deleteBulkVouchers } from "@/app/actions/voucher";
 import { useRouter } from "next/navigation";
 
 export default function VoucherTable({
@@ -32,7 +33,7 @@ export default function VoucherTable({
     return vouchers.filter(
       (v: any) =>
         v.transactionCode?.toLowerCase().includes(searchId.toLowerCase()) ||
-        v.voucherNo?.toLowerCase().includes(searchId.toLowerCase())
+        v.voucherNo?.toString().toLowerCase().includes(searchId.toLowerCase())
     );
   }, [vouchers, searchId]);
 
@@ -42,6 +43,7 @@ export default function VoucherTable({
         ? []
         : filteredVouchers.map((v: any) => v.id)
     );
+
   const toggleSelectOne = (id: number) =>
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
@@ -49,12 +51,21 @@ export default function VoucherTable({
 
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedIds.length} vouchers permanently?`)) return;
+
+    // ✅ FIX: Map IDs to objects with { id, type } for the server action
+    const itemsToDelete = selectedIds.map((id) => {
+      const v = vouchers.find((item) => item.id === id);
+      return { id, type: v?.type || "" };
+    });
+
     startTransition(async () => {
-      const res = await deleteBulkVouchers(selectedIds, companyId);
+      const res = await deleteBulkVouchers(itemsToDelete, companyId);
       if (res.success) {
         setSelectedIds([]);
         router.refresh();
-      } else alert("Error: " + (res.message || "Could not delete"));
+      } else {
+        alert("Error: " + (res.message || "Could not delete"));
+      }
     });
   };
 
@@ -251,8 +262,9 @@ export default function VoucherTable({
                               className="p-3 text-center border-l border-slate-50 align-top"
                               rowSpan={rowsToRender.length}
                             >
+                              {/* ✅ FIXED: Added type to URL for correct routing */}
                               <Link
-                                href={`/companies/${companyId}/vouchers/${voucher.id}/edit`}
+                                href={`/companies/${companyId}/vouchers/${voucher.type}/${voucher.id}/edit`}
                                 className="text-slate-400 hover:text-blue-600 transition-colors p-1 inline-block"
                               >
                                 <FileEdit size={14} />

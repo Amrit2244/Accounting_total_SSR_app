@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-// Ensure you have this file or remove the import if defining groups inline
 import { DEFAULT_GROUPS, SUB_GROUPS } from "@/lib/constants";
 
 // --- SCHEMAS ---
@@ -63,7 +62,6 @@ export async function createCompany(prevState: any, formData: FormData) {
       });
 
       // 2. Seed Default Primary Groups (e.g., Capital, Current Assets)
-      // Note: We map names to IDs to handle parent-child relationships for sub-groups
       const groupMap = new Map<string, number>();
 
       for (const g of DEFAULT_GROUPS) {
@@ -84,7 +82,7 @@ export async function createCompany(prevState: any, formData: FormData) {
           await tx.group.create({
             data: {
               name: sg.name,
-              nature: sg.nature,
+              // ✅ FIXED: Removed 'nature: sg.nature' because it doesn't exist on SUB_GROUPS items
               parentId: parentId,
               companyId: company.id,
             },
@@ -96,8 +94,6 @@ export async function createCompany(prevState: any, formData: FormData) {
     });
 
     revalidatePath("/");
-    // Return success to let the client redirect or show a success message
-    // We don't redirect here to allow the client to invoke selectCompanyAction immediately if desired
     return { success: true, companyId: newCompany.id };
   } catch (e: any) {
     console.error("Create Company Error:", e);
@@ -111,7 +107,6 @@ export async function selectCompanyAction(formData: FormData) {
   const fyYear = formData.get("fyYear");
 
   if (!companyId || !fyYear) {
-    // You might want to handle this error more gracefully in production
     throw new Error("Invalid Selection");
   }
 
@@ -201,7 +196,6 @@ export async function updateCompany(prevState: any, formData: FormData) {
 // --- 4. DELETE COMPANY ---
 export async function deleteCompany(id: number) {
   try {
-    // Using a Transaction ensures we don't leave partial data if something fails
     await prisma.$transaction([
       // 1. Delete Ledger & Group Data
       prisma.ledger.deleteMany({ where: { companyId: id } }),

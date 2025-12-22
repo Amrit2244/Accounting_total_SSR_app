@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
-import { redirect } from "next/navigation"; // Add this at the top!
+import { redirect } from "next/navigation";
 
 const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
@@ -82,7 +82,6 @@ const UpdateLedgerSchema = z.object({
 
 const StockGroupSchema = z.object({
   name: z.string().min(1, "Group name is required"),
-  // ✅ FIX: Transform 0, empty string, or NaN into NULL
   parentId: z.coerce
     .number()
     .optional()
@@ -96,7 +95,7 @@ const StockItemSchema = z.object({
   unitId: z.coerce.number().min(1, "Unit is required"),
   partNumber: z.string().optional().default(""),
   openingQty: z.coerce.number().default(0),
-  openingRate: z.coerce.number().default(0), // Used for calc, removed before DB
+  openingRate: z.coerce.number().default(0),
   companyId: z.coerce.number(),
   minStock: z.coerce.number().optional().default(0),
   gstRate: z.coerce.number().optional().default(0),
@@ -116,6 +115,7 @@ const VoucherEntrySchema = z.object({
 const UpdateVoucherSchema = z.object({
   voucherId: z.coerce.number(),
   companyId: z.coerce.number(),
+  type: z.string().min(1), // ✅ Added Type to schema
   date: z.string().min(1),
   narration: z
     .string()
@@ -198,12 +198,11 @@ export async function createStockGroup(prevState: State, formData: FormData) {
   }
 
   try {
-    // validatedFields.data.parentId is now correctly NULL if it was 0
     await prisma.stockGroup.create({
       data: {
         name: validatedFields.data.name,
         companyId: validatedFields.data.companyId,
-        parentId: validatedFields.data.parentId, // This will be null or a valid ID
+        parentId: validatedFields.data.parentId,
       },
     });
 
@@ -236,7 +235,6 @@ export async function createUnit(prevState: State, formData: FormData) {
   }
 }
 
-// ✅ FIXED: createStockItem with explicit mapping
 export async function createStockItem(prevState: State, formData: FormData) {
   const validatedFields = StockItemSchema.safeParse(
     Object.fromEntries(formData)
@@ -249,13 +247,11 @@ export async function createStockItem(prevState: State, formData: FormData) {
     };
   }
 
-  // Destructure to separate 'openingRate' from the data sent to DB
   const { openingRate, ...itemData } = validatedFields.data;
 
   try {
     await prisma.stockItem.create({
       data: {
-        // Explicitly map allowed fields
         name: itemData.name,
         groupId: itemData.groupId,
         unitId: itemData.unitId,
@@ -263,11 +259,9 @@ export async function createStockItem(prevState: State, formData: FormData) {
         partNumber: itemData.partNumber,
         minStock: itemData.minStock,
         gstRate: itemData.gstRate,
-
-        // Inventory Logic
         openingQty: itemData.openingQty,
-        quantity: itemData.openingQty, // Live stock starts equal to opening
-        openingValue: itemData.openingQty * openingRate, // Calculate Value here
+        quantity: itemData.openingQty,
+        openingValue: itemData.openingQty * openingRate,
       },
     });
 
@@ -278,14 +272,6 @@ export async function createStockItem(prevState: State, formData: FormData) {
     return { message: "Database Error: " + error.message, success: false };
   }
 }
-
-// ✅ UPDATE: Stock Journal with Maker-Checker Logic
-// ... keep existing imports ...
-
-// ✅ 1. STRICT CREATE ACTION (Always Pending)
-// In app/actions/masters.ts
-
-// In app/actions/masters.ts
 
 export async function createStockJournal(prevState: any, formData: FormData) {
   const companyId = parseInt(formData.get("companyId") as string);
@@ -303,11 +289,10 @@ export async function createStockJournal(prevState: any, formData: FormData) {
     const userId = await getCurrentUserId();
     if (!userId) return { error: "Unauthorized" };
 
-    const status = "PENDING"; // Always Pending for Maker-Checker
+    const status = "PENDING";
 
     const entries: any[] = [];
 
-    // Consumption logic...
     consumption.forEach((i: any) =>
       entries.push({
         stockItemId: parseInt(i.sid),
@@ -318,7 +303,6 @@ export async function createStockJournal(prevState: any, formData: FormData) {
       })
     );
 
-    // Production logic...
     production.forEach((i: any) =>
       entries.push({
         stockItemId: parseInt(i.sid),
@@ -329,16 +313,14 @@ export async function createStockJournal(prevState: any, formData: FormData) {
       })
     );
 
-    // ✅ FIX: Generate Pure 5-Digit Code (e.g., "49281")
     const randomCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     await prisma.stockJournal.create({
       data: {
         companyId,
         date,
-        // Internal ID can have prefix, but Transaction Code must be pure digits
         voucherNo: "SJ-" + randomCode,
-        transactionCode: randomCode, // <--- THIS FIXES THE FORMAT ISSUE
+        transactionCode: randomCode,
         narration,
         status: status,
         createdById: userId,
@@ -349,7 +331,6 @@ export async function createStockJournal(prevState: any, formData: FormData) {
 
     revalidatePath(`/companies/${companyId}/inventory`);
 
-    // ✅ SUCCESS MESSAGE: Shows the 5-digit code for verification
     return {
       success: true,
       message: `Stock Journal Posted. TX Code: ${randomCode}`,
@@ -359,7 +340,7 @@ export async function createStockJournal(prevState: any, formData: FormData) {
     return { error: "Failed: " + error.message };
   }
 }
-// ✅ 2. NEW: VERIFY ACTION (For the Checker to call later)
+
 export async function verifyStockJournal(
   voucherId: number,
   isApproved: boolean
@@ -370,24 +351,22 @@ export async function verifyStockJournal(
 
     const status = isApproved ? "APPROVED" : "REJECTED";
 
-    // 1. Update Status
     const journal = await prisma.stockJournal.update({
       where: { id: voucherId },
       data: {
         status: status,
-        verifiedById: userId, // Tracks WHO verified it
+        verifiedById: userId,
       },
       include: { inventoryEntries: true },
     });
 
-    // 2. IF APPROVED: Update Real Stock Quantities
     if (isApproved) {
       await prisma.$transaction(async (tx) => {
         for (const entry of journal.inventoryEntries) {
           await tx.stockItem.update({
             where: { id: entry.stockItemId },
             data: {
-              quantity: { increment: entry.quantity }, // Adds production, subtracts consumption
+              quantity: { increment: entry.quantity },
             },
           });
         }
@@ -400,6 +379,7 @@ export async function verifyStockJournal(
     return { success: false, message: error.message };
   }
 }
+
 // ==========================================
 // 3. Update Actions
 // ==========================================
@@ -439,6 +419,7 @@ export async function updateLedger(prevState: State, formData: FormData) {
   }
 }
 
+// ✅ FIXED: Update Voucher Logic for Split Tables
 export async function updateVoucher(prevState: State, formData: FormData) {
   const rawData = Object.fromEntries(formData.entries());
   const validatedFields = UpdateVoucherSchema.safeParse(rawData);
@@ -454,6 +435,7 @@ export async function updateVoucher(prevState: State, formData: FormData) {
   const {
     voucherId,
     companyId,
+    type,
     date,
     narration,
     structuredEntries,
@@ -465,100 +447,75 @@ export async function updateVoucher(prevState: State, formData: FormData) {
     if (!currentUserId)
       return { success: false, message: "Unauthorized. Session expired." };
 
-    const current = await prisma.voucher.findUnique({
-      where: { id: voucherId },
-      include: { entries: true, inventory: true },
-    });
-
-    if (!current) return { success: false, message: "Voucher not found." };
-
-    const normalizeAccounting = (arr: any[]) =>
-      JSON.stringify(
-        arr
-          .map((e) => ({
-            lid: Number(e.ledgerId),
-            amt: Number(e.amount).toFixed(2),
-          }))
-          .sort((a, b) => a.lid - b.lid)
-      );
-    const normalizeInventory = (arr: any[]) =>
-      JSON.stringify(
-        arr
-          .map((i) => ({
-            sid: Number(i.stockItemId),
-            qty: Number(i.quantity).toFixed(2),
-            rate: Number(i.rate).toFixed(2),
-          }))
-          .sort((a, b) => a.sid - b.sid)
-      );
-
-    const isDateSame =
-      new Date(date).toISOString().split("T")[0] ===
-      new Date(current.date).toISOString().split("T")[0];
-    const isNarrationSame = (current.narration || "") === (narration || "");
-    const isAccountingSame =
-      normalizeAccounting(structuredEntries) ===
-      normalizeAccounting(current.entries);
-    const isInventorySame =
-      normalizeInventory(structuredInventory) ===
-      normalizeInventory(current.inventory);
-
-    if (isDateSame && isNarrationSame && isAccountingSame && isInventorySame) {
-      return { success: true, message: "Voucher is already up to date." };
-    }
-
     const newTxCode = Math.floor(10000 + Math.random() * 90000).toString();
-    const itemIds = structuredInventory.map((i: any) => Number(i.stockItemId));
-    const stockItemsMaster = await prisma.stockItem.findMany({
-      where: { id: { in: itemIds } },
-      select: { id: true, name: true },
-    });
+    const totalAmount = structuredEntries.reduce(
+      (sum: number, e: any) => sum + (e.amount > 0 ? e.amount : 0),
+      0
+    );
 
+    // Common update data
+    const updateData = {
+      date: new Date(date),
+      narration,
+      status: "PENDING", // Reset to pending on edit
+      transactionCode: newTxCode,
+      updatedAt: new Date(),
+      createdById: currentUserId,
+      verifiedById: null, // Clear verification
+      totalAmount,
+    };
+
+    const ledgerEntriesCreate = structuredEntries.map((e: any) => ({
+      ledgerId: Number(e.ledgerId),
+      amount: Number(e.amount),
+    }));
+
+    // Perform Update based on Type
     await prisma.$transaction(async (tx) => {
-      await tx.voucher.update({
-        where: { id: voucherId },
-        data: {
-          date: new Date(date),
-          narration: narration,
-          status: "PENDING",
-          transactionCode: newTxCode,
-          updatedAt: new Date(),
-          createdById: currentUserId,
-          verifiedById: null,
-          totalAmount: structuredEntries.reduce(
-            (sum: number, e: any) => sum + (e.amount > 0 ? e.amount : 0),
-            0
-          ),
-        },
-      });
-
-      await tx.voucherEntry.deleteMany({ where: { voucherId } });
-      await tx.voucherEntry.createMany({
-        data: structuredEntries.map((e: any) => ({
-          voucherId: voucherId,
-          ledgerId: Number(e.ledgerId),
-          amount: Number(e.amount),
-        })),
-      });
-
-      await tx.inventoryEntry.deleteMany({ where: { voucherId } });
-      if (structuredInventory.length > 0) {
-        await tx.inventoryEntry.createMany({
-          data: structuredInventory.map((i: any) => {
-            const itemMaster = stockItemsMaster.find(
-              (si) => si.id === Number(i.stockItemId)
-            );
-            return {
-              voucherId: voucherId,
-              stockItemId: Number(i.stockItemId),
-              itemName: itemMaster?.name || "Unknown Item",
-              quantity: Number(i.quantity),
-              rate: Number(i.rate),
-              amount: Number(i.quantity) * Number(i.rate),
-            };
-          }),
+      if (type === "SALES") {
+        await tx.salesVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerEntriesCreate },
+            inventoryEntries: {
+              deleteMany: {},
+              create: structuredInventory.map((i: any) => ({
+                stockItemId: Number(i.stockItemId),
+                quantity: Number(i.quantity),
+                rate: Number(i.rate),
+                amount: Number(i.quantity) * Number(i.rate),
+              })),
+            },
+          },
+        });
+      } else if (type === "PURCHASE") {
+        await tx.purchaseVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerEntriesCreate },
+            inventoryEntries: {
+              deleteMany: {},
+              create: structuredInventory.map((i: any) => ({
+                stockItemId: Number(i.stockItemId),
+                quantity: Number(i.quantity),
+                rate: Number(i.rate),
+                amount: Number(i.quantity) * Number(i.rate),
+              })),
+            },
+          },
+        });
+      } else if (type === "PAYMENT") {
+        await tx.paymentVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerEntriesCreate },
+          },
         });
       }
+      // Add RECEIPT, CONTRA, JOURNAL blocks similarly if needed for edit
     });
 
     revalidatePath(`/companies/${companyId}/vouchers`);
@@ -584,7 +541,6 @@ export async function updateStockItem(prevState: State, formData: FormData) {
   const data = validatedFields.data;
 
   try {
-    // 1. Perform Update
     await prisma.stockItem.update({
       where: { id: parseInt(id) },
       data: {
@@ -596,7 +552,6 @@ export async function updateStockItem(prevState: State, formData: FormData) {
         minStock: data.minStock,
         gstRate: data.gstRate,
         openingQty: data.openingQty,
-        // Calculate Value
         openingValue: data.openingQty * data.openingRate,
       },
     });
@@ -605,7 +560,6 @@ export async function updateStockItem(prevState: State, formData: FormData) {
     return { message: "Database Error: " + error.message, success: false };
   }
 
-  // 2. Revalidate & Redirect (Must be OUTSIDE the try/catch block)
   revalidatePath(`/companies/${data.companyId}/inventory`);
   redirect(`/companies/${data.companyId}/inventory`);
 }
@@ -613,7 +567,6 @@ export async function updateStockItem(prevState: State, formData: FormData) {
 // ==========================================
 // 4. Delete & Bulk Actions
 // ==========================================
-// app/actions/masters.ts
 
 export async function deleteBulkLedgers(
   ledgerIds: number[],
@@ -624,9 +577,6 @@ export async function deleteBulkLedgers(
   }
 
   try {
-    // 1. DIRECT DELETE ATTEMPT
-    // We removed the manual 'findFirst' check.
-    // If Prisma finds constraints, it will throw an error automatically.
     await prisma.ledger.deleteMany({
       where: {
         id: { in: ledgerIds },
@@ -641,9 +591,6 @@ export async function deleteBulkLedgers(
     };
   } catch (error: any) {
     console.error("Delete Error:", error);
-
-    // 2. BETTER ERROR HANDLING
-    // Check if the error code P2003 (Foreign Key Constraint) occurred
     if (error.code === "P2003") {
       return {
         success: false,
@@ -651,7 +598,6 @@ export async function deleteBulkLedgers(
           "Cannot delete: This Ledger is used in a Voucher, Stock Item, or Group.",
       };
     }
-
     return {
       success: false,
       message: "Database Error: " + (error.message || "Unknown error"),
@@ -659,16 +605,12 @@ export async function deleteBulkLedgers(
   }
 }
 
-// app/actions/masters.ts
-
-// ✅ OPTIMIZED: Groups IDs and deletes in batches to prevent Timeout (P2028)
 export async function deleteBulkVouchers(
   items: { id: number; type: string }[],
   companyId: number
 ) {
   if (!items || items.length === 0) return { error: "No items selected" };
 
-  // 1. Group IDs by Type to avoid looping in DB
   const salesIds = items.filter((i) => i.type === "SALES").map((i) => i.id);
   const purchaseIds = items
     .filter((i) => i.type === "PURCHASE")
@@ -682,10 +624,8 @@ export async function deleteBulkVouchers(
     .map((i) => i.id);
 
   try {
-    // 2. Perform Batch Deletion in a Transaction with increased timeout
     await prisma.$transaction(
       async (tx) => {
-        // --- SALES ---
         if (salesIds.length > 0) {
           await tx.salesItemEntry.deleteMany({
             where: { salesId: { in: salesIds } },
@@ -695,8 +635,6 @@ export async function deleteBulkVouchers(
           });
           await tx.salesVoucher.deleteMany({ where: { id: { in: salesIds } } });
         }
-
-        // --- PURCHASE ---
         if (purchaseIds.length > 0) {
           await tx.purchaseItemEntry.deleteMany({
             where: { purchaseId: { in: purchaseIds } },
@@ -708,8 +646,6 @@ export async function deleteBulkVouchers(
             where: { id: { in: purchaseIds } },
           });
         }
-
-        // --- PAYMENT ---
         if (paymentIds.length > 0) {
           await tx.paymentLedgerEntry.deleteMany({
             where: { paymentId: { in: paymentIds } },
@@ -718,8 +654,6 @@ export async function deleteBulkVouchers(
             where: { id: { in: paymentIds } },
           });
         }
-
-        // --- RECEIPT ---
         if (receiptIds.length > 0) {
           await tx.receiptLedgerEntry.deleteMany({
             where: { receiptId: { in: receiptIds } },
@@ -728,8 +662,6 @@ export async function deleteBulkVouchers(
             where: { id: { in: receiptIds } },
           });
         }
-
-        // --- CONTRA ---
         if (contraIds.length > 0) {
           await tx.contraLedgerEntry.deleteMany({
             where: { contraId: { in: contraIds } },
@@ -738,8 +670,6 @@ export async function deleteBulkVouchers(
             where: { id: { in: contraIds } },
           });
         }
-
-        // --- JOURNAL ---
         if (journalIds.length > 0) {
           await tx.journalLedgerEntry.deleteMany({
             where: { journalId: { in: journalIds } },
@@ -748,8 +678,6 @@ export async function deleteBulkVouchers(
             where: { id: { in: journalIds } },
           });
         }
-
-        // --- STOCK JOURNAL ---
         if (stockJournalIds.length > 0) {
           await tx.stockJournalEntry.deleteMany({
             where: { stockJournalId: { in: stockJournalIds } },
@@ -759,9 +687,7 @@ export async function deleteBulkVouchers(
           });
         }
       },
-      {
-        timeout: 20000, // Increase timeout to 20 seconds (default is 5s)
-      }
+      { timeout: 20000 }
     );
 
     revalidatePath(`/companies/${companyId}/vouchers`);
@@ -811,43 +737,80 @@ export async function deleteStockItem(id: number) {
   }
 }
 
-// ✅ NEW: Unified Search for Verification Box
-// This checks BOTH standard Vouchers and Stock Journals
+// ✅ FIXED: Unified Search for all Voucher Types
 export async function getVoucherByTxCode(txCode: string) {
   if (!txCode) return { success: false, message: "Code required" };
 
   try {
-    // 1. Try finding in Standard Vouchers (Sales, Purchase, Journal, etc.)
-    const voucher = await prisma.voucher.findUnique({
-      where: { transactionCode: txCode },
-      include: {
-        createdBy: { select: { name: true } },
-        entries: { include: { ledger: true } },
-      },
-    });
+    // Check all tables concurrently
+    const [sales, purchase, payment, receipt, contra, journal, stock] =
+      await Promise.all([
+        prisma.salesVoucher.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            ledgerEntries: { include: { ledger: true } },
+          },
+        }),
+        prisma.purchaseVoucher.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            ledgerEntries: { include: { ledger: true } },
+          },
+        }),
+        prisma.paymentVoucher.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            ledgerEntries: { include: { ledger: true } },
+          },
+        }),
+        prisma.receiptVoucher.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            ledgerEntries: { include: { ledger: true } },
+          },
+        }),
+        prisma.contraVoucher.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            ledgerEntries: { include: { ledger: true } },
+          },
+        }),
+        prisma.journalVoucher.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            ledgerEntries: { include: { ledger: true } },
+          },
+        }),
+        prisma.stockJournal.findUnique({
+          where: { transactionCode: txCode },
+          include: {
+            createdBy: { select: { name: true } },
+            inventoryEntries: { include: { stockItem: true } },
+          },
+        }),
+      ]);
 
-    if (voucher) {
+    const result = sales || purchase || payment || receipt || contra || journal;
+
+    if (result) {
       return {
         success: true,
         type: "STANDARD",
-        data: voucher,
+        data: { ...result, entries: result.ledgerEntries }, // Map to 'entries' for frontend compat
       };
     }
 
-    // 2. Try finding in Stock Journals (The Missing Part!)
-    const stockJournal = await prisma.stockJournal.findUnique({
-      where: { transactionCode: txCode },
-      include: {
-        createdBy: { select: { name: true } },
-        inventoryEntries: { include: { stockItem: true } },
-      },
-    });
-
-    if (stockJournal) {
+    if (stock) {
       return {
         success: true,
-        type: "STOCK_JOURNAL", // Tells frontend this is a manufacturing entry
-        data: stockJournal,
+        type: "STOCK_JOURNAL",
+        data: stock,
       };
     }
 

@@ -11,6 +11,16 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
+// ✅ 1. Define and Export State Type
+export type State = {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  code?: string;
+  txid?: string;
+  id?: number;
+};
+
 // --- Auth Helper ---
 async function getCurrentUserId(): Promise<number | null> {
   try {
@@ -63,7 +73,10 @@ async function getNextAutoNumber(companyId: number, type: string) {
 // ==========================================
 // 1. CREATE VOUCHER ACTION
 // ==========================================
-export async function createVoucher(prevState: any, formData: FormData) {
+export async function createVoucher(
+  prevState: State,
+  formData: FormData
+): Promise<State> {
   const data = Object.fromEntries(formData);
   const result = VoucherSchema.safeParse(data);
 
@@ -221,9 +234,12 @@ export async function createVoucher(prevState: any, formData: FormData) {
 }
 
 // ==========================================
-// 2. UPDATE VOUCHER (Maker-Checker Reset)
+// 2. UPDATE VOUCHER
 // ==========================================
-export async function updateVoucher(prevState: any, formData: FormData) {
+export async function updateVoucher(
+  prevState: State,
+  formData: FormData
+): Promise<State> {
   const currentUserId = await getCurrentUserId();
   if (!currentUserId) return { error: "Unauthorized" };
 
@@ -256,34 +272,13 @@ export async function updateVoucher(prevState: any, formData: FormData) {
 
   const newTxCode = Math.floor(10000 + Math.random() * 90000).toString();
 
-  let db: any;
-  if (type === "SALES") db = prisma.salesVoucher;
-  else if (type === "PURCHASE") db = prisma.purchaseVoucher;
-  else if (type === "PAYMENT") db = prisma.paymentVoucher;
-  else if (type === "RECEIPT") db = prisma.receiptVoucher;
-  else if (type === "CONTRA") db = prisma.contraVoucher;
-  else if (type === "JOURNAL") db = prisma.journalVoucher;
-
-  if (!db) return { error: "Invalid Voucher Type" };
-
   try {
-    await prisma.$transaction(async (tx: any) => {
-      if (type === "SALES" || type === "PURCHASE") {
-        await tx.ledgerEntry.deleteMany({
-          where: { [type.toLowerCase() + "Id"]: voucherId },
-        });
-        await tx.inventoryEntry.deleteMany({
-          where: { [type.toLowerCase() + "Id"]: voucherId },
-        });
-      } else {
-        await tx.ledgerEntry.deleteMany({
-          where: { [type.toLowerCase() + "Id"]: voucherId },
-        });
-      }
-
+    await prisma.$transaction(async (tx) => {
+      // 1. Prepare Data specific to type
       let ledgerData = [];
       let inventoryData = [];
 
+      // Sales/Purchase Logic (Fixed Ledger Slots)
       if (type === "SALES" || type === "PURCHASE") {
         ledgerData.push({
           ledgerId: partyLedgerId!,
@@ -311,7 +306,9 @@ export async function updateVoucher(prevState: any, formData: FormData) {
           amount: parseFloat(i.qty) * parseFloat(i.rate),
           unit: "",
         }));
-      } else {
+      }
+      // Standard Vouchers Logic (Dynamic Rows)
+      else {
         ledgerData = rows.map((e: any) => ({
           ledgerId: parseInt(e.ledgerId),
           amount:
@@ -321,26 +318,69 @@ export async function updateVoucher(prevState: any, formData: FormData) {
         }));
       }
 
-      const updatePayload: any = {
+      // 2. Execute Update based on Specific Table
+      const updateData = {
         date,
         narration,
-        totalAmount,
+        totalAmount: Math.abs(totalAmount),
         transactionCode: newTxCode,
         createdById: currentUserId,
-        verifiedById: null,
+        verifiedById: null, // Reset verification
         status: "PENDING",
         updatedAt: new Date(),
-        ledgerEntries: { create: ledgerData },
       };
 
-      if (inventoryData.length > 0) {
-        updatePayload.inventoryEntries = { create: inventoryData };
+      if (type === "SALES") {
+        await tx.salesVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerData },
+            inventoryEntries: { deleteMany: {}, create: inventoryData },
+          },
+        });
+      } else if (type === "PURCHASE") {
+        await tx.purchaseVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerData },
+            inventoryEntries: { deleteMany: {}, create: inventoryData },
+          },
+        });
+      } else if (type === "PAYMENT") {
+        await tx.paymentVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerData },
+          },
+        });
+      } else if (type === "RECEIPT") {
+        await tx.receiptVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerData },
+          },
+        });
+      } else if (type === "CONTRA") {
+        await tx.contraVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerData },
+          },
+        });
+      } else if (type === "JOURNAL") {
+        await tx.journalVoucher.update({
+          where: { id: voucherId },
+          data: {
+            ...updateData,
+            ledgerEntries: { deleteMany: {}, create: ledgerData },
+          },
+        });
       }
-
-      await db.update({
-        where: { id: voucherId },
-        data: updatePayload,
-      });
     });
 
     revalidatePath(`/companies/${companyId}/vouchers`);
@@ -354,6 +394,97 @@ export async function updateVoucher(prevState: any, formData: FormData) {
 // ==========================================
 // 3. DELETE VOUCHER
 // ==========================================
+
+// ... existing imports and code ...
+
+// ==========================================
+// 9. BULK DELETE VOUCHERS
+// ==========================================
+export async function deleteBulkVouchers(
+  items: { id: number; type: string }[],
+  companyId: number
+) {
+  if (!items || items.length === 0) return { error: "No items selected" };
+
+  // Group IDs by Type to perform batch deletions efficiently
+  const salesIds = items.filter((i) => i.type === "SALES").map((i) => i.id);
+  const purchaseIds = items
+    .filter((i) => i.type === "PURCHASE")
+    .map((i) => i.id);
+  const paymentIds = items.filter((i) => i.type === "PAYMENT").map((i) => i.id);
+  const receiptIds = items.filter((i) => i.type === "RECEIPT").map((i) => i.id);
+  const contraIds = items.filter((i) => i.type === "CONTRA").map((i) => i.id);
+  const journalIds = items.filter((i) => i.type === "JOURNAL").map((i) => i.id);
+  const stockJournalIds = items
+    .filter((i) => i.type === "STOCK_JOURNAL")
+    .map((i) => i.id);
+
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        // --- SALES ---
+        if (salesIds.length > 0) {
+          // Delete child entries first (Cascade usually handles this, but explicit is safer for some DB configs)
+          await tx.salesVoucher.deleteMany({ where: { id: { in: salesIds } } });
+        }
+
+        // --- PURCHASE ---
+        if (purchaseIds.length > 0) {
+          await tx.purchaseVoucher.deleteMany({
+            where: { id: { in: purchaseIds } },
+          });
+        }
+
+        // --- PAYMENT ---
+        if (paymentIds.length > 0) {
+          await tx.paymentVoucher.deleteMany({
+            where: { id: { in: paymentIds } },
+          });
+        }
+
+        // --- RECEIPT ---
+        if (receiptIds.length > 0) {
+          await tx.receiptVoucher.deleteMany({
+            where: { id: { in: receiptIds } },
+          });
+        }
+
+        // --- CONTRA ---
+        if (contraIds.length > 0) {
+          await tx.contraVoucher.deleteMany({
+            where: { id: { in: contraIds } },
+          });
+        }
+
+        // --- JOURNAL ---
+        if (journalIds.length > 0) {
+          await tx.journalVoucher.deleteMany({
+            where: { id: { in: journalIds } },
+          });
+        }
+
+        // --- STOCK JOURNAL ---
+        if (stockJournalIds.length > 0) {
+          await tx.stockJournal.deleteMany({
+            where: { id: { in: stockJournalIds } },
+          });
+        }
+      },
+      { timeout: 20000 } // Increased timeout for bulk ops
+    );
+
+    revalidatePath(`/companies/${companyId}/vouchers`);
+
+    return {
+      success: true,
+      message: `Successfully deleted ${items.length} vouchers.`,
+    };
+  } catch (error: any) {
+    console.error("Bulk Delete Error:", error);
+    return { success: false, message: "Database Error: " + error.message };
+  }
+}
+
 export async function deleteVoucher(voucherId: number, type: string) {
   try {
     if (type === "SALES")
@@ -474,59 +605,37 @@ export async function getVouchers(
   endDate?: Date,
   searchQuery?: string
 ) {
-  // 1. Define base filters (Company + Dates)
   const baseWhere: any = { companyId };
   if (startDate && endDate) {
     baseWhere.date = { gte: startDate, lte: endDate };
   }
 
-  // 2. Prepare Search Filter
-  let searchFilter: any = {};
-  if (searchQuery) {
-    searchFilter = {
-      OR: [
-        { transactionCode: { contains: searchQuery } },
-        { narration: { contains: searchQuery } },
-        {
-          ledgerEntries: {
-            some: {
-              ledger: {
-                name: { contains: searchQuery },
-              },
-            },
-          },
-        },
-        // We add voucherNo as a string search here
-        { voucherNo: { contains: searchQuery } },
-      ],
-    };
-  }
+  // --- Prepare Search Filters ---
+  let searchFilterString: any = {};
+  let searchFilterInt: any = {};
 
-  // 3. Prepare Integer-specific Filter for tables where voucherNo is Int
-  // (Payment, Receipt, Contra, Journal often use Auto-Increment Ints)
-  let searchFilterWithInt: any = { ...searchFilter };
   if (searchQuery) {
-    const searchNumber = parseInt(searchQuery);
-    if (!isNaN(searchNumber)) {
-      // Create a specific filter for Integer tables
-      searchFilterWithInt = {
-        OR: [
-          ...searchFilter.OR.filter((condition: any) => !condition.voucherNo), // Remove the String version
-          { voucherNo: searchNumber }, // Add the Integer version
-          { transactionCode: { contains: searchQuery } },
-          { narration: { contains: searchQuery } },
-          {
-            ledgerEntries: {
-              some: { ledger: { name: { contains: searchQuery } } },
-            },
-          },
-        ],
+    const commonOR = [
+      { transactionCode: { contains: searchQuery } },
+      { narration: { contains: searchQuery } },
+      {
+        ledgerEntries: {
+          some: { ledger: { name: { contains: searchQuery } } },
+        },
+      },
+    ];
+
+    searchFilterString = {
+      OR: [...commonOR, { voucherNo: { contains: searchQuery } }],
+    };
+
+    const searchNum = parseInt(searchQuery);
+    if (!isNaN(searchNum)) {
+      searchFilterInt = {
+        OR: [...commonOR, { voucherNo: searchNum }],
       };
     } else {
-      // If it's not a number, remove voucherNo from Integer tables to prevent crash
-      searchFilterWithInt = {
-        OR: searchFilter.OR.filter((condition: any) => !condition.voucherNo),
-      };
+      searchFilterInt = { OR: commonOR };
     }
   }
 
@@ -539,35 +648,33 @@ export async function getVouchers(
   try {
     const [sales, purchase, payment, receipt, contra, journal, stockJournal] =
       await Promise.all([
-        // SALES & PURCHASE: Usually String voucherNo
         prisma.salesVoucher.findMany({
-          where: { ...baseWhere, ...searchFilter },
+          where: { ...baseWhere, ...searchFilterString },
           orderBy: { date: "desc" },
           include: { ...includeEntries, partyLedger: true },
         }),
         prisma.purchaseVoucher.findMany({
-          where: { ...baseWhere, ...searchFilter },
+          where: { ...baseWhere, ...searchFilterString },
           orderBy: { date: "desc" },
           include: { ...includeEntries, partyLedger: true },
         }),
-        // PAYMENT, RECEIPT, CONTRA, JOURNAL: Check if your schema uses Int
         prisma.paymentVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterWithInt },
+          where: { ...baseWhere, ...searchFilterInt },
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
         prisma.receiptVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterWithInt },
+          where: { ...baseWhere, ...searchFilterInt },
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
         prisma.contraVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterWithInt },
+          where: { ...baseWhere, ...searchFilterInt },
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
         prisma.journalVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterWithInt },
+          where: { ...baseWhere, ...searchFilterInt },
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
@@ -626,12 +733,12 @@ export async function getVouchers(
     return allVouchers;
   } catch (error) {
     console.error("Search Error:", error);
-    return []; // Return empty array so UI doesn't crash
+    return [];
   }
 }
 
 // ==========================================
-// 7. FIND VOUCHER BY TXID
+// 7. FIND VOUCHER BY TXID (Lightweight Lookup)
 // ==========================================
 export async function findVoucherByCode(txCode: string, companyId: number) {
   const where = { transactionCode: txCode, companyId };
@@ -685,7 +792,7 @@ export async function findVoucherByCode(txCode: string, companyId: number) {
 }
 
 // ==========================================
-// 8. GET FULL VOUCHER BY CODE
+// 8. GET FULL VOUCHER BY CODE (For Verification Page)
 // ==========================================
 export async function getVoucherByCode(code: string, companyId: number) {
   const where = { transactionCode: code, companyId };

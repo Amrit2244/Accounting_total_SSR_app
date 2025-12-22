@@ -58,6 +58,12 @@ export default async function VerifyPage({
   const isMaker = voucher.createdById === currentUserId;
   const isInventoryVoucher = voucher.inventory && voucher.inventory.length > 0;
 
+  // ✅ SAFE ACCESS: Check if 'reference' exists on this voucher type
+  const reference = "reference" in voucher ? (voucher as any).reference : null;
+  // ✅ SAFE ACCESS: Check if 'attachmentUrl' exists
+  const attachmentUrl =
+    "attachmentUrl" in voucher ? (voucher as any).attachmentUrl : null;
+
   return (
     <div className="max-w-3xl mx-auto space-y-4 py-6 font-sans">
       <Link
@@ -108,15 +114,15 @@ export default async function VerifyPage({
           <InfoItem
             icon={<Hash size={10} />}
             label="Reference"
-            value={voucher.reference || "N/A"}
+            value={reference || "N/A"}
           />
           <InfoItem
             icon={<FileText size={10} />}
             label="Proof"
             value={
-              voucher.attachmentUrl ? (
+              attachmentUrl ? (
                 <a
-                  href={voucher.attachmentUrl}
+                  href={attachmentUrl}
                   target="_blank"
                   className="text-blue-600 hover:underline"
                 >
