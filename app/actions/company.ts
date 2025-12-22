@@ -113,39 +113,38 @@ export async function selectCompanyAction(formData: FormData) {
   const cid = parseInt(companyId.toString());
   const year = parseInt(fyYear.toString());
 
-  // Calculate Fiscal Year Dates (April 1 to March 31)
+  // 1. Calculate Fiscal Year Dates (April 1 to March 31)
+  // Using UTC to prevent timezone shifts during the selection process
   const startDate = new Date(Date.UTC(year, 3, 1)); // April 1st
   const endDate = new Date(Date.UTC(year + 1, 2, 31)); // March 31st
 
   const cookieStore = await cookies();
 
-  // Store Active Company ID
-  cookieStore.set("activeCompanyId", cid.toString(), {
-    path: "/", // ✅ IMPORTANT: Must be root path
+  // 2. Cookie Configuration
+  // secure: false is used here to ensure it works on your VPS IP address (HTTP)
+  const cookieOptions = {
+    path: "/",
     httpOnly: true,
-    sameSite: "strict",
-    maxAge: 60 * 60 * 24 * 7,
-  });
+    sameSite: "lax" as const,
+    secure: false,
+    maxAge: 60 * 60 * 24 * 7, // 7 Days
+  };
 
-  // Store Active Fiscal Year Context
-  cookieStore.set(
-    "activeFY",
-    JSON.stringify({
-      start: startDate.toISOString(),
-      end: endDate.toISOString(),
-      label: `FY ${year}-${year + 1}`,
-    }),
-    {
-      path: "/",
-      httpOnly: true,
-      sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7,
-    }
-  );
+  // 3. Set Active Company ID
+  // ✅ MATCHES: proxy.ts and session.ts
+  cookieStore.set("activeCompanyId", cid.toString(), cookieOptions);
 
+  // 4. Set Individual Fiscal Year Cookies
+  // ✅ MATCHES: session.ts getAccountingContext()
+  cookieStore.set("active_fy_start", startDate.toISOString(), cookieOptions);
+  cookieStore.set("active_fy_end", endDate.toISOString(), cookieOptions);
+
+  // 5. Optional: Set the label for UI display
+  cookieStore.set("active_fy_label", `FY ${year}-${year + 1}`, cookieOptions);
+
+  // 6. Redirect to the Dashboard
   redirect(`/companies/${cid}`);
 }
-
 // --- 3. UPDATE COMPANY ---
 export async function updateCompany(prevState: any, formData: FormData) {
   const data = Object.fromEntries(formData);
