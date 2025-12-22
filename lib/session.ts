@@ -6,8 +6,7 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
-// --- 1. Session Management (Login/Logout) ---
-
+// --- SESSION HELPERS ---
 export async function createSession(userId: string) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const session = await new SignJWT({ userId })
@@ -19,7 +18,7 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set("session", session, {
     httpOnly: true,
-    secure: false, // False for IP/HTTP access
+    secure: false,
     expires: expiresAt,
     sameSite: "lax",
     path: "/",
@@ -34,9 +33,7 @@ export async function deleteSession() {
   cookieStore.delete("active_fy_end");
 }
 
-// --- 2. Accounting Context (Financial Year & Company) ---
-
-// ✅ Helper to get selected FY context
+// --- ACCOUNTING CONTEXT HELPERS ---
 export async function getAccountingContext() {
   const cookieStore = await cookies();
   const companyId = cookieStore.get("selected_company_id")?.value;
@@ -52,7 +49,6 @@ export async function getAccountingContext() {
   };
 }
 
-// ✅ Helper to set context (Matches Middleware Cookie Name)
 export async function setAccountingContext(
   companyId: string,
   start: string,
@@ -61,9 +57,9 @@ export async function setAccountingContext(
   const cookieStore = await cookies();
   const options = {
     httpOnly: true,
-    secure: false, // False for IP/HTTP access
+    secure: false,
     path: "/",
-    maxAge: 60 * 60 * 24, // 1 Day
+    maxAge: 60 * 60 * 24,
   };
 
   cookieStore.set("selected_company_id", companyId, options);
