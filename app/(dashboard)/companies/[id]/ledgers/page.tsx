@@ -1,4 +1,3 @@
-// app/(dashboard)/companies/[id]/ledgers/page.tsx
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ArrowLeft, Book, Plus, ChevronRight } from "lucide-react";
@@ -9,19 +8,13 @@ export default async function LedgerListPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // Await params for Next.js 15
   const resolvedParams = await params;
   const companyId = parseInt(resolvedParams.id);
 
   if (isNaN(companyId) || companyId <= 0) {
-    return (
-      <div className="p-20 text-center text-red-600 font-bold">
-        Invalid Company ID
-      </div>
-    );
+    return <div className="p-20 text-center text-red-600">Invalid ID</div>;
   }
 
-  // Fetch Ledgers with Group relation
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     include: { group: true },
@@ -30,7 +23,6 @@ export default async function LedgerListPage({
 
   return (
     <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8 animate-in fade-in duration-500">
-      {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-8">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">
@@ -70,7 +62,6 @@ export default async function LedgerListPage({
         </div>
       </div>
 
-      {/* TABLE SECTION */}
       <div className="bg-white border border-slate-200 rounded-[2rem] shadow-2xl shadow-slate-200/50 overflow-hidden">
         <LedgerTable ledgers={ledgers} companyId={companyId} />
       </div>

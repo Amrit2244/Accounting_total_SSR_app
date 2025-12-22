@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import VoucherForm from "@/components/forms/VoucherForm";
 import SalesPurchaseForm from "@/components/forms/SalesPurchaseForm";
+import StockJournalForm from "@/components/forms/StockJournalForm"; // Import the new form
 import Link from "next/link";
 import clsx from "clsx";
 import {
@@ -12,6 +13,7 @@ import {
   Truck,
   ArrowLeft,
   ChevronRight,
+  Factory, // Icon for Manufacturing/Stock Journal
 } from "lucide-react";
 
 export default async function CreateVoucherPage({
@@ -69,20 +71,26 @@ export default async function CreateVoucherPage({
       color: "text-purple-600",
       active: "border-purple-500 text-purple-800",
     },
+    // ✅ NEW: Stock Journal Tab
+    {
+      id: "STOCK_JOURNAL",
+      label: "Manufacturing",
+      icon: Factory,
+      color: "text-rose-600",
+      active: "border-rose-500 text-rose-800",
+    },
   ];
 
   const currentVoucher =
     voucherTypes.find((v) => v.id === voucherType) || voucherTypes[3];
 
-  // Fetch Raw Ledgers
+  // Fetch Data
   const rawLedgers = await prisma.ledger.findMany({
     where: { companyId },
     select: { id: true, name: true, group: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
 
-  // ✅ FIX: Sanitize ledgers to ensure 'group' is never null
-  // This satisfies the strict type requirement of the child components
   const ledgers = rawLedgers.map((l) => ({
     ...l,
     group: l.group || { name: "Uncategorized" },
@@ -90,11 +98,12 @@ export default async function CreateVoucherPage({
 
   const items = await prisma.stockItem.findMany({
     where: { companyId },
-    select: { id: true, name: true, gstRate: true },
+    select: { id: true, name: true, gstRate: true }, // Add current quantity if needed
     orderBy: { name: "asc" },
   });
 
   const isInventory = voucherType === "SALES" || voucherType === "PURCHASE";
+  const isStockJournal = voucherType === "STOCK_JOURNAL";
 
   return (
     <div className="max-w-[1400px] mx-auto p-4 space-y-4">
@@ -123,8 +132,8 @@ export default async function CreateVoucherPage({
         </Link>
       </div>
 
-      {/* TABS */}
-      <div className="grid grid-cols-6 gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+      {/* TABS (Grid updated to 7 columns) */}
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
         {voucherTypes.map((v) => {
           const isActive = voucherType === v.id;
           return (
@@ -146,7 +155,10 @@ export default async function CreateVoucherPage({
 
       {/* FORM AREA */}
       <div className="bg-white p-6 border border-slate-200 shadow-sm rounded-xl min-h-[500px]">
-        {isInventory ? (
+        {isStockJournal ? (
+          // ✅ Render Stock Journal Form
+          <StockJournalForm companyId={companyId} stockItems={items} />
+        ) : isInventory ? (
           <SalesPurchaseForm
             companyId={companyId}
             type={voucherType}

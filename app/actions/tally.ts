@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 
 // --- CONFIG ---
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 50;
 const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
@@ -51,12 +51,21 @@ function getName(obj: any): string {
   if (obj.NAME) {
     const n = Array.isArray(obj.NAME) ? obj.NAME[0] : obj.NAME;
     return typeof n === "object"
-      ? String(n._text || "").trim()
+      ? String(n._text || n["#text"] || "").trim()
       : String(n).trim();
   }
   return String(
     obj.LEDGERNAME || obj.STOCKITEMNAME || obj.STOCKGROUPNAME || ""
   ).trim();
+}
+
+async function getNextAutoNumber(companyId: number, type: string) {
+  const seq = await prisma.voucherSequence.upsert({
+    where: { companyId_voucherType: { companyId, voucherType: type } },
+    update: { lastNo: { increment: 1 } },
+    create: { companyId, voucherType: type, lastNo: 1 },
+  });
+  return seq.lastNo;
 }
 
 // ✅ MAIN LOGIC FUNCTION
@@ -66,7 +75,10 @@ export async function processTallyXML(
   userId: number
 ) {
   try {
-    let text = xmlContent.replace(/<[\/]{0,1}[a-zA-Z0-9]+:/g, "<");
+    // 1. CLEAN XML
+    let text = xmlContent
+      .replace(/<[\/]{0,1}[a-zA-Z0-9]+:/g, "<")
+      .replace(/\sxmlns[^"]+"[^"]+"/g, "");
 
     const parser = new XMLParser({
       ignoreAttributes: false,
@@ -76,11 +88,13 @@ export async function processTallyXML(
       textNodeName: "_text",
     });
 
-    let rawChunks = text.match(/<TALLYMESSAGE[\s\S]*?<\/TALLYMESSAGE>/gi) || [];
+    // 2. PARSE
+    let rawChunks =
+      text.match(/<TALLYMESSAGE\b[\s\S]*?<\/TALLYMESSAGE>/gi) || [];
     if (rawChunks.length === 0) {
       rawChunks =
         text.match(
-          /<(GROUP|LEDGER|UNIT|STOCKGROUP|STOCKITEM|VOUCHER)[\s\S]*?<\/\1>/gi
+          /<(GROUP|LEDGER|UNIT|STOCKGROUP|STOCKITEM|VOUCHER|VOUCHERTYPE)[\s\S]*?<\/\1>/gi
         ) || [];
     }
     if (rawChunks.length === 0) return { error: `No valid Tally Data found.` };
@@ -95,52 +109,59 @@ export async function processTallyXML(
       ledgers: 0,
       units: 0,
       stockItems: 0,
-      vouchers: 0,
+      sales: 0,
+      purchase: 0,
+      payment: 0,
+      receipt: 0,
+      contra: 0,
+      journal: 0,
+      stockJournal: 0,
+      skipped: 0,
     };
 
-    // --- CACHE MASTERS ---
-    const existingGroups = await prisma.group.findMany({
-      where: { companyId },
-      select: { name: true, id: true },
-    });
+    // --- DB CACHE ---
     const groupMap = new Map(
-      existingGroups.map((g) => [g.name.toLowerCase(), g.id])
+      (
+        await prisma.group.findMany({
+          where: { companyId },
+          select: { name: true, id: true },
+        })
+      ).map((g) => [g.name.toLowerCase(), g.id])
     );
-
-    // ✅ NEW: Cache Stock Groups
-    const existingStockGroups = await prisma.stockGroup.findMany({
-      where: { companyId },
-      select: { name: true, id: true },
-    });
     const stockGroupMap = new Map(
-      existingStockGroups.map((g) => [g.name.toLowerCase(), g.id])
+      (
+        await prisma.stockGroup.findMany({
+          where: { companyId },
+          select: { name: true, id: true },
+        })
+      ).map((g) => [g.name.toLowerCase(), g.id])
     );
-
-    const existingLedgers = await prisma.ledger.findMany({
-      where: { companyId },
-      select: { name: true, id: true },
-    });
     const ledgerMap = new Map(
-      existingLedgers.map((l) => [l.name.toLowerCase(), l.id])
+      (
+        await prisma.ledger.findMany({
+          where: { companyId },
+          select: { name: true, id: true },
+        })
+      ).map((l) => [l.name.toLowerCase(), l.id])
     );
-
-    const existingItems = await prisma.stockItem.findMany({
-      where: { companyId },
-      select: { name: true, id: true },
-    });
     const itemMap = new Map(
-      existingItems.map((i) => [i.name.toLowerCase(), i.id])
+      (
+        await prisma.stockItem.findMany({
+          where: { companyId },
+          select: { name: true, id: true },
+        })
+      ).map((i) => [i.name.toLowerCase(), i.id])
     );
-
-    const existingUnits = await prisma.unit.findMany({
-      where: { companyId },
-      select: { symbol: true, id: true },
-    });
     const unitMap = new Map(
-      existingUnits.map((u) => [u.symbol.toLowerCase(), u.id])
+      (
+        await prisma.unit.findMany({
+          where: { companyId },
+          select: { symbol: true, id: true },
+        })
+      ).map((u) => [u.symbol.toLowerCase(), u.id])
     );
 
-    // Helper: Get Primary Group
+    // --- HELPERS ---
     const getPrimaryGroupId = async () => {
       if (groupMap.has("primary")) return groupMap.get("primary")!;
       const g = await prisma.group.create({
@@ -150,7 +171,6 @@ export async function processTallyXML(
       return g.id;
     };
 
-    // Helper: Get Fallback Group
     let fallbackGroupId: number | null = null;
     const getFallbackId = async () => {
       if (fallbackGroupId) return fallbackGroupId;
@@ -166,11 +186,14 @@ export async function processTallyXML(
 
     // --- SEPARATE DATA ---
     const groupsToProcess: any[] = [];
-    const stockGroupsToProcess: any[] = []; // ✅ NEW: Separate array for Stock Groups
+    const stockGroupsToProcess: any[] = [];
     const ledgersToProcess: any[] = [];
     const unitsToProcess: any[] = [];
     const itemsToProcess: any[] = [];
     const vouchersToProcess: any[] = [];
+
+    // Map Custom Types (e.g. "Bank Payment" -> "Payment")
+    const voucherTypeMap = new Map<string, string>();
 
     for (const rawMsg of rawChunks) {
       const safeXML = rawMsg.startsWith("<")
@@ -180,15 +203,25 @@ export async function processTallyXML(
       const data = jsonObj.TALLYMESSAGE || jsonObj;
 
       if (data.GROUP) groupsToProcess.push(data.GROUP);
-      else if (data.STOCKGROUP)
-        stockGroupsToProcess.push(data.STOCKGROUP); // ✅ Push to correct array
+      else if (data.STOCKGROUP) stockGroupsToProcess.push(data.STOCKGROUP);
       else if (data.LEDGER) ledgersToProcess.push(data.LEDGER);
       else if (data.UNIT) unitsToProcess.push(data.UNIT);
       else if (data.STOCKITEM) itemsToProcess.push(data.STOCKITEM);
       else if (data.VOUCHER) vouchersToProcess.push(data.VOUCHER);
+      else if (data.VOUCHERTYPE) {
+        const vName = getName(data.VOUCHERTYPE);
+        let vParent =
+          data.VOUCHERTYPE.PARENT || data.VOUCHERTYPE["@_PARENT"] || "";
+        if (vParent)
+          voucherTypeMap.set(vName.toLowerCase(), vParent.toLowerCase());
+      }
     }
 
-    // --- PHASE 1: ACCOUNTING GROUPS ---
+    // =========================================================
+    // ✅ PHASE 1: MASTERS (Restored & Fixed Logic)
+    // =========================================================
+
+    // 1. GROUPS
     for (const grp of groupsToProcess) {
       const name = getName(grp);
       if (name && name !== "Primary" && !groupMap.has(name.toLowerCase())) {
@@ -198,8 +231,7 @@ export async function processTallyXML(
       }
     }
 
-    // --- PHASE 1.5: STOCK GROUPS (NEW) ---
-    // We process these separately so they go into 'StockGroup' table
+    // 2. STOCK GROUPS
     for (const sg of stockGroupsToProcess) {
       const name = getName(sg);
       if (
@@ -207,34 +239,15 @@ export async function processTallyXML(
         name !== "Primary" &&
         !stockGroupMap.has(name.toLowerCase())
       ) {
-        // Handle Parent (Stock Groups can have parents too)
-        let parentName = sg["@_PARENT"] || sg.PARENT;
-        if (Array.isArray(parentName)) parentName = parentName[0];
-        parentName = parentName ? String(parentName).trim() : "";
-
-        let parentId: number | null = null;
-        if (parentName && parentName !== "Primary") {
-          parentId = stockGroupMap.get(parentName.toLowerCase()) || null;
-          // Create parent if missing
-          if (!parentId) {
-            const newParent = await prisma.stockGroup.create({
-              data: { name: parentName, companyId },
-            });
-            parentId = newParent.id;
-            stockGroupMap.set(parentName.toLowerCase(), parentId);
-            stats.stockGroups++;
-          }
-        }
-
         const newSg = await prisma.stockGroup.create({
-          data: { name, companyId, parentId },
+          data: { name, companyId },
         });
         stockGroupMap.set(name.toLowerCase(), newSg.id);
         stats.stockGroups++;
       }
     }
 
-    // --- PHASE 2: UNITS ---
+    // 3. UNITS
     for (const unit of unitsToProcess) {
       const name = getName(unit);
       const symbol = unit.ORIGINALNAME || unit.NAME || name;
@@ -251,7 +264,7 @@ export async function processTallyXML(
       }
     }
 
-    // --- PHASE 3: LEDGERS ---
+    // 4. LEDGERS (With Safety Check for Parents)
     for (const led of ledgersToProcess) {
       const name = getName(led);
       if (name && !ledgerMap.has(name.toLowerCase())) {
@@ -260,14 +273,11 @@ export async function processTallyXML(
         parentName = parentName ? String(parentName).trim() : "";
 
         let groupId: number | undefined;
-
-        if (
-          name.toLowerCase() === "profit & loss a/c" ||
-          name.toLowerCase().includes("profit & loss")
-        ) {
+        if (name.toLowerCase().includes("profit & loss")) {
           groupId = await getPrimaryGroupId();
         } else if (parentName) {
           groupId = groupMap.get(parentName.toLowerCase());
+          // ✅ FIX: If Parent Group is Missing, Create it (This fixes the "Only 15 ledgers" issue)
           if (!groupId) {
             const newParent = await prisma.group.create({
               data: { name: parentName, companyId },
@@ -292,43 +302,35 @@ export async function processTallyXML(
       }
     }
 
-    // --- PHASE 4: ITEMS ---
+    // 5. ITEMS
     for (const item of itemsToProcess) {
       const name = getName(item);
       if (name && !itemMap.has(name.toLowerCase())) {
-        // Link Stock Group if present
         let parentName = item["@_PARENT"] || item.PARENT;
         if (Array.isArray(parentName)) parentName = parentName[0];
-        parentName = parentName ? String(parentName).trim() : "";
 
-        let groupId: number | null = null;
-        if (parentName && parentName !== "Primary") {
-          groupId = stockGroupMap.get(parentName.toLowerCase()) || null;
-          // Create Stock Group if missing
-          if (!groupId) {
-            const newSg = await prisma.stockGroup.create({
-              data: { name: parentName, companyId },
-            });
-            groupId = newSg.id;
-            stockGroupMap.set(parentName.toLowerCase(), groupId);
-            stats.stockGroups++;
-          }
+        let groupId = parentName
+          ? stockGroupMap.get(String(parentName).toLowerCase())
+          : null;
+        // ✅ FIX: If Stock Group is Missing, Create it
+        if (parentName && !groupId) {
+          const newSg = await prisma.stockGroup.create({
+            data: { name: parentName, companyId },
+          });
+          groupId = newSg.id;
+          stockGroupMap.set(String(parentName).toLowerCase(), groupId);
         }
 
-        // Link Unit if present
-        let unitName = item.BASEUNITS;
-        let unitId = unitName
-          ? unitMap.get(String(unitName).toLowerCase())
+        let unitId = item.BASEUNITS
+          ? unitMap.get(String(item.BASEUNITS).toLowerCase())
           : null;
 
         const newItm = await prisma.stockItem.create({
           data: {
             name,
             companyId,
-            groupId: groupId, // Link to Stock Group
-            unitId: unitId,
-            openingQty: parseTallyNumber(item.OPENINGBALANCE),
-            openingValue: Math.abs(parseTallyNumber(item.OPENINGVALUE)),
+            groupId,
+            unitId,
             quantity: parseTallyNumber(item.OPENINGBALANCE),
             gstRate: 0,
           },
@@ -338,8 +340,11 @@ export async function processTallyXML(
       }
     }
 
-    // --- PHASE 5: VOUCHERS ---
+    // =========================================================
+    // ✅ PHASE 2: VOUCHERS (New Working Logic - Force Import)
+    // =========================================================
     console.log(`🚀 Processing ${vouchersToProcess.length} vouchers...`);
+
     for (let i = 0; i < vouchersToProcess.length; i += BATCH_SIZE) {
       const batch = vouchersToProcess.slice(i, i + BATCH_SIZE);
       await Promise.all(
@@ -350,68 +355,86 @@ export async function processTallyXML(
               voucherData.ACTION === "Delete"
             )
               return;
-            const vchNo = String(
-              voucherData.VOUCHERNUMBER ||
-                voucherData["@_VOUCHERNUMBER"] ||
-                "AUTO"
-            );
-            const vchType = (
-              voucherData.VOUCHERTYPENAME || "Journal"
+
+            // 1. SMART VOUCHER TYPE DETECTION
+            let rawVchType = (
+              voucherData.VOUCHERTYPENAME ||
+              voucherData["@_VCHTYPE"] ||
+              "Journal"
             ).toString();
+            let rawTypeLower = rawVchType.toLowerCase();
+            let effectiveType = voucherTypeMap.get(rawTypeLower);
+
+            if (!effectiveType) {
+              if (rawTypeLower.includes("payment")) effectiveType = "payment";
+              else if (rawTypeLower.includes("receipt"))
+                effectiveType = "receipt";
+              else if (rawTypeLower.includes("contra"))
+                effectiveType = "contra";
+              else if (
+                rawTypeLower.includes("sales") ||
+                rawTypeLower.includes("sale")
+              )
+                effectiveType = "sales";
+              else if (rawTypeLower.includes("purchase"))
+                effectiveType = "purchase";
+              else if (
+                rawTypeLower.includes("stock journal") ||
+                rawTypeLower.includes("manufacturing")
+              )
+                effectiveType = "stock_journal";
+              else effectiveType = "journal";
+            }
+            effectiveType = effectiveType.toLowerCase();
+
+            // 2. EXTRACT DATA
+            let vchNoStr = String(
+              voucherData.VOUCHERNUMBER || voucherData["@_VOUCHERNUMBER"] || ""
+            ).trim();
+            if (!vchNoStr)
+              vchNoStr = "AUTO-" + Math.floor(Math.random() * 1000000);
+
+            // Integer ID for Payment/Receipt/etc
+            let vchNoInt = parseInt(vchNoStr);
+            if (isNaN(vchNoInt)) vchNoInt = Math.floor(Math.random() * 1000000);
+
             const date = parseTallyDate(
               voucherData.DATE || voucherData["@_DATE"]
             );
+            const narration = String(voucherData.NARRATION || "");
+            const transactionCode = Math.floor(
+              100000 + Math.random() * 900000
+            ).toString();
 
-            const exists = await prisma.voucher.findFirst({
-              where: { voucherNo: vchNo, companyId, type: vchType },
-              select: { id: true },
-            });
-            if (exists) return;
-
-            const accountingEntries: any[] = [];
-            const inventoryEntries: any[] = [];
-            let totalDebitValue = 0;
-
-            // LEDGERS
+            // 3. LEDGER ENTRIES
             let rawLedgers =
               voucherData["ALLLEDGERENTRIES.LIST"] ||
               voucherData["LEDGERENTRIES.LIST"] ||
               [];
             if (!Array.isArray(rawLedgers)) rawLedgers = [rawLedgers];
 
+            const ledgerEntries: any[] = [];
+            let totalAmount = 0;
+
             for (const ent of rawLedgers) {
               const lName = getName(ent);
               if (!lName) continue;
               const amt = -parseTallyNumber(ent.AMOUNT);
-              if (amt > 0) totalDebitValue += amt;
+              if (amt > 0) totalAmount += amt;
 
               let ledgerId = ledgerMap.get(lName.toLowerCase());
               if (!ledgerId) {
-                let dbLedger = await prisma.ledger.findFirst({
-                  where: { companyId, name: lName },
+                const fid = await getFallbackId();
+                const newL = await prisma.ledger.create({
+                  data: { name: lName, companyId, groupId: fid },
                 });
-                if (!dbLedger) {
-                  const fallbackId = await getFallbackId();
-                  dbLedger = await prisma.ledger.create({
-                    data: {
-                      name: lName,
-                      companyId,
-                      groupId: fallbackId,
-                      openingBalance: 0,
-                    },
-                  });
-                }
-                ledgerId = dbLedger.id;
+                ledgerId = newL.id;
                 ledgerMap.set(lName.toLowerCase(), ledgerId);
               }
-              accountingEntries.push({
-                ledgerId,
-                ledgerName: lName,
-                amount: amt,
-              });
+              ledgerEntries.push({ ledgerId, amount: amt });
             }
 
-            // INVENTORY
+            // 4. INVENTORY & ALLOCATIONS
             let rawInv =
               voucherData["ALLINVENTORYENTRIES.LIST"] ||
               voucherData["INVENTORYENTRIES.LIST"] ||
@@ -419,89 +442,176 @@ export async function processTallyXML(
             if (!Array.isArray(rawInv))
               rawInv = Array.isArray(rawInv) ? rawInv : [rawInv];
 
+            const inventoryEntries: any[] = [];
             for (const inv of rawInv) {
               const iName = getName(inv);
               if (!iName) continue;
+
               let itemId = itemMap.get(iName.toLowerCase());
               if (!itemId) {
-                const dbItem = await prisma.stockItem.create({
+                const newItm = await prisma.stockItem.create({
                   data: { name: iName, companyId, gstRate: 0 },
                 });
-                itemId = dbItem.id;
+                itemId = newItm.id;
                 itemMap.set(iName.toLowerCase(), itemId);
               }
+
               const qtyStr = inv.BILLEDQTY || inv.ACTUALQTY || "0";
               const qty = Math.abs(parseTallyNumber(qtyStr));
+              const isDeemedPositive =
+                inv.ISDEEMEDPOSITIVE === "Yes" ||
+                inv["@_ISDEEMEDPOSITIVE"] === "Yes";
+
               inventoryEntries.push({
                 stockItemId: itemId,
-                itemName: iName,
                 quantity: qty,
                 rate: Math.abs(parseTallyNumber(inv.RATE)),
                 amount: Math.abs(parseTallyNumber(inv.AMOUNT)),
                 unit: String(qtyStr).match(/[a-zA-Z]+/)?.[0] || "",
+                isDeemedPositive,
               });
 
-              // ALLOCATIONS
+              // ALLOCATIONS (Hidden Ledgers)
               let allocs = inv["ACCOUNTINGALLOCATIONS.LIST"] || [];
               if (!Array.isArray(allocs)) allocs = [allocs];
               for (const al of allocs) {
-                const aName = getName(al);
-                const aAmt = -parseTallyNumber(al.AMOUNT);
-                let aLedgerId = ledgerMap.get(aName.toLowerCase());
-                if (!aLedgerId) {
-                  let dbALedger = await prisma.ledger.findFirst({
-                    where: { companyId, name: aName },
+                const alName = getName(al);
+                const alAmt = -parseTallyNumber(al.AMOUNT);
+                let alLedgerId = ledgerMap.get(alName.toLowerCase());
+                if (!alLedgerId) {
+                  const fid = await getFallbackId();
+                  const newL = await prisma.ledger.create({
+                    data: { name: alName, companyId, groupId: fid },
                   });
-                  if (!dbALedger) {
-                    const fid = await getFallbackId();
-                    dbALedger = await prisma.ledger.create({
-                      data: { name: aName, companyId, groupId: fid },
-                    });
-                  }
-                  aLedgerId = dbALedger.id;
-                  ledgerMap.set(aName.toLowerCase(), aLedgerId);
+                  alLedgerId = newL.id;
+                  ledgerMap.set(alName.toLowerCase(), alLedgerId);
                 }
-                accountingEntries.push({
-                  ledgerId: aLedgerId,
-                  ledgerName: aName,
-                  amount: aAmt,
-                });
+                ledgerEntries.push({ ledgerId: alLedgerId, amount: alAmt });
               }
             }
 
-            await prisma.$transaction(async (tx) => {
-              const isSale = vchType.toLowerCase().includes("sale");
-              for (const invEntry of inventoryEntries) {
-                await tx.stockItem.update({
-                  where: { id: invEntry.stockItemId },
-                  data: {
-                    quantity: isSale
-                      ? { decrement: invEntry.quantity }
-                      : { increment: invEntry.quantity },
-                  },
-                });
-              }
-              await tx.voucher.create({
+            // --- 5. INSERT (Forceful) ---
+            const cleanInv = inventoryEntries.map(
+              ({ isDeemedPositive, ...rest }) => rest
+            );
+
+            if (effectiveType === "stock_journal") {
+              const sjEntries = inventoryEntries.map((e) => ({
+                stockItemId: e.stockItemId,
+                quantity: e.isDeemedPositive ? e.quantity : -e.quantity,
+                rate: e.rate,
+                amount: e.amount,
+                isProduction: e.isDeemedPositive,
+              }));
+              await prisma.stockJournal.create({
                 data: {
-                  date,
-                  voucherNo: vchNo,
-                  type: vchType,
                   companyId,
+                  voucherNo: vchNoStr,
+                  transactionCode,
+                  date,
+                  narration,
                   status: "APPROVED",
                   createdById: userId,
-                  totalAmount: totalDebitValue,
-                  narration: voucherData.NARRATION || "",
-                  transactionCode: Math.floor(
-                    10000 + Math.random() * 90000
-                  ).toString(),
-                  entries: { create: accountingEntries },
-                  inventory: { create: inventoryEntries },
+                  inventoryEntries: { create: sjEntries },
                 },
               });
-            });
-            stats.vouchers++;
-          } catch (err) {
-            console.error(`Skipping Voucher:`, err);
+              stats.stockJournal++;
+            } else if (effectiveType === "sales") {
+              await prisma.salesVoucher.create({
+                data: {
+                  companyId,
+                  voucherNo: vchNoStr,
+                  date,
+                  narration,
+                  totalAmount,
+                  transactionCode,
+                  status: "APPROVED",
+                  createdById: userId,
+                  ledgerEntries: { create: ledgerEntries },
+                  inventoryEntries: { create: cleanInv },
+                },
+              });
+              stats.sales++;
+            } else if (effectiveType === "purchase") {
+              await prisma.purchaseVoucher.create({
+                data: {
+                  companyId,
+                  voucherNo: vchNoStr,
+                  date,
+                  narration,
+                  totalAmount,
+                  transactionCode,
+                  status: "APPROVED",
+                  createdById: userId,
+                  ledgerEntries: { create: ledgerEntries },
+                  inventoryEntries: { create: cleanInv },
+                },
+              });
+              stats.purchase++;
+            } else if (effectiveType === "payment") {
+              await prisma.paymentVoucher.create({
+                data: {
+                  companyId,
+                  voucherNo: vchNoInt,
+                  date,
+                  narration,
+                  totalAmount,
+                  transactionCode,
+                  status: "APPROVED",
+                  createdById: userId,
+                  ledgerEntries: { create: ledgerEntries },
+                },
+              });
+              stats.payment++;
+            } else if (effectiveType === "receipt") {
+              await prisma.receiptVoucher.create({
+                data: {
+                  companyId,
+                  voucherNo: vchNoInt,
+                  date,
+                  narration,
+                  totalAmount,
+                  transactionCode,
+                  status: "APPROVED",
+                  createdById: userId,
+                  ledgerEntries: { create: ledgerEntries },
+                },
+              });
+              stats.receipt++;
+            } else if (effectiveType === "contra") {
+              await prisma.contraVoucher.create({
+                data: {
+                  companyId,
+                  voucherNo: vchNoInt,
+                  date,
+                  narration,
+                  totalAmount,
+                  transactionCode,
+                  status: "APPROVED",
+                  createdById: userId,
+                  ledgerEntries: { create: ledgerEntries },
+                },
+              });
+              stats.contra++;
+            } else {
+              await prisma.journalVoucher.create({
+                data: {
+                  companyId,
+                  voucherNo: vchNoInt,
+                  date,
+                  narration,
+                  totalAmount,
+                  transactionCode,
+                  status: "APPROVED",
+                  createdById: userId,
+                  ledgerEntries: { create: ledgerEntries },
+                },
+              });
+              stats.journal++;
+            }
+          } catch (err: any) {
+            console.error(`Skipping Voucher: ${err.message}`);
+            stats.skipped++;
           }
         })
       );
@@ -510,14 +620,14 @@ export async function processTallyXML(
     revalidatePath(`/companies/${companyId}`);
     return {
       success: true,
-      message: `Imported: ${stats.groups} Groups, ${stats.stockGroups} Stock Groups, ${stats.ledgers} Ledgers, ${stats.stockItems} Items, ${stats.vouchers} Vouchers.`,
+      message: `Imported: ${stats.sales} Sales, ${stats.purchase} Pur, ${stats.payment} Pay, ${stats.receipt} Rcpt, ${stats.contra} Cntr, ${stats.journal} Jrnl, ${stats.stockJournal} StkJrnl. Masters: ${stats.groups} Grps, ${stats.ledgers} Ldgrs, ${stats.stockItems} Items.`,
     };
   } catch (err: any) {
     return { error: `Processing Failed: ${err.message}` };
   }
 }
 
-// SERVER ACTION WRAPPER
+// WRAPPER
 export async function importTallyXML(prevState: any, formData: FormData) {
   const file = formData.get("xmlFile") as File;
   const companyId = parseInt(formData.get("companyId") as string);

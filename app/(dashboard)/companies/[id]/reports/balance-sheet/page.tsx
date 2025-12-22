@@ -28,22 +28,46 @@ export default async function BalanceSheetPage({
 
   if (isNaN(companyId)) notFound();
 
-  // --- 1. DATA FETCHING ---
+  // --- 1. DATA FETCHING (Updated for New Schema) ---
   const [ledgers, stockItems] = await Promise.all([
+    // A. Fetch Ledgers + 6 Transaction Types
     prisma.ledger.findMany({
       where: { companyId },
       include: {
         group: { select: { name: true, nature: true } },
-        entries: {
-          where: { voucher: { status: "APPROVED" } },
+        salesEntries: {
+          where: { salesVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        purchaseEntries: {
+          where: { purchaseVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        paymentEntries: {
+          where: { paymentVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        receiptEntries: {
+          where: { receiptVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        contraEntries: {
+          where: { contraVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        journalEntries: {
+          where: { journalVoucher: { status: "APPROVED" } },
           select: { amount: true },
         },
       },
     }),
+    // B. Fetch Stock Items + 3 Inventory Types
     prisma.stockItem.findMany({
       where: { companyId },
       include: {
-        inventoryEntries: { where: { voucher: { status: "APPROVED" } } },
+        salesItems: { where: { salesVoucher: { status: "APPROVED" } } },
+        purchaseItems: { where: { purchaseVoucher: { status: "APPROVED" } } },
+        journalEntries: { where: { stockJournal: { status: "APPROVED" } } },
       },
     }),
   ]);
@@ -53,41 +77,33 @@ export default async function BalanceSheetPage({
   let closingStock = 0;
   let closingStockDetails: { name: string; amount: number }[] = [];
 
-  // Stock Valuation
+  // Stock Valuation Logic (WAC)
   stockItems.forEach((item) => {
-    // ✅ FIX: Removed 'item.openingRate' as it does not exist.
-    // Just use 'item.openingValue'.
     const opVal = item.openingValue || 0;
-
     openingStock += opVal;
 
-    let qty = item.openingQty || 0;
-    let val = opVal;
+    // Merge all entries
+    const allEntries = [
+      ...item.salesItems.map((e) => ({ qty: e.quantity, val: 0 })),
+      ...item.purchaseItems.map((e) => ({ qty: e.quantity, val: e.amount })),
+      ...item.journalEntries.map((e) => ({ qty: e.quantity, val: e.amount })),
+    ];
 
-    // Calculate Closing
-    item.inventoryEntries.forEach((e) => {
-      if (e.quantity > 0) {
-        qty += e.quantity;
-        val += e.amount;
-      } else {
-        qty -= Math.abs(e.quantity);
+    let currentQty = item.openingQty || 0;
+    let totalInwardQty = item.openingQty || 0;
+    let totalInwardVal = opVal;
+
+    allEntries.forEach((e) => {
+      currentQty += e.qty;
+      if (e.qty > 0) {
+        // Only Inwards affect Cost
+        totalInwardQty += e.qty;
+        totalInwardVal += e.val;
       }
     });
 
-    const inwardRate =
-      item.inventoryEntries.reduce(
-        (s, e) => (e.quantity > 0 ? s + e.quantity : s),
-        0
-      ) + (item.openingQty || 0) || 1;
-
-    const totalInwardVal =
-      item.inventoryEntries.reduce(
-        (s, e) => (e.quantity > 0 ? s + e.amount : s),
-        0
-      ) + opVal;
-
-    const avgRate = totalInwardVal / inwardRate;
-    const clVal = Math.max(0, qty * avgRate);
+    const avgRate = totalInwardQty > 0 ? totalInwardVal / totalInwardQty : 0;
+    const clVal = Math.max(0, currentQty * avgRate);
 
     if (clVal > 0) {
       closingStock += clVal;
@@ -96,17 +112,27 @@ export default async function BalanceSheetPage({
   });
 
   // Calculate Net Profit Internally
-  let totalExpense = openingStock; // Opening Stock is an expense
-  let totalIncome = closingStock; // Closing Stock is income
+  let totalExpense = openingStock;
+  let totalIncome = closingStock;
 
   ledgers.forEach((l) => {
-    const net =
-      (l.openingBalance || 0) + l.entries.reduce((s, e) => s + e.amount, 0);
-    if (Math.abs(net) < 0.01) return;
+    // Sum from all 6 tables
+    const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
+    const txTotal =
+      sum(l.salesEntries) +
+      sum(l.purchaseEntries) +
+      sum(l.paymentEntries) +
+      sum(l.receiptEntries) +
+      sum(l.contraEntries) +
+      sum(l.journalEntries);
 
-    // ✅ FIX: Use optional chaining in case nature is null
-    const nature = l.group?.nature?.toUpperCase();
-    const gName = l.group?.name.toLowerCase() || "";
+    const net = (l.openingBalance || 0) + txTotal;
+
+    if (Math.abs(net) < 0.01) return;
+    if (!l.group) return;
+
+    const nature = l.group.nature?.toUpperCase();
+    const gName = l.group.name.toLowerCase();
     const amt = Math.abs(net);
 
     // Identify P&L Items
@@ -146,25 +172,36 @@ export default async function BalanceSheetPage({
   };
 
   ledgers.forEach((l) => {
-    const net =
-      (l.openingBalance || 0) + l.entries.reduce((s, e) => s + e.amount, 0);
-    if (Math.abs(net) < 0.01) return;
+    // Re-calculate net balance for Asset/Liability classification
+    const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
+    const txTotal =
+      sum(l.salesEntries) +
+      sum(l.purchaseEntries) +
+      sum(l.paymentEntries) +
+      sum(l.receiptEntries) +
+      sum(l.contraEntries) +
+      sum(l.journalEntries);
 
-    // ✅ FIX: Safety Check for group existence
+    const net = (l.openingBalance || 0) + txTotal;
+
+    if (Math.abs(net) < 0.01) return;
     if (!l.group) return;
 
     const nature = l.group.nature?.toUpperCase();
     const gName = l.group.name.toLowerCase();
 
-    // Skip P&L items (already processed)
+    // Skip P&L items
     if (
       nature === "EXPENSE" ||
       nature === "INCOME" ||
       gName.includes("purchase") ||
-      gName.includes("sales")
+      gName.includes("sales") ||
+      gName.includes("direct") ||
+      gName.includes("indirect")
     )
       return;
 
+    // Classify
     if (
       nature === "LIABILITY" ||
       nature === "CAPITAL" ||
@@ -185,7 +222,7 @@ export default async function BalanceSheetPage({
 
   // --- 4. INJECT SYSTEM ROWS ---
 
-  // A. Net Profit -> Liability Side (Reserves & Surplus)
+  // A. Net Profit -> Liability (Reserves)
   if (isProfit && netResult > 0) {
     liabMap.set("Reserves & Surplus", {
       groupName: "Reserves & Surplus",
@@ -194,7 +231,7 @@ export default async function BalanceSheetPage({
       isSystem: true,
     });
   }
-  // B. Net Loss -> Asset Side (Profit & Loss A/c)
+  // B. Net Loss -> Asset (P&L A/c)
   else if (!isProfit && Math.abs(netResult) > 0) {
     assetMap.set("Profit & Loss A/c", {
       groupName: "Profit & Loss A/c",
@@ -206,7 +243,7 @@ export default async function BalanceSheetPage({
     });
   }
 
-  // C. Closing Stock -> Asset Side
+  // C. Closing Stock -> Asset
   if (closingStock > 0) {
     assetMap.set("Closing Stock", {
       groupName: "Closing Stock",
@@ -226,7 +263,6 @@ export default async function BalanceSheetPage({
   const diff = totalLiab - totalAsset;
   const isBalanced = Math.abs(diff) < 0.01;
 
-  // Render Helper
   const TotalRow = ({ amount }: { amount: number }) => (
     <div className="flex justify-between px-3 py-2 bg-slate-100 border-t border-slate-200 border-b-4 border-double border-b-slate-400 font-black text-xs text-slate-900 mt-auto">
       <span>Total</span>
@@ -283,7 +319,7 @@ export default async function BalanceSheetPage({
 
         {/* COLUMNS */}
         <div className="flex flex-1 min-h-0">
-          {/* --- LIABILITIES --- */}
+          {/* LIABILITIES */}
           <div className="w-1/2 border-r border-slate-200 flex flex-col overflow-y-auto custom-scrollbar">
             <div className="flex-1 p-1">
               {liabilities.length === 0 ? (
@@ -296,18 +332,15 @@ export default async function BalanceSheetPage({
                 ))
               )}
             </div>
-
-            {/* Diff Check (Liability Side) */}
             {!isBalanced && diff < 0 && (
               <div className="px-3 py-2 bg-rose-50 text-rose-700 text-[10px] font-bold border-t border-rose-200">
                 Difference in Liabilities: {fmt(Math.abs(diff))}
               </div>
             )}
-
             <TotalRow amount={grandTotal} />
           </div>
 
-          {/* --- ASSETS --- */}
+          {/* ASSETS */}
           <div className="w-1/2 flex flex-col overflow-y-auto custom-scrollbar">
             <div className="flex-1 p-1">
               {assets.length === 0 ? (
@@ -320,14 +353,11 @@ export default async function BalanceSheetPage({
                 ))
               )}
             </div>
-
-            {/* Diff Check (Asset Side) */}
             {!isBalanced && diff > 0 && (
               <div className="px-3 py-2 bg-rose-50 text-rose-700 text-[10px] font-bold border-t border-rose-200">
                 Difference in Assets: {fmt(Math.abs(diff))}
               </div>
             )}
-
             <TotalRow amount={grandTotal} />
           </div>
         </div>

@@ -1,13 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  FolderOpen,
-  ArrowUpRight,
-  ArrowDownLeft,
-  Hash,
-} from "lucide-react";
-import DaybookFilters from "@/components/reports/DaybookFilters"; // Import the component above
+import { ArrowLeft, FolderOpen, ArrowUpRight } from "lucide-react";
+import DaybookFilters from "@/components/reports/DaybookFilters";
 
 const fmt = (n: number) =>
   n.toLocaleString("en-IN", {
@@ -48,29 +42,158 @@ export default async function DaybookPage({
     date: { gte: startISO, lte: endISO },
   };
 
-  if (type && type !== "ALL") {
-    whereClause.type = type;
+  // ✅ NEW: Fetch from all 7 tables
+  const promises = [];
+
+  if (!type || type === "ALL" || type === "SALES") {
+    promises.push(
+      prisma.salesVoucher.findMany({
+        where: whereClause,
+        include: { ledgerEntries: { include: { ledger: true } } },
+      })
+    );
+  }
+  if (!type || type === "ALL" || type === "PURCHASE") {
+    promises.push(
+      prisma.purchaseVoucher.findMany({
+        where: whereClause,
+        include: { ledgerEntries: { include: { ledger: true } } },
+      })
+    );
+  }
+  if (!type || type === "ALL" || type === "PAYMENT") {
+    promises.push(
+      prisma.paymentVoucher.findMany({
+        where: whereClause,
+        include: { ledgerEntries: { include: { ledger: true } } },
+      })
+    );
+  }
+  if (!type || type === "ALL" || type === "RECEIPT") {
+    promises.push(
+      prisma.receiptVoucher.findMany({
+        where: whereClause,
+        include: { ledgerEntries: { include: { ledger: true } } },
+      })
+    );
+  }
+  if (!type || type === "ALL" || type === "CONTRA") {
+    promises.push(
+      prisma.contraVoucher.findMany({
+        where: whereClause,
+        include: { ledgerEntries: { include: { ledger: true } } },
+      })
+    );
+  }
+  if (!type || type === "ALL" || type === "JOURNAL") {
+    promises.push(
+      prisma.journalVoucher.findMany({
+        where: whereClause,
+        include: { ledgerEntries: { include: { ledger: true } } },
+      })
+    );
+  }
+  if (!type || type === "ALL" || type === "STOCK_JOURNAL") {
+    promises.push(prisma.stockJournal.findMany({ where: whereClause })); // Stock Journal has no ledger entries, handled separately
   }
 
-  // Fetch Vouchers
-  const vouchers = await prisma.voucher.findMany({
-    where: whereClause,
-    include: {
-      entries: {
-        include: { ledger: { select: { name: true } } },
-      },
-    },
-    orderBy: { date: "asc" }, // Chronological order
+  const results = await Promise.all(promises);
+  let allVouchers: any[] = [];
+
+  // Flatten and normalize
+  results.forEach((group: any[]) => {
+    group.forEach((v) => {
+      // Determine Type based on object keys (simplistic check)
+      let vType = "UNKNOWN";
+      if (v.ledgerEntries) {
+        // Try to deduce type or add type during query if Prisma supported it directly.
+        // Since we pushed in specific order or logic, we can map them if we fetched separately.
+        // But simpler is to rely on the table source.
+        // Actually, the 'type' field is missing in new schema models!
+        // We must inject it based on which table it came from.
+      }
+    });
   });
+
+  // Since mapping flattened array back to type is hard without tracking index, let's redo fetch cleanly:
+
+  const [sales, purchase, payment, receipt, contra, journal, stock] =
+    await Promise.all([
+      !type || type === "ALL" || type === "SALES"
+        ? prisma.salesVoucher.findMany({
+            where: whereClause,
+            include: { ledgerEntries: { include: { ledger: true } } },
+          })
+        : [],
+      !type || type === "ALL" || type === "PURCHASE"
+        ? prisma.purchaseVoucher.findMany({
+            where: whereClause,
+            include: { ledgerEntries: { include: { ledger: true } } },
+          })
+        : [],
+      !type || type === "ALL" || type === "PAYMENT"
+        ? prisma.paymentVoucher.findMany({
+            where: whereClause,
+            include: { ledgerEntries: { include: { ledger: true } } },
+          })
+        : [],
+      !type || type === "ALL" || type === "RECEIPT"
+        ? prisma.receiptVoucher.findMany({
+            where: whereClause,
+            include: { ledgerEntries: { include: { ledger: true } } },
+          })
+        : [],
+      !type || type === "ALL" || type === "CONTRA"
+        ? prisma.contraVoucher.findMany({
+            where: whereClause,
+            include: { ledgerEntries: { include: { ledger: true } } },
+          })
+        : [],
+      !type || type === "ALL" || type === "JOURNAL"
+        ? prisma.journalVoucher.findMany({
+            where: whereClause,
+            include: { ledgerEntries: { include: { ledger: true } } },
+          })
+        : [],
+      !type || type === "ALL" || type === "STOCK_JOURNAL"
+        ? prisma.stockJournal.findMany({ where: whereClause })
+        : [],
+    ]);
+
+  const vouchers = [
+    ...sales.map((v) => ({ ...v, type: "SALES", entries: v.ledgerEntries })),
+    ...purchase.map((v) => ({
+      ...v,
+      type: "PURCHASE",
+      entries: v.ledgerEntries,
+    })),
+    ...payment.map((v) => ({
+      ...v,
+      type: "PAYMENT",
+      entries: v.ledgerEntries,
+    })),
+    ...receipt.map((v) => ({
+      ...v,
+      type: "RECEIPT",
+      entries: v.ledgerEntries,
+    })),
+    ...contra.map((v) => ({ ...v, type: "CONTRA", entries: v.ledgerEntries })),
+    ...journal.map((v) => ({
+      ...v,
+      type: "JOURNAL",
+      entries: v.ledgerEntries,
+    })),
+    ...stock.map((v) => ({
+      ...v,
+      type: "STOCK_JOURNAL",
+      entries: [],
+      totalAmount: 0,
+    })), // Stock Journal handling
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Calculate Totals for the View
   const totalTransactions = vouchers.length;
-  const totalValue = vouchers.reduce(
-    (sum, v) =>
-      sum +
-      v.entries.filter((e) => e.amount > 0).reduce((s, e) => s + e.amount, 0),
-    0
-  );
+  const totalValue = vouchers.reduce((sum, v) => sum + (v.totalAmount || 0), 0);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-3 animate-in fade-in duration-500 h-[calc(100vh-64px)] flex flex-col">
@@ -144,16 +267,20 @@ export default async function DaybookPage({
                 </tr>
               ) : (
                 vouchers.map((v) => {
-                  // Determine primary ledger (Party) for display
-                  // Usually the first entry that isn't Cash/Bank, or the first entry generally
-                  const primaryEntry = v.entries[0];
-                  const totalVchAmount = v.entries
-                    .filter((e) => e.amount > 0)
-                    .reduce((sum, e) => sum + e.amount, 0);
+                  // Display Logic
+                  // For Sales/Purchase, Party is main ledger.
+                  // For others, usually the first ledger entry is good enough for summary.
+                  const primaryEntry = v.entries?.[0];
+                  const ledgerName =
+                    primaryEntry?.ledger?.name ||
+                    v.partyName ||
+                    v.narration ||
+                    "Unknown";
+                  const amount = v.totalAmount || 0;
 
                   return (
                     <tr
-                      key={v.id}
+                      key={`${v.type}-${v.id}`}
                       className="group hover:bg-blue-50/40 transition-colors text-[11px]"
                     >
                       <td className="py-2 px-4 font-bold text-slate-700 whitespace-nowrap">
@@ -161,19 +288,18 @@ export default async function DaybookPage({
                       </td>
                       <td className="py-2 px-4">
                         <span
-                          className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tight ${
+                          className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tight 
+                          ${
                             v.type === "SALES"
                               ? "bg-emerald-100 text-emerald-700"
                               : v.type === "PURCHASE"
                               ? "bg-amber-100 text-amber-700"
                               : v.type === "PAYMENT"
                               ? "bg-rose-100 text-rose-700"
-                              : v.type === "RECEIPT"
-                              ? "bg-blue-100 text-blue-700"
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {v.type}
+                          {v.type.replace("_", " ")}
                         </span>
                       </td>
                       <td className="py-2 px-4 font-mono font-bold text-slate-500">
@@ -181,21 +307,23 @@ export default async function DaybookPage({
                       </td>
                       <td className="py-2 px-4">
                         <div className="font-bold text-slate-800 uppercase tracking-tight">
-                          {primaryEntry?.ledger?.name || "Unknown Ledger"}
+                          {ledgerName}
                         </div>
                         <div className="text-[9px] text-slate-400 italic truncate max-w-[250px]">
                           {v.narration || "—"}
                         </div>
                       </td>
                       <td className="py-2 px-4 text-right font-mono font-bold text-slate-900">
-                        {fmt(totalVchAmount)}
+                        {fmt(amount)}
                       </td>
                       <td className="py-2 px-4 text-right font-mono font-bold text-slate-900">
-                        {fmt(totalVchAmount)}
+                        {fmt(amount)}
                       </td>
                       <td className="py-2 px-4 text-center">
                         <Link
-                          href={`/companies/${companyId}/vouchers/${v.id}`}
+                          href={`/companies/${companyId}/vouchers/${v.type.toLowerCase()}/${
+                            v.id
+                          }`}
                           className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-blue-600 hover:underline"
                         >
                           View <ArrowUpRight size={10} />

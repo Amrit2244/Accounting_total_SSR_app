@@ -23,7 +23,8 @@ export default async function EditItemPage({
   if (!item) return notFound();
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    // ✅ Added overflow-visible to ensure dropdowns aren't clipped
+    <div className="max-w-2xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-visible">
       {/* HEADER */}
       <div className="flex items-center justify-between mb-10 border-b border-slate-200 pb-8">
         <div>
@@ -58,7 +59,8 @@ export default async function EditItemPage({
       </div>
 
       {/* FORM CARD */}
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 md:p-12">
+      {/* ✅ Added overflow-visible here as well */}
+      <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 md:p-12 overflow-visible relative z-10">
         <EditInventoryForm
           item={item}
           companyId={companyId}

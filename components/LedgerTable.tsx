@@ -1,15 +1,23 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useTransition } from "react";
 import Link from "next/link";
-import { Search, FileEdit, ExternalLink, Trash2, X } from "lucide-react";
+import {
+  Search,
+  FileEdit,
+  ExternalLink,
+  Trash2,
+  X,
+  Loader2,
+} from "lucide-react";
+// ✅ IMPORT FROM MASTERS (The correct location)
 import { deleteBulkLedgers } from "@/app/actions/masters";
+import { useRouter } from "next/navigation";
 
 interface Ledger {
   id: number;
   name: string;
   openingBalance: number;
-  // ✅ FIX: Allow group to be null to match Prisma schema
   group: { name: string } | null;
 }
 
@@ -20,39 +28,52 @@ export default function LedgerTable({
   ledgers: Ledger[];
   companyId: number;
 }) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   const filteredLedgers = useMemo(
     () =>
       ledgers.filter(
         (l) =>
           l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          // ✅ FIX: Safely handle null groups during search
           (l.group?.name || "").toLowerCase().includes(searchTerm.toLowerCase())
       ),
     [ledgers, searchTerm]
   );
 
-  const toggleSelectAll = () =>
-    setSelectedIds(
-      selectedIds.length === filteredLedgers.length
-        ? []
-        : filteredLedgers.map((l) => l.id)
-    );
-  const toggleSelectOne = (id: number) =>
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredLedgers.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredLedgers.map((l) => l.id));
+    }
+  };
 
-  const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedIds.length} ledgers?`)) return;
-    setIsDeleting(true);
-    const res = await deleteBulkLedgers(selectedIds, companyId);
-    if (res.success) setSelectedIds([]);
-    else alert(res.message);
-    setIsDeleting(false);
+  const toggleSelectOne = (id: number) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter((i) => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (
+      !confirm(`Are you sure you want to delete ${selectedIds.length} ledgers?`)
+    )
+      return;
+
+    startTransition(async () => {
+      const res = await deleteBulkLedgers(selectedIds, companyId);
+      if (res.success) {
+        setSelectedIds([]); // Clear selection
+        router.refresh(); // Refresh data
+      } else {
+        alert(res.message);
+      }
+    });
   };
 
   const fmt = (n: number) =>
@@ -60,6 +81,7 @@ export default function LedgerTable({
 
   return (
     <div className="relative">
+      {/* BULK ACTION BAR */}
       {selectedIds.length > 0 && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-slate-900 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-4 animate-in slide-in-from-top-2">
           <span className="text-[10px] font-black uppercase tracking-widest">
@@ -67,17 +89,23 @@ export default function LedgerTable({
           </span>
           <button
             onClick={handleBulkDelete}
-            disabled={isDeleting}
-            className="text-red-400 hover:text-white font-bold text-[10px] uppercase flex items-center gap-1 transition-colors"
+            disabled={isPending}
+            className="text-red-400 hover:text-white font-bold text-[10px] uppercase flex items-center gap-1 transition-colors disabled:opacity-50"
           >
-            <Trash2 size={12} /> {isDeleting ? "..." : "Delete"}
+            {isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Trash2 size={12} />
+            )}
+            {isPending ? "Deleting..." : "Delete"}
           </button>
-          <button onClick={() => setSelectedIds([])}>
+          <button onClick={() => setSelectedIds([])} disabled={isPending}>
             <X size={14} className="text-slate-500 hover:text-white" />
           </button>
         </div>
       )}
 
+      {/* SEARCH BAR */}
       <div className="px-4 py-2 border-b border-slate-100 flex justify-end bg-slate-50/50">
         <div className="relative w-64">
           <Search
@@ -94,6 +122,7 @@ export default function LedgerTable({
         </div>
       </div>
 
+      {/* TABLE */}
       <div className="overflow-x-auto h-[calc(100vh-220px)] custom-scrollbar">
         <table className="w-full text-left border-collapse text-[11px]">
           <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest sticky top-0 z-10 border-b">
@@ -137,7 +166,6 @@ export default function LedgerTable({
                     {ledger.name}
                   </td>
                   <td className="px-4 py-1.5 text-[10px] font-bold text-slate-500 uppercase">
-                    {/* ✅ FIX: Optional chaining for group name */}
                     {ledger.group?.name || "-"}
                   </td>
                   <td

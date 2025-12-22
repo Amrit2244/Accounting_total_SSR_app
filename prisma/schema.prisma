@@ -14,49 +14,76 @@ datasource db {
 // 1. USER MANAGEMENT (Roles for Maker-Checker)
 // ==========================================
 model User {
-  id               Int       @id @default(autoincrement())
-  username         String    @unique
-  password         String
-  name             String
-  role             String    @default("MAKER") // MAKER, CHECKER, ADMIN
-  createdAt        DateTime  @default(now())
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("MAKER") // MAKER, CHECKER, ADMIN
+  createdAt DateTime @default(now())
 
-  // Relations
-  createdVouchers  Voucher[] @relation("CreatedBy")
-  verifiedVouchers Voucher[] @relation("VerifiedBy")
+  // Relations - Updated to reference specific voucher types
+  createdSales     SalesVoucher[]    @relation("SalesCreatedBy")
+  verifiedSales    SalesVoucher[]    @relation("SalesVerifiedBy")
   
-  // ✅ FEATURE 5: Audit Tracking for BOMs
-  createdBoms      BOM[]     @relation("BOMMaker")
+  createdPurchase  PurchaseVoucher[] @relation("PurchaseCreatedBy")
+  verifiedPurchase PurchaseVoucher[] @relation("PurchaseVerifiedBy")
+  
+  createdPayment   PaymentVoucher[]  @relation("PaymentCreatedBy")
+  verifiedPayment  PaymentVoucher[]  @relation("PaymentVerifiedBy")
+  
+  createdReceipt   ReceiptVoucher[]  @relation("ReceiptCreatedBy")
+  verifiedReceipt  ReceiptVoucher[]  @relation("ReceiptVerifiedBy")
+  
+  createdContra    ContraVoucher[]   @relation("ContraCreatedBy")
+  verifiedContra   ContraVoucher[]   @relation("ContraVerifiedBy")
+  
+  createdJournal   JournalVoucher[]  @relation("JournalCreatedBy")
+  verifiedJournal  JournalVoucher[]  @relation("JournalVerifiedBy")
+  
+  // ✅ ADDED: Stock Journal Relation
+  createdStockJournals StockJournal[] @relation("StockJournalCreatedBy")
+  // ✅ ADD THIS LINE:
+  verifiedStockJournals StockJournal[] @relation("StockJournalVerifiedBy")
+  // BOM Relations
+  createdBoms BOM[] @relation("BOMMaker")
 }
 
 // ==========================================
 // 2. COMPANY DATA
 // ==========================================
 model Company {
-  id                Int               @id @default(autoincrement())
-  name              String
-  address           String?           @db.Text
-  state             String?
-  pincode           String?
-  email             String?
-  gstin             String?
+  id               Int      @id @default(autoincrement())
+  name             String
+  address          String?  @db.Text
+  state            String?
+  pincode          String?
+  email            String?
+  gstin            String?
   
   // Settings
-  currencySymbol    String            @default("₹")
+  currencySymbol   String   @default("₹")
   financialYearFrom DateTime
   booksBeginFrom    DateTime
 
   // Relations
   groups           Group[]
   ledgers          Ledger[]
-  vouchers         Voucher[]
   units            Unit[]
   stockGroups      StockGroup[]
   stockItems       StockItem[]
   sequences        VoucherSequence[]
-  boms             BOM[]             
+  boms             BOM[]
   
-  createdAt        DateTime          @default(now())
+  // Separate Voucher Relations
+  salesVouchers    SalesVoucher[]
+  purchaseVouchers PurchaseVoucher[]
+  paymentVouchers  PaymentVoucher[]
+  receiptVouchers  ReceiptVoucher[]
+  contraVouchers   ContraVoucher[]
+  journalVouchers  JournalVoucher[]
+  stockJournals    StockJournal[]
+  
+  createdAt        DateTime @default(now())
 }
 
 // ==========================================
@@ -66,7 +93,7 @@ model VoucherSequence {
   id          Int     @id @default(autoincrement())
   companyId   Int
   company     Company @relation(fields: [companyId], references: [id])
-  voucherType String  // SALES, PAYMENT, RECEIPT...
+  voucherType String  // PAYMENT, RECEIPT, CONTRA, JOURNAL, STOCK_JOURNAL
   lastNo      Int     @default(0)
 
   @@unique([companyId, voucherType])
@@ -94,25 +121,33 @@ model Group {
 }
 
 model Ledger {
-  id              Int            @id @default(autoincrement())
+  id              Int     @id @default(autoincrement())
   name            String
-  address         String?        @db.Text
-  openingBalance  Float          @default(0.0)
+  address         String? @db.Text
+  openingBalance  Float   @default(0.0)
   
-  groupId         Int?           
-  group           Group?         @relation(fields: [groupId], references: [id])
+  groupId         Int?
+  group           Group?  @relation(fields: [groupId], references: [id])
   
   companyId       Int
-  company         Company        @relation(fields: [companyId], references: [id])
+  company         Company @relation(fields: [companyId], references: [id])
   
-  // Relations
-  entries         VoucherEntry[]
-  vouchersAsParty Voucher[]      @relation("PartyLedger")
+  // Relations to Voucher Entries (One for each type)
+  salesEntries    SalesLedgerEntry[]
+  purchaseEntries PurchaseLedgerEntry[]
+  paymentEntries  PaymentLedgerEntry[]
+  receiptEntries  ReceiptLedgerEntry[]
+  contraEntries   ContraLedgerEntry[]
+  journalEntries  JournalLedgerEntry[]
+
+  // Also referenced as Party Ledger in transactions
+  salesParties    SalesVoucher[]    @relation("SalesPartyLedger")
+  purchaseParties PurchaseVoucher[] @relation("PurchasePartyLedger")
 
   // Tally Specifics
-  tallyName       String?        
-  state           String?        
-  gstin           String?        
+  tallyName       String?
+  state           String?
+  gstin           String?
 
   @@unique([name, companyId])
 }
@@ -132,52 +167,57 @@ model Unit {
 }
 
 model StockGroup {
-  id        Int          @id @default(autoincrement())
+  id        Int         @id @default(autoincrement())
   name      String
   companyId Int
-  company   Company      @relation(fields: [companyId], references: [id])
+  company   Company     @relation(fields: [companyId], references: [id])
   items     StockItem[]
   
   parentId  Int?
-  parent    StockGroup?  @relation("StockHierarchy", fields: [parentId], references: [id])
+  parent    StockGroup? @relation("StockHierarchy", fields: [parentId], references: [id])
   children  StockGroup[] @relation("StockHierarchy")
   
   @@unique([name, companyId])
 }
 
 model StockItem {
-  id               Int              @id @default(autoincrement())
-  name             String
-  partNumber       String?
+  id            Int      @id @default(autoincrement())
+  name          String
+  partNumber    String?
   
   // Balance Fields
-  openingQty       Float            @default(0)
-  openingValue     Float            @default(0)
-  quantity         Float            @default(0) // Current Stock level
+  openingQty    Float    @default(0)
+  openingValue  Float    @default(0)
+  quantity      Float    @default(0) // Current Stock level
   
-  // ✅ FEATURE 3: REORDER ALERTS
-  minStock         Float            @default(0) 
+  // Alerts
+  minStock      Float    @default(0) 
 
-  groupId          Int?
-  group            StockGroup?      @relation(fields: [groupId], references: [id])
+  groupId       Int?
+  group         StockGroup? @relation(fields: [groupId], references: [id])
   
-  unitId           Int?
-  unit             Unit?            @relation(fields: [unitId], references: [id])
+  unitId        Int?
+  unit          Unit?       @relation(fields: [unitId], references: [id])
   
-  companyId        Int
-  company          Company          @relation(fields: [companyId], references: [id])
+  companyId     Int
+  company       Company     @relation(fields: [companyId], references: [id])
   
-  inventoryEntries InventoryEntry[]
-  gstRate          Float            @default(0) 
+  gstRate       Float       @default(0) 
 
-  // ✅ FEATURE 2: BILL OF MATERIALS (BOM) RELATIONS
-  producedBy       BOM[]            @relation("FinishedGood")
-  usedInBoms       BOMItem[]        @relation("BOMComponent")
+  // Relations to Voucher Inventory Entries
+  salesItems    SalesItemEntry[]
+  purchaseItems PurchaseItemEntry[]
+  
+  // ✅ THIS RELATION WAS MISSING IN YOUR PREVIOUS ATTEMPT
+  journalEntries StockJournalEntry[] 
+
+  // BOM Relations
+  producedBy    BOM[]       @relation("FinishedGood")
+  usedInBoms    BOMItem[]   @relation("BOMComponent")
   
   @@unique([name, companyId])
 }
 
-// ✅ NEW MODEL: BILL OF MATERIALS (BOM)
 model BOM {
   id             Int       @id @default(autoincrement())
   name           String    
@@ -191,7 +231,6 @@ model BOM {
   companyId      Int
   company        Company   @relation(fields: [companyId], references: [id])
 
-  // ✅ FEATURE 5: AUDIT TRAIL for Master Data
   createdById    Int
   createdBy      User      @relation("BOMMaker", fields: [createdById], references: [id])
   createdAt      DateTime  @default(now())
@@ -205,95 +244,333 @@ model BOMItem {
   
   stockItemId Int
   stockItem   StockItem @relation("BOMComponent", fields: [stockItemId], references: [id])
-  quantity    Float     
+  quantity    Float    
 }
 
 // ==========================================
-// 6. VOUCHER (Transactions)
+// 6. SALES VOUCHER (Manual No + Inventory)
 // ==========================================
-model Voucher {
+model SalesVoucher {
   id              Int      @id @default(autoincrement())
-  
-  voucherNo       String   
-  transactionCode String?  @unique 
-  
-  type            String   // SALES, RECEIPT, PAYMENT, STOCK_JOURNAL...
-  date            DateTime 
-  narration       String?  @db.Text
-  
-  reference       String?  
-  partyName       String?  
-  
-  partyLedgerId   Int?     
-  partyLedger     Ledger?  @relation("PartyLedger", fields: [partyLedgerId], references: [id])
-
-  partyGstin      String?  
-  placeOfSupply   String?  
-  totalAmount     Float?    
-
-  // ✅ FEATURE 5: ATTACHMENTS (Unique field)
-  attachmentUrl   String?  @db.Text 
-
   companyId       Int
   company         Company  @relation(fields: [companyId], references: [id])
   
-  status          String   @default("PENDING") // PENDING, APPROVED
-  rejectionReason  String?  @db.Text            // ✅ Added this field
+  // MANUAL NUMBERING (String)
+  voucherNo       String   
+  transactionCode String?  @unique
   
-  createdById     Int      
-  createdBy       User     @relation("CreatedBy", fields: [createdById], references: [id])
-  
-  verifiedById    Int?
-  verifiedBy      User?    @relation("VerifiedBy", fields: [verifiedById], references: [id])
+  date            DateTime
+  narration       String?  @db.Text
+  totalAmount     Float
 
-  entries         VoucherEntry[]   
-  inventory       InventoryEntry[] 
+  // Specific Fields
+  partyName       String?
+  partyLedgerId   Int?
+  partyLedger     Ledger?  @relation("SalesPartyLedger", fields: [partyLedgerId], references: [id])
+  gstin           String?
+  placeOfSupply   String?
   
-  // ✅ FEATURE 5: AUDIT LOGS
-  auditLogs       AuditLog[]
+  // Relations
+  ledgerEntries   SalesLedgerEntry[]
+  inventoryEntries SalesItemEntry[]
+
+  // Approval Workflow
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejectionReason String?  @db.Text
+  
+  createdById     Int
+  createdBy       User     @relation("SalesCreatedBy", fields: [createdById], references: [id])
+  verifiedById    Int?
+  verifiedBy      User?    @relation("SalesVerifiedBy", fields: [verifiedById], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // PREVENT DUPLICATE VOUCHER NO IN SALES
+  @@unique([companyId, voucherNo])
+}
+
+model SalesLedgerEntry {
+  id            Int          @id @default(autoincrement())
+  salesId       Int
+  salesVoucher  SalesVoucher @relation(fields: [salesId], references: [id], onDelete: Cascade)
+  ledgerId      Int
+  ledger        Ledger       @relation(fields: [ledgerId], references: [id])
+  amount        Float        // Debit/Credit
+}
+
+model SalesItemEntry {
+  id            Int          @id @default(autoincrement())
+  salesId       Int
+  salesVoucher  SalesVoucher @relation(fields: [salesId], references: [id], onDelete: Cascade)
+  stockItemId   Int
+  stockItem     StockItem    @relation(fields: [stockItemId], references: [id])
+  quantity      Float
+  rate          Float
+  amount        Float
+  unit          String?
+}
+
+// ==========================================
+// 7. PURCHASE VOUCHER (Manual No + Inventory)
+// ==========================================
+model PurchaseVoucher {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  // MANUAL NUMBERING (String)
+  voucherNo       String   
+  transactionCode String?  @unique
+  
+  date            DateTime
+  narration       String?  @db.Text
+  totalAmount     Float
+  
+  supplierRef     String?
+  partyName       String?
+  partyLedgerId   Int?
+  partyLedger     Ledger?  @relation("PurchasePartyLedger", fields: [partyLedgerId], references: [id])
+  gstin           String?
+
+  ledgerEntries   PurchaseLedgerEntry[]
+  inventoryEntries PurchaseItemEntry[]
+
+  status          String   @default("PENDING")
+  rejectionReason String?  @db.Text
+
+  createdById     Int
+  createdBy       User     @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  verifiedById    Int?
+  verifiedBy      User?    @relation("PurchaseVerifiedBy", fields: [verifiedById], references: [id])
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@unique([companyId, voucherNo, type]) 
+  @@unique([companyId, voucherNo])
 }
 
-// ✅ NEW MODEL: AUDIT LOG (Feature 5)
-model AuditLog {
-  id          Int      @id @default(autoincrement())
-  voucherId   Int
-  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
-  userId      Int
-  userName    String   
-  action      String   // "CREATED", "EDITED", "VERIFIED", "REJECTED"
-  details     String?  @db.Text 
-  createdAt   DateTime @default(now())
+model PurchaseLedgerEntry {
+  id              Int             @id @default(autoincrement())
+  purchaseId      Int
+  purchaseVoucher PurchaseVoucher @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  ledgerId        Int
+  ledger          Ledger          @relation(fields: [ledgerId], references: [id])
+  amount          Float
 }
 
-model VoucherEntry {
+model PurchaseItemEntry {
+  id              Int             @id @default(autoincrement())
+  purchaseId      Int
+  purchaseVoucher PurchaseVoucher @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  stockItemId     Int
+  stockItem       StockItem       @relation(fields: [stockItemId], references: [id])
+  quantity        Float
+  rate            Float
+  amount          Float
+  unit            String?
+}
+
+// ==========================================
+// 8. PAYMENT VOUCHER (Auto No, No Inventory)
+// ==========================================
+model PaymentVoucher {
   id              Int      @id @default(autoincrement())
-  ledgerName      String?   
-  ledgerId        Int?     
-  ledger          Ledger?  @relation(fields: [ledgerId], references: [id]) 
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  // AUTO NUMBERING (Int) - Managed by sequence logic
+  voucherNo       Int      
+  transactionCode String?  @unique
   
-  amount          Float    // Positive = Debit, Negative = Credit
-  bankDate        DateTime?
-  voucherId       Int
-  voucher         Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  date            DateTime
+  narration       String?  @db.Text
+  totalAmount     Float
+
+  ledgerEntries   PaymentLedgerEntry[]
+
+  status          String   @default("PENDING")
+  rejectionReason String?  @db.Text
+
+  createdById     Int
+  createdBy       User     @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  verifiedById    Int?
+  verifiedBy      User?    @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, voucherNo])
 }
 
-model InventoryEntry {
-  id          Int       @id @default(autoincrement())
-  voucherId   Int
-  stockItemId Int
-  itemName    String
-  quantity    Float
-  rate        Float
-  amount      Float
-  unit        String?
-  
-  isProduction Boolean   @default(false) 
+model PaymentLedgerEntry {
+  id            Int            @id @default(autoincrement())
+  paymentId     Int
+  paymentVoucher PaymentVoucher @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  ledgerId      Int
+  ledger        Ledger         @relation(fields: [ledgerId], references: [id])
+  amount        Float
+}
 
-  voucher     Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
-  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+// ==========================================
+// 9. RECEIPT VOUCHER (Auto No)
+// ==========================================
+model ReceiptVoucher {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  voucherNo       Int      
+  transactionCode String?  @unique
+  date            DateTime
+  narration       String?  @db.Text
+  totalAmount     Float
+
+  ledgerEntries   ReceiptLedgerEntry[]
+
+  status          String   @default("PENDING")
+  rejectionReason String?  @db.Text
+
+  createdById     Int
+  createdBy       User     @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  verifiedById    Int?
+  verifiedBy      User?    @relation("ReceiptVerifiedBy", fields: [verifiedById], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, voucherNo])
+}
+
+model ReceiptLedgerEntry {
+  id            Int            @id @default(autoincrement())
+  receiptId     Int
+  receiptVoucher ReceiptVoucher @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  ledgerId      Int
+  ledger        Ledger         @relation(fields: [ledgerId], references: [id])
+  amount        Float
+}
+
+// ==========================================
+// 10. CONTRA VOUCHER (Auto No)
+// ==========================================
+model ContraVoucher {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  voucherNo       Int      
+  transactionCode String?  @unique
+  date            DateTime
+  narration       String?  @db.Text
+  totalAmount     Float
+
+  ledgerEntries   ContraLedgerEntry[]
+
+  status          String   @default("PENDING")
+  rejectionReason String?  @db.Text
+
+  createdById     Int
+  createdBy       User     @relation("ContraCreatedBy", fields: [createdById], references: [id])
+  verifiedById    Int?
+  verifiedBy      User?    @relation("ContraVerifiedBy", fields: [verifiedById], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, voucherNo])
+}
+
+model ContraLedgerEntry {
+  id            Int            @id @default(autoincrement())
+  contraId      Int
+  contraVoucher ContraVoucher  @relation(fields: [contraId], references: [id], onDelete: Cascade)
+  ledgerId      Int
+  ledger        Ledger         @relation(fields: [ledgerId], references: [id])
+  amount        Float
+}
+
+// ==========================================
+// 11. JOURNAL VOUCHER (Auto No)
+// ==========================================
+model JournalVoucher {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  voucherNo       Int      
+  transactionCode String?  @unique
+  date            DateTime
+  narration       String?  @db.Text
+  totalAmount     Float
+
+  ledgerEntries   JournalLedgerEntry[]
+
+  status          String   @default("PENDING")
+  rejectionReason String?  @db.Text
+
+  createdById     Int
+  createdBy       User     @relation("JournalCreatedBy", fields: [createdById], references: [id])
+  verifiedById    Int?
+  verifiedBy      User?    @relation("JournalVerifiedBy", fields: [verifiedById], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, voucherNo])
+}
+
+model JournalLedgerEntry {
+  id            Int            @id @default(autoincrement())
+  journalId     Int
+  journalVoucher JournalVoucher @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  ledgerId      Int
+  ledger        Ledger         @relation(fields: [ledgerId], references: [id])
+  amount        Float
+}
+
+// ==========================================
+// 12. NEW MODEL: STOCK JOURNAL (Manufacturing)
+// ==========================================
+model StockJournal {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+  
+  // Use Manual (String) or Auto (Int) - Let's stick to String "SJ-XXXX" for simplicity
+  voucherNo       String   
+  transactionCode String?  @unique
+  
+  date            DateTime
+  narration       String?  @db.Text
+  
+  status          String   @default("PENDING")
+  createdById     Int
+  createdBy       User     @relation("StockJournalCreatedBy", fields: [createdById], references: [id])
+  
+  inventoryEntries StockJournalEntry[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // ✅ ADD THESE TWO LINES:
+  verifiedById    Int?
+  verifiedBy      User?    @relation("StockJournalVerifiedBy", fields: [verifiedById], references: [id])
+
+  @@unique([companyId, voucherNo])
+}
+
+model StockJournalEntry {
+  id              Int          @id @default(autoincrement())
+  stockJournalId  Int
+  stockJournal    StockJournal @relation(fields: [stockJournalId], references: [id], onDelete: Cascade)
+  
+  stockItemId     Int
+  stockItem       StockItem    @relation(fields: [stockItemId], references: [id])
+  
+  quantity        Float        // Positive = Production, Negative = Consumption
+  rate            Float
+  amount          Float
+  
+  isProduction    Boolean      // True = Source (Production), False = Destination (Consumption)
 }

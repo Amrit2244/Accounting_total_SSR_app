@@ -11,13 +11,12 @@ const fmt = (v: number) =>
     maximumFractionDigits: 2,
   });
 
-// Definition for the Grouped Data Structure
 type GroupData = {
   groupName: string;
   amount: number;
   ledgers: { name: string; amount: number }[];
   isSystem?: boolean;
-  prefix?: string; // "To" or "By"
+  prefix?: string;
 };
 
 export default async function ProfitLossPage({
@@ -30,22 +29,46 @@ export default async function ProfitLossPage({
 
   if (isNaN(companyId)) notFound();
 
-  // --- 1. DATA FETCHING ---
+  // --- 1. DATA FETCHING (Updated for New Schema) ---
   const [ledgers, stockItems] = await Promise.all([
+    // A. Fetch Ledgers + 6 Transaction Types
     prisma.ledger.findMany({
       where: { companyId },
       include: {
         group: { select: { name: true, nature: true } },
-        entries: {
-          where: { voucher: { status: "APPROVED" } },
+        salesEntries: {
+          where: { salesVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        purchaseEntries: {
+          where: { purchaseVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        paymentEntries: {
+          where: { paymentVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        receiptEntries: {
+          where: { receiptVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        contraEntries: {
+          where: { contraVoucher: { status: "APPROVED" } },
+          select: { amount: true },
+        },
+        journalEntries: {
+          where: { journalVoucher: { status: "APPROVED" } },
           select: { amount: true },
         },
       },
     }),
+    // B. Fetch Stock Items + 3 Inventory Types
     prisma.stockItem.findMany({
       where: { companyId },
       include: {
-        inventoryEntries: { where: { voucher: { status: "APPROVED" } } },
+        salesItems: { where: { salesVoucher: { status: "APPROVED" } } },
+        purchaseItems: { where: { purchaseVoucher: { status: "APPROVED" } } },
+        journalEntries: { where: { stockJournal: { status: "APPROVED" } } },
       },
     }),
   ]);
@@ -53,12 +76,10 @@ export default async function ProfitLossPage({
   // --- 2. STOCK VALUATION (Detailed) ---
   let openingStockTotal = 0;
   let closingStockTotal = 0;
-  // We keep details so we can expand "Closing Stock" to see "Wheat: 500", "Rice: 200"
   let openingStockDetails: { name: string; amount: number }[] = [];
   let closingStockDetails: { name: string; amount: number }[] = [];
 
   stockItems.forEach((item) => {
-    // ✅ FIX: Use openingValue directly since openingRate does not exist
     const opVal = item.openingValue || 0;
 
     if (opVal > 0) {
@@ -66,43 +87,40 @@ export default async function ProfitLossPage({
       openingStockDetails.push({ name: item.name, amount: opVal });
     }
 
-    // Closing Logic
-    let qty = item.openingQty || 0;
-    let val = opVal;
+    // Merge all entries into one list for calculation
+    // Note: Sales quantity is negative in DB, Purchase is positive.
+    const allEntries = [
+      ...item.salesItems.map((e) => ({ qty: e.quantity, val: 0 })), // Sales Value irrelevant for Cost
+      ...item.purchaseItems.map((e) => ({ qty: e.quantity, val: e.amount })),
+      ...item.journalEntries.map((e) => ({ qty: e.quantity, val: e.amount })),
+    ];
 
-    item.inventoryEntries.forEach((e) => {
-      if (e.quantity > 0) {
-        qty += e.quantity;
-        val += e.amount;
-      } else {
-        qty -= Math.abs(e.quantity);
+    let currentQty = item.openingQty || 0;
+    let totalInwardQty = item.openingQty || 0;
+    let totalInwardVal = opVal;
+
+    allEntries.forEach((e) => {
+      // 1. Update Current Stock
+      currentQty += e.qty;
+
+      // 2. WAC Calculation: Only Inwards (Positive Qty) affect the Rate
+      if (e.qty > 0) {
+        totalInwardQty += e.qty;
+        totalInwardVal += e.val;
       }
     });
 
-    // WAC Calculation
-    const inwardRate =
-      item.inventoryEntries.reduce(
-        (s, e) => (e.quantity > 0 ? s + e.quantity : s),
-        0
-      ) + (item.openingQty || 0) || 1;
+    // Avoid division by zero
+    const avgRate = totalInwardQty > 0 ? totalInwardVal / totalInwardQty : 0;
+    const closingVal = Math.max(0, currentQty * avgRate);
 
-    const totalInwardVal =
-      item.inventoryEntries.reduce(
-        (s, e) => (e.quantity > 0 ? s + e.amount : s),
-        0
-      ) + opVal;
-
-    const avgRate = totalInwardVal / inwardRate;
-    const clVal = Math.max(0, qty * avgRate);
-
-    if (clVal > 0) {
-      closingStockTotal += clVal;
-      closingStockDetails.push({ name: item.name, amount: clVal });
+    if (closingVal > 0) {
+      closingStockTotal += closingVal;
+      closingStockDetails.push({ name: item.name, amount: closingVal });
     }
   });
 
   // --- 3. AGGREGATION HELPER ---
-  // Maps maintain order better than Objects in JS/TS
   const tradingDrMap = new Map<string, GroupData>();
   const tradingCrMap = new Map<string, GroupData>();
   const plDrMap = new Map<string, GroupData>();
@@ -125,19 +143,26 @@ export default async function ProfitLossPage({
 
   // --- 4. CLASSIFY LEDGERS ---
   ledgers.forEach((l) => {
-    const netBalance =
-      (l.openingBalance || 0) + l.entries.reduce((sum, e) => sum + e.amount, 0);
-    if (Math.abs(netBalance) < 0.01) return;
+    // Sum from all 6 tables
+    const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
+    const txTotal =
+      sum(l.salesEntries) +
+      sum(l.purchaseEntries) +
+      sum(l.paymentEntries) +
+      sum(l.receiptEntries) +
+      sum(l.contraEntries) +
+      sum(l.journalEntries);
 
-    // ✅ FIX: Add safety check for l.group
+    const netBalance = (l.openingBalance || 0) + txTotal;
+
+    if (Math.abs(netBalance) < 0.01) return;
     if (!l.group) return;
 
     const absAmount = Math.abs(netBalance);
-    const gName = l.group.name; // E.g., "Indirect Expenses"
+    const gName = l.group.name;
     const gLower = gName.toLowerCase();
     const nature = l.group.nature?.toUpperCase();
 
-    // Logic to route Ledger -> Correct Map
     if (gLower.includes("purchase") || gLower.includes("direct exp")) {
       addToMap(tradingDrMap, gName, l.name, absAmount, "To");
     } else if (gLower.includes("sales") || gLower.includes("direct inc")) {
@@ -149,11 +174,10 @@ export default async function ProfitLossPage({
     }
   });
 
-  // --- 5. BUILD TRADING ACCOUNT LISTS ---
+  // --- 5. BUILD TRADING ACCOUNT ---
   const tradingDr = Array.from(tradingDrMap.values());
   const tradingCr = Array.from(tradingCrMap.values());
 
-  // Inject Stocks
   if (openingStockTotal > 0) {
     tradingDr.unshift({
       groupName: "Opening Stock",
@@ -173,22 +197,20 @@ export default async function ProfitLossPage({
     });
   }
 
-  // Trading Totals
   const sumTradingDr = tradingDr.reduce((s, i) => s + i.amount, 0);
   const sumTradingCr = tradingCr.reduce((s, i) => s + i.amount, 0);
-  const grossDiff = sumTradingCr - sumTradingDr; // +ve = Profit
+  const grossDiff = sumTradingCr - sumTradingDr;
   const isGrossProfit = grossDiff >= 0;
   const tradingTotal = Math.max(sumTradingDr, sumTradingCr);
 
-  // --- 6. BUILD P&L ACCOUNT LISTS ---
+  // --- 6. BUILD P&L ACCOUNT ---
   const plDr = Array.from(plDrMap.values());
   const plCr = Array.from(plCrMap.values());
 
-  // Transfer GP/GL
   const grossItem: GroupData = {
     groupName: isGrossProfit ? "Gross Profit b/d" : "Gross Loss b/d",
     amount: Math.abs(grossDiff),
-    ledgers: [], // No drill down for system calc line
+    ledgers: [],
     isSystem: true,
     prefix: isGrossProfit ? "By" : "To",
   };
@@ -196,15 +218,13 @@ export default async function ProfitLossPage({
   if (isGrossProfit) plCr.unshift(grossItem);
   else plDr.unshift(grossItem);
 
-  // P&L Totals
   const sumPLDr = plDr.reduce((s, i) => s + i.amount, 0);
   const sumPLCr = plCr.reduce((s, i) => s + i.amount, 0);
-  const netDiff = sumPLCr - sumPLDr; // +ve = Profit
+  const netDiff = sumPLCr - sumPLDr;
   const isNetProfit = netDiff >= 0;
   const plTotal = Math.max(sumPLDr, sumPLCr);
 
-  // --- 7. RENDER HELPERS ---
-  // Balancing Row Component
+  // --- 7. RENDER COMPONENTS ---
   const BalanceRow = ({
     label,
     amount,
@@ -263,9 +283,8 @@ export default async function ProfitLossPage({
         </div>
       </div>
 
-      {/* MAIN REPORT CONTAINER */}
+      {/* REPORT BODY */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1">
-        {/* TABLE HEADERS */}
         <div className="flex border-b border-slate-200 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shrink-0">
           <div className="w-1/2 flex justify-between px-4 py-2 border-r border-slate-700">
             <span>Particulars</span>
@@ -277,22 +296,16 @@ export default async function ProfitLossPage({
           </div>
         </div>
 
-        {/* SCROLLABLE CONTENT */}
         <div className="flex flex-1 min-h-0">
-          {/* --- LEFT SIDE (DEBIT) --- */}
+          {/* DEBIT SIDE */}
           <div className="w-1/2 border-r border-slate-200 flex flex-col overflow-y-auto custom-scrollbar">
-            {/* TRADING ACCOUNT */}
             <div className="flex-1">
-              {/* Sticky Sub-Header */}
               <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
                 Trading Account
               </div>
-
-              {tradingDr.map((group) => (
-                <ProfitLossDrillDown key={group.groupName} item={group} />
+              {tradingDr.map((g) => (
+                <ProfitLossDrillDown key={g.groupName} item={g} />
               ))}
-
-              {/* Gross Profit c/d (Balancing Figure) */}
               {isGrossProfit && (
                 <BalanceRow
                   label="To Gross Profit c/d"
@@ -301,50 +314,37 @@ export default async function ProfitLossPage({
                 />
               )}
             </div>
-
-            {/* Trading Total Dr */}
             <div className="bg-slate-100 px-3 py-1.5 flex justify-between text-[10px] font-black text-slate-500 border-t border-b border-slate-200">
               <span>Total Trading</span>
               <span className="font-mono">{fmt(tradingTotal)}</span>
             </div>
-
-            {/* P&L ACCOUNT */}
             <div className="flex-1 mt-2">
               <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
                 P & L Account
               </div>
-
-              {plDr.map((group) => (
-                <ProfitLossDrillDown key={group.groupName} item={group} />
+              {plDr.map((g) => (
+                <ProfitLossDrillDown key={g.groupName} item={g} />
               ))}
-
-              {/* Net Profit (Balancing Figure) */}
               {isNetProfit && (
                 <BalanceRow
-                  label="To Net Profit (Transferred to Capital)"
+                  label="To Net Profit"
                   amount={netDiff}
                   isProfitRow={true}
                 />
               )}
             </div>
-
-            {/* P&L Total Dr */}
             <TotalRow amount={plTotal} />
           </div>
 
-          {/* --- RIGHT SIDE (CREDIT) --- */}
+          {/* CREDIT SIDE */}
           <div className="w-1/2 flex flex-col overflow-y-auto custom-scrollbar">
-            {/* TRADING ACCOUNT */}
             <div className="flex-1">
               <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
                 Trading Account
               </div>
-
-              {tradingCr.map((group) => (
-                <ProfitLossDrillDown key={group.groupName} item={group} />
+              {tradingCr.map((g) => (
+                <ProfitLossDrillDown key={g.groupName} item={g} />
               ))}
-
-              {/* Gross Loss c/d (Balancing Figure) */}
               {!isGrossProfit && (
                 <BalanceRow
                   label="By Gross Loss c/d"
@@ -353,34 +353,25 @@ export default async function ProfitLossPage({
                 />
               )}
             </div>
-
-            {/* Trading Total Cr */}
             <div className="bg-slate-100 px-3 py-1.5 flex justify-between text-[10px] font-black text-slate-500 border-t border-b border-slate-200">
               <span>Total Trading</span>
               <span className="font-mono">{fmt(tradingTotal)}</span>
             </div>
-
-            {/* P&L ACCOUNT */}
             <div className="flex-1 mt-2">
               <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
                 P & L Account
               </div>
-
-              {plCr.map((group) => (
-                <ProfitLossDrillDown key={group.groupName} item={group} />
+              {plCr.map((g) => (
+                <ProfitLossDrillDown key={g.groupName} item={g} />
               ))}
-
-              {/* Net Loss (Balancing Figure) */}
               {!isNetProfit && (
                 <BalanceRow
-                  label="By Net Loss (Transferred to Capital)"
+                  label="By Net Loss"
                   amount={Math.abs(netDiff)}
                   isProfitRow={false}
                 />
               )}
             </div>
-
-            {/* P&L Total Cr */}
             <TotalRow amount={plTotal} />
           </div>
         </div>

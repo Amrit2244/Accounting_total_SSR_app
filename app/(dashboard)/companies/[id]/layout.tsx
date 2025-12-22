@@ -1,19 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import Sidebar from "@/components/Sidebar";
 import AutoLogout from "@/components/AutoLogout";
-import {
-  Search,
-  Bell,
-  ChevronRight,
-  User,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
+import { Search, Bell, ChevronRight, Clock } from "lucide-react";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 
+// Force dynamic rendering since we rely on cookies and params
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
@@ -22,15 +15,21 @@ export default async function CompanyLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>; // Params is a Promise
 }) {
+  // ✅ 1. Await params to extract the ID safely
   const { id } = await params;
   const companyId = parseInt(id);
 
+  // ✅ 2. Validate ID (prevent NaN errors in Prisma)
+  if (isNaN(companyId)) {
+    redirect("/dashboard");
+  }
+
+  // --- User Session Logic ---
   const cookieStore = await cookies();
   const session = cookieStore.get("session")?.value;
   let user = null;
-  let sessionError = false;
 
   if (session) {
     try {
@@ -38,7 +37,8 @@ export default async function CompanyLayout({
         process.env.SESSION_SECRET || "your-super-secret-key-change-this";
       const encodedKey = new TextEncoder().encode(secret);
       const { payload } = await jwtVerify(session, encodedKey);
-      if (payload && payload.userId) {
+
+      if (payload?.userId) {
         const userIdInt =
           typeof payload.userId === "string"
             ? parseInt(payload.userId)
@@ -47,29 +47,40 @@ export default async function CompanyLayout({
           where: { id: userIdInt },
           select: { name: true },
         });
-        if (!user) sessionError = true;
       }
     } catch (e) {
-      sessionError = true;
+      // Session invalid, redirect to login
+      redirect("/login");
     }
+  } else {
+    // No session, redirect to login
+    redirect("/login");
   }
 
+  // ✅ 3. Fetch Company safely
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { name: true, id: true },
   });
 
+  if (!company) {
+    redirect("/dashboard");
+  }
+
+  // --- Search Action ---
   async function handleSearch(formData: FormData) {
     "use server";
     const query = formData.get("search");
-    if (query)
+    if (query) {
       redirect(
         `/companies/${companyId}/vouchers?search=${encodeURIComponent(
           query.toString()
         )}`
       );
+    }
   }
 
+  // Current Time for Header
   const currentTime = new Date().toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -79,19 +90,20 @@ export default async function CompanyLayout({
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900 antialiased">
       <AutoLogout />
+      {/* Pass the valid companyId */}
       <Sidebar companyId={companyId} />
 
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50">
-        {/* --- COMPACT HEADER (Reduced from h-20 to h-14) --- */}
+        {/* --- HEADER --- */}
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 shadow-sm shrink-0 z-10">
           <div className="flex flex-col">
             <h1 className="text-sm font-black tracking-tight text-slate-900 uppercase leading-none">
-              {company?.name || "Dashboard"}
+              {company.name}
             </h1>
             <div className="flex items-center gap-1 text-[9px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">
               <span>Workspace</span>
               <ChevronRight size={8} />
-              <span>ID: {company?.id.toString().padStart(4, "0")}</span>
+              <span>ID: {company.id.toString().padStart(4, "0")}</span>
             </div>
           </div>
 
@@ -130,6 +142,7 @@ export default async function CompanyLayout({
           </div>
         </header>
 
+        {/* --- CONTENT --- */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
           <div className="max-w-[1400px] mx-auto">{children}</div>
         </div>

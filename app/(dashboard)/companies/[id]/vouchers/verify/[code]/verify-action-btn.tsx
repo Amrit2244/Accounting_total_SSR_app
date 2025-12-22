@@ -13,14 +13,16 @@ import { useRouter, useParams } from "next/navigation";
 
 export default function VerifyActionBtn({
   voucherId,
+  type,
   disabled,
 }: {
   voucherId: number;
+  type: string;
   disabled?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false); // ✅ New Success State
+  const [showSuccess, setShowSuccess] = useState(false);
   const [reason, setReason] = useState("");
   const router = useRouter();
   const params = useParams();
@@ -30,14 +32,16 @@ export default function VerifyActionBtn({
       return;
 
     startTransition(async () => {
-      const result = await verifyVoucher(voucherId);
+      // ✅ Pass Type
+      const result = await verifyVoucher(voucherId, type);
       if (result.success) {
-        setShowSuccess(true); // ✅ Show Success Modal
-        // ✅ Redirect after 2 seconds
+        setShowSuccess(true);
         setTimeout(() => {
           router.push(`/companies/${params.id}/vouchers`);
           router.refresh();
         }, 2000);
+      } else {
+        alert(result.error);
       }
     });
   };
@@ -45,14 +49,16 @@ export default function VerifyActionBtn({
   const handleRejectSubmit = async () => {
     if (!reason.trim()) return alert("Reason required");
     startTransition(async () => {
-      const result = await rejectVoucher(voucherId, reason);
+      // ✅ Pass Type
+      const result = await rejectVoucher(voucherId, type, reason);
       if (result.success) router.push(`/companies/${params.id}/vouchers`);
+      else alert(result.error);
     });
   };
 
   return (
     <>
-      {/* ✅ SUCCESS OVERLAY */}
+      {/* SUCCESS OVERLAY */}
       {showSuccess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/90 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-sm mx-4 animate-in zoom-in-95 duration-300">

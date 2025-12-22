@@ -15,7 +15,6 @@ const fmt = (v: number) =>
     maximumFractionDigits: 2,
   });
 
-// Helper for Quantity (0 decimal places usually preferred for units)
 const fmtQty = (v: number) =>
   v.toLocaleString("en-IN", {
     minimumFractionDigits: 0,
@@ -53,20 +52,19 @@ export default async function SalesRegisterPage({
   searchParams: Promise<{ month?: string; year?: string }>;
 }) {
   const { id } = await params;
-  const { month, year } = await searchParams;
+  const sp = await searchParams; // Await searchParams
   const companyId = parseInt(id);
 
-  const isMonthlyView = !month || !year;
+  const month = sp.month ? parseInt(sp.month) : undefined;
+  const year = sp.year ? parseInt(sp.year) : undefined;
+
+  const isMonthlyView = month === undefined || year === undefined;
 
   if (isMonthlyView) {
     return <MonthlySummaryView companyId={companyId} />;
   } else {
     return (
-      <VoucherRegisterView
-        companyId={companyId}
-        month={parseInt(month)}
-        year={parseInt(year)}
-      />
+      <VoucherRegisterView companyId={companyId} month={month!} year={year!} />
     );
   }
 }
@@ -77,9 +75,11 @@ export default async function SalesRegisterPage({
 async function MonthlySummaryView({ companyId }: { companyId: number }) {
   const fyMonths = getFinancialYearMonths();
 
-  const allSales = await prisma.voucher.findMany({
-    where: { companyId, type: "SALES", status: "APPROVED" },
-    include: { entries: true },
+  // ✅ FIX: Query 'salesVoucher' instead of 'voucher'
+  // Use 'ledgerEntries' instead of 'entries'
+  const allSales = await prisma.salesVoucher.findMany({
+    where: { companyId, status: "APPROVED" },
+    include: { ledgerEntries: true },
   });
 
   let grandTotalSales = 0;
@@ -91,8 +91,11 @@ async function MonthlySummaryView({ companyId }: { companyId: number }) {
     });
 
     const monthTotal = vouchersInMonth.reduce((sum, v) => {
+      // ✅ FIX: Access 'ledgerEntries'
+      // Sales Logic: Credit amounts (negative) are usually the Income/Sales values
+      // We sum absolute values of negative entries to get total sales value
       let vTotal = 0;
-      v.entries
+      v.ledgerEntries
         .filter((e) => e.amount < 0)
         .forEach((e) => (vTotal += Math.abs(e.amount)));
       return sum + vTotal;
@@ -187,17 +190,17 @@ async function VoucherRegisterView({
   const startDate = new Date(year, month, 1);
   const endDate = new Date(year, month + 1, 0);
 
-  // Fetch Vouchers + Inventory
-  const vouchers = await prisma.voucher.findMany({
+  // ✅ FIX: Query 'salesVoucher'
+  const vouchers = await prisma.salesVoucher.findMany({
     where: {
       companyId,
-      type: "SALES",
       date: { gte: startDate, lte: endDate },
       status: "APPROVED",
     },
+    // ✅ FIX: Update relation names
     include: {
-      entries: { include: { ledger: { include: { group: true } } } },
-      inventory: { include: { stockItem: true } },
+      ledgerEntries: { include: { ledger: { include: { group: true } } } },
+      inventoryEntries: { include: { stockItem: true } },
     },
     orderBy: { date: "asc" },
   });
@@ -205,49 +208,51 @@ async function VoucherRegisterView({
   // Aggregation vars
   let totalTaxable = 0;
   let grandTotal = 0;
-  let totalQty = 0; // ✅ Variable for Total Quantity
+  let totalQty = 0;
 
   const registerData = vouchers.map((v) => {
-    const partyEntry = v.entries.find((e) => e.amount > 0);
-    const partyName = partyEntry?.ledger?.name || "Cash / Unknown";
+    // Sales Logic: Party is usually debited (Positive amount)
+    const partyEntry = v.ledgerEntries.find((e) => e.amount > 0);
+    const partyName =
+      partyEntry?.ledger?.name || v.partyName || "Cash / Unknown";
 
     let taxable = 0;
     let taxAmt = 0;
     let voucherQty = 0;
 
     // Financial Totals
-    v.entries
+    // Sales logic: Credit entries (negative) are Sales + Tax
+    v.ledgerEntries
       .filter((e) => e.amount < 0)
       .forEach((e) => {
         const amt = Math.abs(e.amount);
 
-        // ✅ FIX: Safety check for ledger and group existence
         if (!e.ledger || !e.ledger.group) return;
 
         const groupName = e.ledger.group.name.toLowerCase();
         if (groupName.includes("duties") || groupName.includes("tax")) {
           taxAmt += amt;
         } else {
-          taxable += amt;
+          taxable += amt; // Assuming non-tax credits are Sales
         }
       });
 
     // Quantity Totals
-    v.inventory.forEach((item) => {
-      voucherQty += item.quantity;
+    v.inventoryEntries.forEach((item) => {
+      voucherQty += Math.abs(item.quantity); // Inventory in Sales is usually negative (outward), so use Abs
     });
 
     totalTaxable += taxable;
     const rowTotal = taxable + taxAmt;
     grandTotal += rowTotal;
-    totalQty += voucherQty; // ✅ Add to grand total Qty
+    totalQty += voucherQty;
 
     return {
       id: v.id,
       date: v.date,
       voucherNo: v.voucherNo,
       partyName,
-      items: v.inventory,
+      items: v.inventoryEntries, // Use updated field name
       taxable,
       total: rowTotal,
     };
@@ -345,7 +350,7 @@ async function VoucherRegisterView({
                             : ""
                         }`}
                       >
-                        {item.stockItem.name}
+                        {item.stockItem?.name}
                       </div>
                     ))
                   ) : (
@@ -364,7 +369,7 @@ async function VoucherRegisterView({
                           : ""
                       }`}
                     >
-                      {item.quantity}
+                      {Math.abs(item.quantity)}
                     </div>
                   ))}
                 </div>
@@ -379,7 +384,7 @@ async function VoucherRegisterView({
                       }`}
                     >
                       {item.quantity !== 0
-                        ? fmt(item.amount / item.quantity)
+                        ? fmt(item.amount / Math.abs(item.quantity))
                         : "-"}
                     </div>
                   ))}
@@ -397,18 +402,16 @@ async function VoucherRegisterView({
           )}
         </div>
 
-        {/* TOTAL FOOTER (Updated with Quantity) */}
+        {/* TOTAL FOOTER */}
         <div className="bg-slate-100 border-t border-slate-200 flex items-center text-[10px] font-black uppercase tracking-tight shrink-0">
           <div className="w-[calc(96px+96px+192px)] p-3 text-right text-slate-500">
             Total
           </div>
           <div className="flex-1 border-l border-slate-200" />
-          {/* ✅ Total Quantity Column */}
           <div className="w-20 p-3 text-right border-l border-slate-200 font-mono text-blue-700">
             {fmtQty(totalQty)}
           </div>
           <div className="w-24 border-l border-slate-200" />{" "}
-          {/* Spacer for Rate */}
           <div className="w-32 p-3 text-right border-l border-slate-200">
             {fmt(totalTaxable)}
           </div>

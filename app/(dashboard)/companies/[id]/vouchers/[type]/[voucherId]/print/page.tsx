@@ -3,74 +3,90 @@ import { notFound } from "next/navigation";
 import PrintTriggerButton from "@/components/PrintTriggerButton";
 import { IndianRupee } from "lucide-react";
 
+// --- FETCH HELPER (Same logic as Details Page) ---
+async function getVoucherForPrint(companyId: number, type: string, id: number) {
+  const t = type.toUpperCase();
+  const where = { id, companyId };
+
+  // Relations needed for printing
+  const rel = {
+    company: true,
+    ledgerEntries: { include: { ledger: { include: { group: true } } } },
+    inventoryEntries: { include: { stockItem: { include: { unit: true } } } },
+    createdBy: true,
+    verifiedBy: true,
+  };
+
+  // Adjust for specific tables
+  switch (t) {
+    case "SALES":
+      return prisma.salesVoucher.findUnique({ where, include: rel });
+    case "PURCHASE":
+      return prisma.purchaseVoucher.findUnique({ where, include: rel });
+    case "PAYMENT":
+      return prisma.paymentVoucher.findUnique({
+        where,
+        include: { ...rel, inventoryEntries: false },
+      }); // Payment has no inventory
+    case "RECEIPT":
+      return prisma.receiptVoucher.findUnique({
+        where,
+        include: { ...rel, inventoryEntries: false },
+      });
+    case "CONTRA":
+      return prisma.contraVoucher.findUnique({
+        where,
+        include: { ...rel, inventoryEntries: false },
+      });
+    case "JOURNAL":
+      return prisma.journalVoucher.findUnique({
+        where,
+        include: { ...rel, inventoryEntries: false },
+      });
+    case "STOCK_JOURNAL":
+      return prisma.stockJournal.findUnique({ where, include: rel }); // Stock Journal has inventory
+    default:
+      return null;
+  }
+}
+
 export default async function PrintVoucherPage({
   params,
 }: {
-  params: Promise<{ id: string; voucherId: string }>;
+  params: Promise<{ id: string; type: string; voucherId: string }>;
 }) {
-  const { id, voucherId } = await params;
+  const { id, type, voucherId } = await params;
+
+  const companyId = parseInt(id);
   const vId = parseInt(voucherId);
 
-  const voucher = await prisma.voucher.findUnique({
-    where: { id: vId },
-    include: {
-      company: true,
-      entries: { include: { ledger: { include: { group: true } } } },
-      inventory: { include: { stockItem: { include: { unit: true } } } },
-      createdBy: true,
-      verifiedBy: true,
-    },
-  });
+  // ✅ Fetch from correct table
+  const voucher: any = await getVoucherForPrint(companyId, type, vId);
 
   if (!voucher) return notFound();
 
-  const isStockJournal = voucher.type === "STOCK_JOURNAL";
-  let grandTotal = 0;
+  const isStockJournal = type.toUpperCase() === "STOCK_JOURNAL";
+  let grandTotal = voucher.totalAmount || 0;
 
-  if (isStockJournal) {
-    const prodTotal = voucher.inventory
-      .filter((i) => i.isProduction)
-      .reduce((sum, i) => sum + i.amount, 0);
-    grandTotal =
-      prodTotal > 0
-        ? prodTotal
-        : voucher.inventory.reduce((sum, i) => sum + i.amount, 0) / 2;
-  } else {
-    grandTotal = voucher.entries
-      .filter((e) => e.amount > 0)
-      .reduce((sum, e) => sum + e.amount, 0);
-  }
+  // Use the correct field names from your schema
+  // Your schema uses 'ledgerEntries' and 'inventoryEntries'
+  const entries = voucher.ledgerEntries || [];
+  const inventory = voucher.inventoryEntries || [];
 
-  // ✅ FIX: Explicit check to satisfy TypeScript
-  const primaryPartyEntry = voucher.entries.find((e) => {
-    // 1. If ledger is null, skip this entry
-    if (!e.ledger) return false;
-
-    // 2. Now safe to access name
-    const name = e.ledger.name.toLowerCase();
-
-    // 3. check against keywords
-    const isCashOrBank = ["cash", "bank"].some((k) => name.includes(k));
-
-    return !isCashOrBank && Math.abs(e.amount) > 0;
-  });
-
-  // Fallback if no party found
-  const primaryPartyName =
-    primaryPartyEntry?.ledger?.name || "Cash / Counterparty";
-
+  // Helper formatting functions
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
   const fmtDate = (date: Date) =>
-    date.toLocaleDateString("en-IN", {
+    new Date(date).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
-  const isInventory = voucher.inventory.length > 0;
+
+  const isInventory = inventory.length > 0;
 
   return (
-    <div className="bg-slate-100 min-h-screen flex justify-center p-4 print:p-0 print:bg-white">
+    <div className="bg-slate-100 min-h-screen flex justify-center p-4 print:p-0 print:bg-white font-sans">
       <div className="fixed top-4 right-4 no-print z-50">
         <PrintTriggerButton />
       </div>
@@ -83,18 +99,18 @@ export default async function PrintVoucherPage({
         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
           <div>
             <h1 className="text-xl font-black uppercase tracking-wide text-slate-900">
-              {voucher.company.name}
+              {voucher.company?.name || "Company Name"}
             </h1>
             <div className="text-xs mt-1 text-slate-600 whitespace-pre-line leading-snug max-w-[350px]">
-              {voucher.company.address || "Address Not Provided"}
+              {voucher.company?.address || "Address Not Provided"}
             </div>
             <div className="text-[10px] mt-2 font-bold bg-slate-100 inline-block px-1.5 py-0.5 rounded">
-              GSTIN: {voucher.company.gstin || "N/A"}
+              GSTIN: {voucher.company?.gstin || "N/A"}
             </div>
           </div>
           <div className="text-right">
             <h2 className="text-2xl font-black uppercase text-slate-300 leading-none mb-2">
-              {voucher.type.replace("_", " ")}
+              {type.replace("_", " ")}
             </h2>
             <div className="text-xs space-y-0.5">
               <p className="font-bold text-slate-500">
@@ -108,7 +124,7 @@ export default async function PrintVoucherPage({
                 <span className="text-slate-900">{fmtDate(voucher.date)}</span>
               </p>
               <p className="font-mono text-[10px] text-slate-400">
-                {voucher.transactionCode}
+                TX: {voucher.transactionCode}
               </p>
             </div>
           </div>
@@ -145,11 +161,11 @@ export default async function PrintVoucherPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 border-b-2 border-slate-900">
-              {voucher.inventory.map((item, idx) => (
+              {inventory.map((item: any, idx: number) => (
                 <tr
                   key={idx}
                   className={
-                    isStockJournal && item.isProduction
+                    isStockJournal && item.quantity > 0 // Check quantity for Stock Jrnl logic (In/Out)
                       ? "bg-emerald-50/50 print:bg-transparent"
                       : ""
                   }
@@ -159,12 +175,12 @@ export default async function PrintVoucherPage({
                     {isStockJournal && (
                       <span
                         className={`text-[8px] font-black px-1 rounded border ${
-                          item.isProduction
+                          item.quantity > 0
                             ? "bg-emerald-100 border-emerald-200 text-emerald-700"
                             : "bg-orange-100 border-orange-200 text-orange-700"
                         }`}
                       >
-                        {item.isProduction ? "IN" : "OUT"}
+                        {item.quantity > 0 ? "IN" : "OUT"}
                       </span>
                     )}
                   </td>
@@ -198,7 +214,7 @@ export default async function PrintVoucherPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 border-b-2 border-slate-900">
-              {voucher.entries.map((entry, idx) => (
+              {entries.map((entry: any, idx: number) => (
                 <tr key={idx}>
                   <td className="p-2 font-bold text-slate-800">
                     {entry.ledger?.name || "Unknown Ledger"}
@@ -251,7 +267,7 @@ export default async function PrintVoucherPage({
             )}
           </div>
           <div className="text-right flex flex-col justify-between h-20">
-            <p className="font-bold uppercase">For {voucher.company.name}</p>
+            <p className="font-bold uppercase">For {voucher.company?.name}</p>
             <p className="font-black uppercase tracking-widest border-t border-slate-900 inline-block pt-1">
               Authorized Signatory
             </p>
@@ -261,3 +277,4 @@ export default async function PrintVoucherPage({
     </div>
   );
 }
+``;

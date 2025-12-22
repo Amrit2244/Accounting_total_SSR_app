@@ -129,7 +129,7 @@ export default async function VerifyPage({
           />
         </div>
 
-        {/* ✅ INVENTORY ITEMS SECTION (Show only if items exist) */}
+        {/* ✅ INVENTORY ITEMS SECTION */}
         {isInventoryVoucher && (
           <div className="p-4 border-b border-slate-100">
             <div className="flex items-center gap-2 mb-3 text-blue-600">
@@ -232,7 +232,12 @@ export default async function VerifyPage({
               Review details carefully before authorizing.
             </div>
           )}
-          <VerifyActionBtn voucherId={voucher.id} disabled={isMaker} />
+          {/* ✅ PASS TYPE HERE */}
+          <VerifyActionBtn
+            voucherId={voucher.id}
+            type={voucher.type}
+            disabled={isMaker}
+          />
         </div>
       </div>
     </div>

@@ -17,25 +17,107 @@ export default async function VerificationQueuePage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // Fetch only PENDING vouchers with all required relations
-  const pendingVouchers = await prisma.voucher.findMany({
-    where: {
-      companyId,
-      status: "PENDING",
-    },
-    include: {
-      entries: {
+  // ✅ FIX: Fetch from all 7 distinct tables instead of a single 'voucher' table
+  const [sales, purchase, payment, receipt, contra, journal, stock] =
+    await Promise.all([
+      prisma.salesVoucher.findMany({
+        where: { companyId, status: "PENDING" },
         include: {
-          ledger: {
-            include: { group: true },
-          },
+          ledgerEntries: { include: { ledger: { include: { group: true } } } },
+          inventoryEntries: { include: { stockItem: true } },
+          createdBy: true,
         },
-      },
-      inventory: { include: { stockItem: true } },
-      createdBy: true,
-    },
-    orderBy: { date: "desc" },
-  });
+      }),
+      prisma.purchaseVoucher.findMany({
+        where: { companyId, status: "PENDING" },
+        include: {
+          ledgerEntries: { include: { ledger: { include: { group: true } } } },
+          inventoryEntries: { include: { stockItem: true } },
+          createdBy: true,
+        },
+      }),
+      prisma.paymentVoucher.findMany({
+        where: { companyId, status: "PENDING" },
+        include: {
+          ledgerEntries: { include: { ledger: { include: { group: true } } } },
+          createdBy: true,
+        },
+      }),
+      prisma.receiptVoucher.findMany({
+        where: { companyId, status: "PENDING" },
+        include: {
+          ledgerEntries: { include: { ledger: { include: { group: true } } } },
+          createdBy: true,
+        },
+      }),
+      prisma.contraVoucher.findMany({
+        where: { companyId, status: "PENDING" },
+        include: {
+          ledgerEntries: { include: { ledger: { include: { group: true } } } },
+          createdBy: true,
+        },
+      }),
+      prisma.journalVoucher.findMany({
+        where: { companyId, status: "PENDING" },
+        include: {
+          ledgerEntries: { include: { ledger: { include: { group: true } } } },
+          createdBy: true,
+        },
+      }),
+      prisma.stockJournal.findMany({
+        where: { companyId, status: "PENDING" },
+        include: {
+          inventoryEntries: { include: { stockItem: true } },
+          createdBy: true,
+        },
+      }),
+    ]);
+
+  // ✅ Normalize data so the 'VoucherTable' component can read it
+  const pendingVouchers = [
+    ...sales.map((v) => ({
+      ...v,
+      type: "SALES",
+      entries: v.ledgerEntries,
+      inventory: v.inventoryEntries,
+    })),
+    ...purchase.map((v) => ({
+      ...v,
+      type: "PURCHASE",
+      entries: v.ledgerEntries,
+      inventory: v.inventoryEntries,
+    })),
+    ...payment.map((v) => ({
+      ...v,
+      type: "PAYMENT",
+      entries: v.ledgerEntries,
+      inventory: [],
+    })),
+    ...receipt.map((v) => ({
+      ...v,
+      type: "RECEIPT",
+      entries: v.ledgerEntries,
+      inventory: [],
+    })),
+    ...contra.map((v) => ({
+      ...v,
+      type: "CONTRA",
+      entries: v.ledgerEntries,
+      inventory: [],
+    })),
+    ...journal.map((v) => ({
+      ...v,
+      type: "JOURNAL",
+      entries: v.ledgerEntries,
+      inventory: [],
+    })),
+    ...stock.map((v) => ({
+      ...v,
+      type: "STOCK_JOURNAL",
+      entries: [],
+      inventory: v.inventoryEntries,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500">
@@ -84,7 +166,11 @@ export default async function VerificationQueuePage({
       {/* CONTENT AREA */}
       {pendingVouchers.length > 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <VoucherTable vouchers={pendingVouchers} companyId={companyId} />
+          {/* Note: Ensure VoucherTable handles the 'type' field to perform correct actions */}
+          <VoucherTable
+            vouchers={pendingVouchers as any}
+            companyId={companyId}
+          />
         </div>
       ) : (
         <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 flex flex-col items-center text-center">
