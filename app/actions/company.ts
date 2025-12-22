@@ -121,10 +121,10 @@ export async function selectCompanyAction(formData: FormData) {
 
   // Store Active Company ID
   cookieStore.set("activeCompanyId", cid.toString(), {
-    path: "/",
+    path: "/", // ✅ IMPORTANT: Must be root path
     httpOnly: true,
     sameSite: "strict",
-    maxAge: 60 * 60 * 24 * 7, // 7 Days
+    maxAge: 60 * 60 * 24 * 7,
   });
 
   // Store Active Fiscal Year Context
