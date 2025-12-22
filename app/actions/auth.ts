@@ -131,7 +131,8 @@ export async function login(prevState: any, formData: FormData) {
     return { error: "Login failed. Database error." };
   }
 
-  redirect(`/companies/${companyIdToRedirect}`);
+  // redirect(`/companies/${companyIdToRedirect}`);
+  redirect("/");
 }
 
 // ==========================================
