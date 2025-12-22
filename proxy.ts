@@ -9,14 +9,14 @@ const encodedKey = new TextEncoder().encode(secretKey);
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. PUBLIC PATHS - Never redirect these
+  // 1. Bypass all static files and auth routes
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/register") ||
-    pathname === "/favicon.ico" ||
-    pathname.includes(".")
+    pathname.includes(".") ||
+    pathname === "/favicon.ico"
   ) {
     return NextResponse.next();
   }
@@ -24,28 +24,29 @@ export async function proxy(req: NextRequest) {
   const session = req.cookies.get("session")?.value;
   const activeCompanyId = req.cookies.get("activeCompanyId")?.value;
 
-  // 2. AUTH CHECK
+  // DEBUG LOGS (View these with 'pm2 logs')
+  console.log(
+    `Path: ${pathname} | Session: ${!!session} | Company: ${activeCompanyId}`
+  );
+
+  // 2. Auth Check
   if (!session) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
   try {
-    // Verify JWT
     await jwtVerify(session, encodedKey);
 
-    // 3. COMPANY CONTEXT CHECK
-    // Only redirect to "/" if they are trying to access a dashboard WITHOUT a company cookie
-    if (!activeCompanyId && pathname.startsWith("/companies/")) {
-      // Allow company creation
-      if (pathname === "/companies/create") return NextResponse.next();
-
-      console.log("Middleware: No activeCompanyId found, redirecting to root");
-      return NextResponse.redirect(new URL("/", req.url));
+    // 3. The Loop Fix
+    // If they ARE on a company page, just let them stay there.
+    // We only redirect if they are logged in but haven't picked a company yet.
+    if (pathname.startsWith("/companies/")) {
+      return NextResponse.next();
     }
 
     return NextResponse.next();
   } catch (error) {
-    console.error("Middleware: Session Invalid", error);
+    console.error("Auth Error:", error);
     const response = NextResponse.redirect(new URL("/login", req.url));
     response.cookies.delete("session");
     return response;
