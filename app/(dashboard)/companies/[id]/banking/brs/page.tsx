@@ -17,7 +17,7 @@ export default async function BRSPage({
   const bankLedgers = await prisma.ledger.findMany({
     where: {
       companyId,
-      group: { name: { contains: "Bank" } }, // Adjust filter based on your group names
+      group: { name: { contains: "Bank" } },
     },
     orderBy: { name: "asc" },
   });
@@ -54,7 +54,7 @@ export default async function BRSPage({
         }),
       ]);
 
-    // 3. Unify the data structure
+    // 3. Unify the data structure helper
     const formatEntry = (entry: any, type: string, vKey: string) => ({
       id: entry.id,
       date: entry[vKey].date,
@@ -62,12 +62,10 @@ export default async function BRSPage({
       type: type,
       amount: entry.amount,
       narration: entry[vKey].narration,
-      // Add BRS specific fields if they exist in your schema,
-      // or set as null if you plan to add bankDate later
       bankDate: entry.bankDate || null,
     });
 
-    // Replace the mapping block with this:
+    // 4. Combine and Sort (Added explicit types for Ubuntu Build)
     transactions = [
       ...sales.map((e: any) => formatEntry(e, "SALES", "salesVoucher")),
       ...purchase.map((e: any) =>
@@ -76,6 +74,7 @@ export default async function BRSPage({
       ...payment.map((e: any) => formatEntry(e, "PAYMENT", "paymentVoucher")),
       ...receipt.map((e: any) => formatEntry(e, "RECEIPT", "receiptVoucher")),
       ...contra.map((e: any) => formatEntry(e, "CONTRA", "contraVoucher")),
+      ...journal.map((e: any) => formatEntry(e, "JOURNAL", "journalVoucher")),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
@@ -99,7 +98,7 @@ export default async function BRSPage({
             className="border rounded-lg p-2 text-sm w-64 outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">-- Choose Ledger --</option>
-            {bankLedgers.map((l) => (
+            {bankLedgers.map((l: any) => (
               <option key={l.id} value={l.id}>
                 {l.name}
               </option>
@@ -138,7 +137,7 @@ export default async function BRSPage({
                 </td>
               </tr>
             ) : (
-              transactions.map((tx) => (
+              transactions.map((tx: any) => (
                 <tr
                   key={`${tx.type}-${tx.id}`}
                   className="hover:bg-slate-50 transition-colors"
