@@ -7,18 +7,14 @@ const secretKey =
 const encodedKey = new TextEncoder().encode(secretKey);
 
 export async function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl;
   const session = req.cookies.get("session")?.value;
-  // ✅ MATCHED NAME: Must be activeCompanyId
-  const activeCompanyId = req.cookies.get("activeCompanyId")?.value;
 
-  // 1. Allow Auth Pages & Static Files
-  if (
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/register") ||
-    pathname.startsWith("/_next") ||
-    pathname.includes(".")
-  ) {
+  // ✅ FIXED: Changed name to activeCompanyId to match company.ts
+  const activeCompanyId = req.cookies.get("activeCompanyId")?.value;
+  const { pathname } = req.nextUrl;
+
+  // 1. Allow Auth Pages
+  if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
     return NextResponse.next();
   }
 
@@ -30,11 +26,12 @@ export async function proxy(req: NextRequest) {
   try {
     await jwtVerify(session, encodedKey);
 
-    // 3. Prevent Redirection Loop
-    // If we have a session but NO company cookie, only allow them on the selection page (/)
-    // or the company creation page.
+    // 3. Company Context Protection
+    // If trying to access any dashboard page but no company cookie exists, send to selection
     if (!activeCompanyId && pathname.startsWith("/companies/")) {
+      // Always allow the creation page
       if (pathname === "/companies/create") return NextResponse.next();
+
       return NextResponse.redirect(new URL("/", req.url));
     }
 
