@@ -45,8 +45,6 @@ export async function createCompany(prevState: any, formData: FormData) {
   } = result.data;
 
   try {
-    // We use a generic 'any' for tx here to bypass the "@prisma/client has no member Prisma"
-    // export error while still ensuring the transaction logic is sound.
     const newCompany = await prisma.$transaction(async (tx: any) => {
       const company = await tx.company.create({
         data: {
@@ -90,7 +88,6 @@ export async function createCompany(prevState: any, formData: FormData) {
     });
 
     revalidatePath("/");
-    // Redirect moved below to be outside the try block
   } catch (e: any) {
     console.error("Create Company Error:", e);
     return { message: "Database Error: Failed to create company." };
@@ -120,11 +117,12 @@ export async function selectCompanyAction(formData: FormData) {
     path: "/",
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: false,
+    secure: false, // Set to false to support HTTP/IP-based cloud access
     maxAge: 60 * 60 * 24 * 7,
   };
 
-  cookieStore.set("activeCompanyId", cid.toString(), cookieOptions);
+  // ✅ SYNCED: Using 'selected_company_id' to match Middleware requirements
+  cookieStore.set("selected_company_id", cid.toString(), cookieOptions);
   cookieStore.set("active_fy_start", startDate.toISOString(), cookieOptions);
   cookieStore.set("active_fy_end", endDate.toISOString(), cookieOptions);
   cookieStore.set("active_fy_label", `FY ${year}-${year + 1}`, cookieOptions);
@@ -182,22 +180,23 @@ export async function updateCompany(prevState: any, formData: FormData) {
 // --- 4. DELETE COMPANY ---
 export async function deleteCompany(id: number) {
   try {
-    await prisma.$transaction([
-      prisma.ledger.deleteMany({ where: { companyId: id } }),
-      prisma.group.deleteMany({ where: { companyId: id } }),
-      prisma.stockItem.deleteMany({ where: { companyId: id } }),
-      prisma.stockGroup.deleteMany({ where: { companyId: id } }),
-      prisma.unit.deleteMany({ where: { companyId: id } }),
-      prisma.voucherSequence.deleteMany({ where: { companyId: id } }),
-      prisma.salesVoucher.deleteMany({ where: { companyId: id } }),
-      prisma.purchaseVoucher.deleteMany({ where: { companyId: id } }),
-      prisma.paymentVoucher.deleteMany({ where: { companyId: id } }),
-      prisma.receiptVoucher.deleteMany({ where: { companyId: id } }),
-      prisma.contraVoucher.deleteMany({ where: { companyId: id } }),
-      prisma.journalVoucher.deleteMany({ where: { companyId: id } }),
-      prisma.stockJournal.deleteMany({ where: { companyId: id } }),
-      prisma.company.delete({ where: { id } }),
-    ]);
+    // ✅ Typed 'tx' as any to satisfy strict build workers
+    await prisma.$transaction(async (tx: any) => {
+      await tx.ledger.deleteMany({ where: { companyId: id } });
+      await tx.group.deleteMany({ where: { companyId: id } });
+      await tx.stockItem.deleteMany({ where: { companyId: id } });
+      await tx.stockGroup.deleteMany({ where: { companyId: id } });
+      await tx.unit.deleteMany({ where: { companyId: id } });
+      await tx.voucherSequence.deleteMany({ where: { companyId: id } });
+      await tx.salesVoucher.deleteMany({ where: { companyId: id } });
+      await tx.purchaseVoucher.deleteMany({ where: { companyId: id } });
+      await tx.paymentVoucher.deleteMany({ where: { companyId: id } });
+      await tx.receiptVoucher.deleteMany({ where: { companyId: id } });
+      await tx.contraVoucher.deleteMany({ where: { companyId: id } });
+      await tx.journalVoucher.deleteMany({ where: { companyId: id } });
+      await tx.stockJournal.deleteMany({ where: { companyId: id } });
+      await tx.company.delete({ where: { id } });
+    });
   } catch (e) {
     console.error("Delete Company Error:", e);
     return { error: "Delete failed. Check server logs." };

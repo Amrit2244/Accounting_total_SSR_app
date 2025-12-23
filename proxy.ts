@@ -9,27 +9,21 @@ const encodedKey = new TextEncoder().encode(secretKey);
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Bypass all static files and auth routes
+  // 1. Bypass static files and auth routes
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/register") ||
-    pathname.includes(".") ||
-    pathname === "/favicon.ico"
+    pathname.includes(".")
   ) {
     return NextResponse.next();
   }
 
   const session = req.cookies.get("session")?.value;
-  const activeCompanyId = req.cookies.get("activeCompanyId")?.value;
+  const companyId = req.cookies.get("selected_company_id")?.value;
 
-  // DEBUG LOGS (View these with 'pm2 logs')
-  console.log(
-    `Path: ${pathname} | Session: ${!!session} | Company: ${activeCompanyId}`
-  );
-
-  // 2. Auth Check
+  // 2. Auth Check: If no session, go to login
   if (!session) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
@@ -37,16 +31,18 @@ export async function proxy(req: NextRequest) {
   try {
     await jwtVerify(session, encodedKey);
 
-    // 3. The Loop Fix
-    // If they ARE on a company page, just let them stay there.
-    // We only redirect if they are logged in but haven't picked a company yet.
-    if (pathname.startsWith("/companies/")) {
+    // 3. Prevent loop: If on Select Company page or creating a company, let them stay
+    if (pathname === "/" || pathname === "/companies/create") {
       return NextResponse.next();
+    }
+
+    // 4. Context Check: If they try to go deep without a company, send to selection
+    if (!companyId && pathname.startsWith("/companies/")) {
+      return NextResponse.redirect(new URL("/", req.url));
     }
 
     return NextResponse.next();
   } catch (error) {
-    console.error("Auth Error:", error);
     const response = NextResponse.redirect(new URL("/login", req.url));
     response.cookies.delete("session");
     return response;
