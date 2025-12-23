@@ -1,10 +1,10 @@
-// ... imports same as your original code ...
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, TrendingUp, ChevronRight } from "lucide-react";
+import { ArrowLeft, TrendingUp } from "lucide-react";
 import { notFound } from "next/navigation";
 import PrintButton from "@/components/PrintButton";
 import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown";
+import BalanceSheetFilter from "@/components/reports/BalanceSheetFilter"; // Reuse the existing filter
 
 const fmt = (v: number) =>
   Math.abs(v).toLocaleString("en-IN", {
@@ -22,40 +22,57 @@ type GroupData = {
 
 export default async function ProfitLossPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ date?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const companyId = parseInt(id);
   if (isNaN(companyId)) notFound();
 
+  // --- 1. DATE LOGIC ---
+  const todayStr = new Date().toISOString().split("T")[0];
+  const asOf = sp.date || todayStr;
+
+  const asOfDate = new Date(asOf);
+  asOfDate.setHours(23, 59, 59, 999);
+
+  // Filter applied to all queries
+  const voucherFilter = {
+    status: "APPROVED",
+    date: { lte: asOfDate },
+  };
+
+  // --- 2. DATA FETCHING ---
   const [ledgers, stockItems] = await Promise.all([
     prisma.ledger.findMany({
       where: { companyId },
       include: {
         group: { select: { name: true, nature: true } },
         salesEntries: {
-          where: { salesVoucher: { status: "APPROVED" } },
+          where: { salesVoucher: voucherFilter },
           select: { amount: true },
         },
         purchaseEntries: {
-          where: { purchaseVoucher: { status: "APPROVED" } },
+          where: { purchaseVoucher: voucherFilter },
           select: { amount: true },
         },
         paymentEntries: {
-          where: { paymentVoucher: { status: "APPROVED" } },
+          where: { paymentVoucher: voucherFilter },
           select: { amount: true },
         },
         receiptEntries: {
-          where: { receiptVoucher: { status: "APPROVED" } },
+          where: { receiptVoucher: voucherFilter },
           select: { amount: true },
         },
         contraEntries: {
-          where: { contraVoucher: { status: "APPROVED" } },
+          where: { contraVoucher: voucherFilter },
           select: { amount: true },
         },
         journalEntries: {
-          where: { journalVoucher: { status: "APPROVED" } },
+          where: { journalVoucher: voucherFilter },
           select: { amount: true },
         },
       },
@@ -63,9 +80,9 @@ export default async function ProfitLossPage({
     prisma.stockItem.findMany({
       where: { companyId },
       include: {
-        salesItems: { where: { salesVoucher: { status: "APPROVED" } } },
-        purchaseItems: { where: { purchaseVoucher: { status: "APPROVED" } } },
-        journalEntries: { where: { stockJournal: { status: "APPROVED" } } },
+        salesItems: { where: { salesVoucher: voucherFilter } },
+        purchaseItems: { where: { purchaseVoucher: voucherFilter } },
+        journalEntries: { where: { stockJournal: voucherFilter } },
       },
     }),
   ]);
@@ -81,6 +98,7 @@ export default async function ProfitLossPage({
       openingStockTotal += opVal;
       openingStockDetails.push({ name: item.name, amount: opVal });
     }
+
     const allEntries = [
       ...item.salesItems.map((e: any) => ({ qty: e.quantity, val: 0 })),
       ...item.purchaseItems.map((e: any) => ({
@@ -92,9 +110,11 @@ export default async function ProfitLossPage({
         val: e.amount,
       })),
     ];
+
     let currentQty = item.openingQty || 0;
     let totalInwardQty = item.openingQty || 0;
     let totalInwardVal = opVal;
+
     allEntries.forEach((e: any) => {
       currentQty += e.qty;
       if (e.qty > 0) {
@@ -102,8 +122,10 @@ export default async function ProfitLossPage({
         totalInwardVal += e.val;
       }
     });
+
     const avgRate = totalInwardQty > 0 ? totalInwardVal / totalInwardQty : 0;
     const closingVal = Math.max(0, currentQty * avgRate);
+
     if (closingVal > 0) {
       closingStockTotal += closingVal;
       closingStockDetails.push({ name: item.name, amount: closingVal });
@@ -139,8 +161,11 @@ export default async function ProfitLossPage({
       sum(l.receiptEntries) +
       sum(l.contraEntries) +
       sum(l.journalEntries);
+
     const netBalance = (l.openingBalance || 0) + txTotal;
+
     if (Math.abs(netBalance) < 0.01 || !l.group) return;
+
     const absAmount = Math.abs(netBalance);
     const gName = l.group.name;
     const gLower = gName.toLowerCase();
@@ -158,6 +183,7 @@ export default async function ProfitLossPage({
 
   const tradingDr = Array.from(tradingDrMap.values());
   const tradingCr = Array.from(tradingCrMap.values());
+
   if (openingStockTotal > 0)
     tradingDr.unshift({
       groupName: "Opening Stock",
@@ -166,6 +192,7 @@ export default async function ProfitLossPage({
       isSystem: true,
       prefix: "To",
     });
+
   if (closingStockTotal > 0)
     tradingCr.push({
       groupName: "Closing Stock",
@@ -183,6 +210,7 @@ export default async function ProfitLossPage({
 
   const plDr = Array.from(plDrMap.values());
   const plCr = Array.from(plCrMap.values());
+
   const grossItem: GroupData = {
     groupName: isGrossProfit ? "Gross Profit b/d" : "Gross Loss b/d",
     amount: Math.abs(grossDiff),
@@ -190,6 +218,7 @@ export default async function ProfitLossPage({
     isSystem: true,
     prefix: isGrossProfit ? "By" : "To",
   };
+
   if (isGrossProfit) plCr.unshift(grossItem);
   else plDr.unshift(grossItem);
 
@@ -199,7 +228,6 @@ export default async function ProfitLossPage({
   const isNetProfit = netDiff >= 0;
   const plTotal = Math.max(sumPLDr, sumPLCr);
 
-  // ... rest of the render logic remains same as original ...
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500 h-[calc(100vh-64px)] flex flex-col font-sans">
       <div className="flex items-center justify-between shrink-0">
@@ -212,11 +240,19 @@ export default async function ProfitLossPage({
               Trading & Profit Loss A/c
             </h1>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-              Financial Year {new Date().getFullYear()}
+              As on{" "}
+              {asOfDate.toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
             </p>
           </div>
         </div>
         <div className="flex gap-2">
+          {/* NEW FILTER COMPONENT */}
+          <BalanceSheetFilter />
+
           <PrintButton />
           <Link
             href={`/companies/${companyId}/reports`}

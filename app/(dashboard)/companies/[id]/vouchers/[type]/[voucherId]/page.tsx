@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer, FileText, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Printer,
+  FileText,
+  User,
+  Package,
+  Layers,
+} from "lucide-react";
 import { format } from "date-fns";
 import VerifyBtn from "@/components/VerifyBtn";
 import { cookies } from "next/headers";
@@ -30,6 +37,7 @@ async function getVoucherDetails(companyId: number, type: string, id: number) {
   const where = { id, companyId };
 
   const ledgerRel = { include: { ledger: true } };
+  // ✅ Ensure stockItem is included to get the item name
   const invRel = { include: { stockItem: true } };
 
   switch (t) {
@@ -87,10 +95,7 @@ export default async function VoucherDetailsPage({
   params: Promise<{ id: string; type: string; voucherId: string }>;
 }) {
   const p = await params;
-
-  // 'id' is the Company ID (from the first [id] folder)
   const companyId = parseInt(p.id);
-  // 'voucherId' is the Voucher ID (from the last [voucherId] folder)
   const voucherId = parseInt(p.voucherId);
   const type = p.type;
 
@@ -107,6 +112,7 @@ export default async function VoucherDetailsPage({
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 font-sans space-y-6">
+      {/* HEADER BAR */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
@@ -118,7 +124,7 @@ export default async function VoucherDetailsPage({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                {type} Voucher
+                {type}
               </span>
               <span
                 className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
@@ -142,7 +148,7 @@ export default async function VoucherDetailsPage({
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50">
+          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all">
             <Printer size={16} /> Print
           </button>
 
@@ -151,33 +157,33 @@ export default async function VoucherDetailsPage({
               voucherId={voucher.id}
               type={type}
               isCreator={isCreator}
-              companyId={companyId} // <--- ✅ ADD THIS LINE
+              companyId={companyId}
             />
           )}
         </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        {/* METADATA */}
+        {/* METADATA GRID */}
         <div className="bg-slate-50/50 p-6 grid grid-cols-2 md:grid-cols-4 gap-6 border-b border-slate-100">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Date
             </label>
-            <p className="text-sm font-bold text-slate-800">
+            <p className="text-sm font-bold text-slate-800 mt-1">
               {format(new Date(voucher.date), "dd MMM yyyy")}
             </p>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Amount
             </label>
-            <p className="text-sm font-bold text-slate-800">
+            <p className="text-sm font-bold text-slate-800 mt-1">
               ₹{(voucher.totalAmount || 0).toLocaleString("en-IN")}
             </p>
           </div>
           <div className="col-span-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Created By
             </label>
             <div className="flex items-center gap-2 mt-1">
@@ -194,87 +200,97 @@ export default async function VoucherDetailsPage({
           </div>
         </div>
 
-        {/* LEDGERS */}
-        {ledgerEntries.length > 0 && (
-          <div className="p-6">
+        {/* ✅ INVENTORY TABLE (The Missing Part) */}
+        {inventoryEntries.length > 0 && (
+          <div className="p-6 border-b border-slate-100">
             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <FileText size={14} /> Ledger Entries
+              <Package size={14} className="text-blue-600" /> Inventory Items
             </h3>
-            <table className="w-full text-sm text-left">
-              <thead className="text-[10px] text-slate-500 uppercase bg-slate-50 border-y border-slate-100">
-                <tr>
-                  <th className="px-4 py-2 w-16">Dr/Cr</th>
-                  <th className="px-4 py-2">Particulars</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {ledgerEntries.map((entry: any, idx: number) => (
-                  <tr key={idx}>
-                    <td className="px-4 py-3 font-bold text-slate-400">
-                      {entry.amount > 0 ? "Dr" : "Cr"}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {entry.ledger?.name || "Unknown Ledger"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-700">
-                      {Math.abs(entry.amount).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </td>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead className="text-[10px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-2 font-bold">Item Name</th>
+                    <th className="px-4 py-2 text-right font-bold">Quantity</th>
+                    <th className="px-4 py-2 text-right font-bold">Rate</th>
+                    <th className="px-4 py-2 text-right font-bold">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {inventoryEntries.map((item: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-700">
+                        {item.stockItem?.name || "Unknown Item"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-600">
+                        {Math.abs(item.quantity)} {item.unit}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-600">
+                        {item.rate.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
+                        {item.amount.toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {/* ITEMS */}
-        {inventoryEntries.length > 0 && (
-          <div className="p-6 border-t border-slate-100">
+        {/* LEDGER ENTRIES TABLE */}
+        {ledgerEntries.length > 0 && (
+          <div className="p-6">
             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <FileText size={14} /> Item Details
+              <Layers size={14} className="text-orange-600" /> Ledger Entries
             </h3>
-            <table className="w-full text-sm text-left">
-              <thead className="text-[10px] text-slate-500 uppercase bg-slate-50 border-y border-slate-100">
-                <tr>
-                  <th className="px-4 py-2">Item Name</th>
-                  <th className="px-4 py-2 text-right">Qty</th>
-                  <th className="px-4 py-2 text-right">Rate</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {inventoryEntries.map((item: any, idx: number) => (
-                  <tr key={idx}>
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {item.stockItem?.name}
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-600">
-                      {Math.abs(item.quantity)} {item.unit}
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-600">
-                      {item.rate}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-700">
-                      {item.amount.toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </td>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead className="text-[10px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-2 w-16 font-bold">Dr/Cr</th>
+                    <th className="px-4 py-2 font-bold">Particulars</th>
+                    <th className="px-4 py-2 text-right font-bold">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {ledgerEntries.map((entry: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-400">
+                        {entry.amount > 0 ? "Dr" : "Cr"}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        {entry.ledger?.name || "Unknown Ledger"}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-mono font-bold ${
+                          entry.amount > 0 ? "text-blue-600" : "text-orange-600"
+                        }`}
+                      >
+                        {Math.abs(entry.amount).toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {/* NARRATION */}
         {voucher.narration && (
-          <div className="bg-yellow-50/50 p-4 border-t border-slate-100 text-xs text-slate-600 italic">
-            <span className="font-bold not-italic text-slate-400 mr-2">
-              Narration:
-            </span>
-            {voucher.narration}
+          <div className="px-6 pb-6">
+            <div className="p-4 bg-yellow-50/50 border border-yellow-100 rounded-xl text-slate-700 text-xs leading-relaxed">
+              <span className="font-black uppercase text-[9px] text-yellow-600/70 tracking-widest block mb-1">
+                Narration
+              </span>
+              "{voucher.narration}"
+            </div>
           </div>
         )}
       </div>

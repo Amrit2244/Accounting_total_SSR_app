@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { format } from "date-fns";
+import LedgerPrintTemplate from "@/components/reports/LedgerPrintTemplate";
 
 type Transaction = {
   id: number;
@@ -9,19 +9,6 @@ type Transaction = {
   narration: string | null;
   amount: number;
 };
-
-const fmt = (n: number) =>
-  n.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-const fmtDate = (date: Date) =>
-  date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 
 export default async function LedgerPrintPage({
   params,
@@ -44,6 +31,7 @@ export default async function LedgerPrintPage({
 
   if (!ledger) return <div className="p-10 text-center">Ledger not found.</div>;
 
+  // --- Date Logic ---
   const today = new Date();
   const currentYear =
     today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
@@ -54,6 +42,7 @@ export default async function LedgerPrintPage({
   const toDateEnd = new Date(toStr);
   toDateEnd.setHours(23, 59, 59, 999);
 
+  // --- 1. Calculate Previous Balance ---
   const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
 
   const [prevSales, prevPur, prevPay, prevRcpt, prevCntr, prevJrnl] =
@@ -94,6 +83,7 @@ export default async function LedgerPrintPage({
 
   const openingBalance = ledger.openingBalance + totalPrevMovement;
 
+  // --- 2. Fetch Current Transactions ---
   const currentFilter = {
     date: { gte: fromDate, lte: toDateEnd },
     status: "APPROVED",
@@ -143,120 +133,16 @@ export default async function LedgerPrintPage({
     ...receipt.map((e: any) => formatTx(e, "RECEIPT", "receiptVoucher")),
     ...contra.map((e: any) => formatTx(e, "CONTRA", "contraVoucher")),
     ...journal.map((e: any) => formatTx(e, "JOURNAL", "journalVoucher")),
-  ].sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  let runningBalance = openingBalance;
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
-    <div className="bg-white p-10 min-h-screen text-black font-sans leading-tight print:p-0">
-      <script
-        dangerouslySetInnerHTML={{
-          __html: "window.onload = () => { window.print(); }",
-        }}
-      />
-      <div className="border-b-4 border-black pb-6 mb-8 flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-black uppercase tracking-tighter">
-            {company?.name || "Statement of Account"}
-          </h1>
-          <p className="text-lg font-bold text-gray-700 uppercase mt-1">
-            Ledger: {ledger.name}
-          </p>
-          {company?.address && (
-            <p className="text-xs text-gray-500 max-w-md mt-1">
-              {company.address}
-            </p>
-          )}
-        </div>
-        <div className="text-right text-sm font-bold uppercase">
-          <p className="bg-black text-white px-2 py-1 inline-block mb-2">
-            Statement
-          </p>
-          <p>
-            {fmtDate(fromDate)} to {fmtDate(toDateEnd)}
-          </p>
-        </div>
-      </div>
-      <table className="w-full text-[11px] border-collapse">
-        <thead>
-          <tr className="border-b-2 border-black text-left font-bold uppercase text-[10px]">
-            <th className="py-2 w-20">Date</th>
-            <th className="py-2 w-24">Vch Type</th>
-            <th className="py-2 w-20">Vch No</th>
-            <th className="py-2">Narration</th>
-            <th className="py-2 text-right w-24">Debit</th>
-            <th className="py-2 text-right w-24">Credit</th>
-            <th className="py-2 text-right w-28">Balance</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-300">
-          <tr className="font-bold italic bg-gray-50">
-            <td className="py-3">—</td>
-            <td className="py-3">—</td>
-            <td className="py-3">—</td>
-            <td className="py-3 uppercase text-gray-500">
-              Opening Balance B/F
-            </td>
-            <td className="py-3 text-right">
-              {openingBalance < 0 ? fmt(Math.abs(openingBalance)) : ""}
-            </td>
-            <td className="py-3 text-right">
-              {openingBalance > 0 ? fmt(Math.abs(openingBalance)) : ""}
-            </td>
-            <td className="py-3 text-right font-black">
-              {fmt(Math.abs(openingBalance))} {openingBalance < 0 ? "Dr" : "Cr"}
-            </td>
-          </tr>
-          {transactions.map((tx: any) => {
-            runningBalance += tx.amount;
-            const isDebit = tx.amount < 0;
-            const isCredit = tx.amount > 0;
-            return (
-              <tr key={`${tx.type}-${tx.id}`} className="break-inside-avoid">
-                <td className="py-3 align-top font-bold">{fmtDate(tx.date)}</td>
-                <td className="py-3 align-top text-[9px] uppercase">
-                  {tx.type}
-                </td>
-                <td className="py-3 align-top font-mono font-bold text-gray-500">
-                  {tx.voucherNo}
-                </td>
-                <td className="py-3 align-top pr-4">
-                  <div className="text-[10px] text-gray-700 leading-tight">
-                    {tx.narration || "-"}
-                  </div>
-                </td>
-                <td className="py-3 text-right align-top font-mono font-bold text-slate-700">
-                  {isDebit ? fmt(Math.abs(tx.amount)) : ""}
-                </td>
-                <td className="py-3 text-right align-top font-mono font-bold text-slate-700">
-                  {isCredit ? fmt(Math.abs(tx.amount)) : ""}
-                </td>
-                <td className="py-3 text-right align-top font-mono font-black text-[11px]">
-                  {fmt(Math.abs(runningBalance))}{" "}
-                  <span className="text-[8px] text-gray-400 font-bold">
-                    {runningBalance < 0 ? "Dr" : "Cr"}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-4 border-black font-black bg-gray-50">
-            <td
-              colSpan={4}
-              className="py-4 text-right pr-6 uppercase tracking-widest text-[10px]"
-            >
-              Closing Balance
-            </td>
-            <td className="py-4 text-right"></td>
-            <td className="py-4 text-right"></td>
-            <td className="py-4 text-right text-lg font-mono">
-              {fmt(Math.abs(runningBalance))} {runningBalance < 0 ? "Dr" : "Cr"}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+    <LedgerPrintTemplate
+      company={company}
+      ledger={ledger}
+      transactions={transactions}
+      openingBalance={openingBalance}
+      fromDate={fromDate}
+      toDate={toDateEnd}
+    />
   );
 }

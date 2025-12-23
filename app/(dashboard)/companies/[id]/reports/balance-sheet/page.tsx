@@ -2,8 +2,9 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ArrowLeft, PieChart } from "lucide-react";
 import { notFound } from "next/navigation";
-import PrintButton from "@/components/PrintButton";
+import PrintButton from "@/components/PrintButton"; // Ensure this exists or remove if unused
 import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown";
+import BalanceSheetFilter from "@/components/reports/BalanceSheetFilter"; // Import the new filter
 
 const fmt = (v: number) =>
   Math.abs(v).toLocaleString("en-IN", {
@@ -20,42 +21,58 @@ type GroupData = {
 
 export default async function BalanceSheetPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ date?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const companyId = parseInt(id);
 
   if (isNaN(companyId)) notFound();
 
-  // --- 1. DATA FETCHING ---
+  // --- 1. DATE LOGIC ---
+  const todayStr = new Date().toISOString().split("T")[0];
+  const asOf = sp.date || todayStr;
+
+  const asOfDate = new Date(asOf);
+  asOfDate.setHours(23, 59, 59, 999); // Include all transactions of the selected day
+
+  // Common Filter for all Ledger Entries
+  const voucherFilter = {
+    status: "APPROVED",
+    date: { lte: asOfDate },
+  };
+
+  // --- 2. DATA FETCHING ---
   const [ledgers, stockItems] = await Promise.all([
     prisma.ledger.findMany({
       where: { companyId },
       include: {
         group: { select: { name: true, nature: true } },
         salesEntries: {
-          where: { salesVoucher: { status: "APPROVED" } },
+          where: { salesVoucher: voucherFilter },
           select: { amount: true },
         },
         purchaseEntries: {
-          where: { purchaseVoucher: { status: "APPROVED" } },
+          where: { purchaseVoucher: voucherFilter },
           select: { amount: true },
         },
         paymentEntries: {
-          where: { paymentVoucher: { status: "APPROVED" } },
+          where: { paymentVoucher: voucherFilter },
           select: { amount: true },
         },
         receiptEntries: {
-          where: { receiptVoucher: { status: "APPROVED" } },
+          where: { receiptVoucher: voucherFilter },
           select: { amount: true },
         },
         contraEntries: {
-          where: { contraVoucher: { status: "APPROVED" } },
+          where: { contraVoucher: voucherFilter },
           select: { amount: true },
         },
         journalEntries: {
-          where: { journalVoucher: { status: "APPROVED" } },
+          where: { journalVoucher: voucherFilter },
           select: { amount: true },
         },
       },
@@ -63,19 +80,19 @@ export default async function BalanceSheetPage({
     prisma.stockItem.findMany({
       where: { companyId },
       include: {
-        salesItems: { where: { salesVoucher: { status: "APPROVED" } } },
-        purchaseItems: { where: { purchaseVoucher: { status: "APPROVED" } } },
-        journalEntries: { where: { stockJournal: { status: "APPROVED" } } },
+        salesItems: { where: { salesVoucher: voucherFilter } },
+        purchaseItems: { where: { purchaseVoucher: voucherFilter } },
+        // Note: Stock Journal relation is typically 'stockJournal'
+        journalEntries: { where: { stockJournal: voucherFilter } },
       },
     }),
   ]);
 
-  // --- 2. CALCULATE STOCK & P&L ---
+  // --- 3. CALCULATE STOCK & P&L ---
   let openingStock = 0;
   let closingStock = 0;
   let closingStockDetails: { name: string; amount: number }[] = [];
 
-  // ✅ FIXED: Added : any to item
   stockItems.forEach((item: any) => {
     const opVal = item.openingValue || 0;
     openingStock += opVal;
@@ -153,7 +170,7 @@ export default async function BalanceSheetPage({
   const netResult = totalIncome - totalExpense;
   const isProfit = netResult >= 0;
 
-  // --- 3. CLASSIFY ASSETS & LIABILITIES ---
+  // --- 4. CLASSIFY ASSETS & LIABILITIES ---
   const liabMap = new Map<string, GroupData>();
   const assetMap = new Map<string, GroupData>();
 
@@ -246,7 +263,6 @@ export default async function BalanceSheetPage({
   const liabilities = Array.from(liabMap.values());
   const assets = Array.from(assetMap.values());
 
-  // ✅ FIXED: Added : any to s and i
   const totalLiab = liabilities.reduce((s: number, i: any) => s + i.amount, 0);
   const totalAsset = assets.reduce((s: number, i: any) => s + i.amount, 0);
   const grandTotal = Math.max(totalLiab, totalAsset);
@@ -273,7 +289,7 @@ export default async function BalanceSheetPage({
             </h1>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
               As on{" "}
-              {new Date().toLocaleDateString("en-IN", {
+              {asOfDate.toLocaleDateString("en-IN", {
                 day: "numeric",
                 month: "long",
                 year: "numeric",
@@ -282,6 +298,9 @@ export default async function BalanceSheetPage({
           </div>
         </div>
         <div className="flex gap-2">
+          {/* NEW DATE FILTER */}
+          <BalanceSheetFilter />
+
           <PrintButton />
           <Link
             href={`/companies/${companyId}/reports`}

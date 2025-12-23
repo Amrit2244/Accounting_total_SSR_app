@@ -11,6 +11,7 @@ import {
   FileText,
   AlertTriangle,
   Package,
+  Layers,
 } from "lucide-react";
 
 async function getCurrentUserId() {
@@ -37,208 +38,217 @@ export default async function VerifyPage({
 }) {
   const { id, code } = await params;
   const companyId = parseInt(id);
+
+  // Fetch full voucher
   const voucher = await getVoucherByCode(code, companyId);
   const currentUserId = await getCurrentUserId();
 
   if (!voucher)
     return (
-      <div className="p-8 text-center bg-white rounded-xl border border-slate-200 mt-10 shadow-sm max-w-md mx-auto">
+      <div className="p-10 text-center bg-white rounded-xl border border-slate-200 mt-10 shadow-sm max-w-md mx-auto">
         <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
           Invalid or Expired Link
         </h1>
         <Link
-          href={`/companies/${id}/vouchers/verify`}
-          className="text-blue-600 text-[10px] font-black uppercase mt-4 inline-block hover:underline tracking-widest"
+          href={`/companies/${id}/vouchers`}
+          className="text-blue-600 font-bold uppercase text-xs mt-4 inline-block hover:underline"
         >
-          Return to Queue
+          Return to Dashboard
         </Link>
       </div>
     );
 
   const isMaker = voucher.createdById === currentUserId;
-  const isInventoryVoucher = voucher.inventory && voucher.inventory.length > 0;
+  const hasInventory = voucher.inventory && voucher.inventory.length > 0;
 
-  // ✅ SAFE ACCESS: Check if 'reference' exists on this voucher type
+  // Safe Property Access
   const reference = "reference" in voucher ? (voucher as any).reference : null;
-  // ✅ SAFE ACCESS: Check if 'attachmentUrl' exists
   const attachmentUrl =
     "attachmentUrl" in voucher ? (voucher as any).attachmentUrl : null;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4 py-6 font-sans">
+    <div className="max-w-4xl mx-auto space-y-6 py-8 font-sans px-4">
       <Link
-        href={`/companies/${id}/vouchers/verify`}
-        className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-400 hover:text-slate-900 transition-colors pl-1"
+        href={`/companies/${id}/vouchers`}
+        className="flex items-center gap-2 text-xs font-black uppercase text-slate-400 hover:text-slate-800 transition-colors w-fit group"
       >
-        <ArrowLeft size={12} /> Back to Queue
+        <ArrowLeft
+          size={14}
+          className="group-hover:-translate-x-1 transition-transform"
+        />
+        Back to Vouchers
       </Link>
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        {/* COMPACT BANNER */}
-        <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center">
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden">
+        {/* HEADER */}
+        <div className="bg-slate-900 px-8 py-6 text-white flex flex-col md:flex-row justify-between md:items-center gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="px-1.5 py-0.5 bg-blue-600 rounded text-[9px] font-black uppercase tracking-widest border border-blue-500">
+            <div className="flex items-center gap-3 mb-2">
+              <span
+                className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${
+                  voucher.type === "SALES"
+                    ? "bg-emerald-500 border-emerald-400"
+                    : voucher.type === "PURCHASE"
+                    ? "bg-blue-500 border-blue-400"
+                    : "bg-slate-700 border-slate-600"
+                }`}
+              >
                 {voucher.type}
               </span>
-              <span className="text-slate-400 font-mono text-[10px] font-bold">
+              <span className="text-slate-400 font-mono text-xs font-bold opacity-80">
                 #{voucher.voucherNo}
               </span>
             </div>
-            <h1 className="text-lg font-black uppercase tracking-tight leading-none">
+            <h1 className="text-2xl font-black uppercase tracking-tight leading-none text-white">
               Verify Transaction
             </h1>
           </div>
-          <div className="text-right">
-            <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-0.5">
+          <div className="text-left md:text-right bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
               Secure Code
             </p>
-            <p className="text-xl font-mono font-black text-blue-400 tracking-tight leading-none">
+            <p className="text-2xl font-mono font-black text-blue-400 tracking-tight leading-none">
               {voucher.transactionCode}
             </p>
           </div>
         </div>
 
-        {/* INFO GRID */}
-        <div className="p-4 grid grid-cols-4 gap-4 bg-slate-50 border-b border-slate-100">
+        {/* METADATA */}
+        <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-6 bg-slate-50 border-b border-slate-100">
           <InfoItem
-            icon={<Calendar size={10} />}
+            icon={<Calendar size={14} />}
             label="Date"
-            value={new Date(voucher.date).toLocaleDateString()}
+            value={new Date(voucher.date).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
           />
           <InfoItem
-            icon={<User size={10} />}
+            icon={<User size={14} />}
             label="Maker"
-            value={voucher.createdBy.name}
+            value={voucher.createdBy?.name || "Unknown"}
           />
           <InfoItem
-            icon={<Hash size={10} />}
+            icon={<Hash size={14} />}
             label="Reference"
             value={reference || "N/A"}
           />
           <InfoItem
-            icon={<FileText size={10} />}
-            label="Proof"
-            value={
-              attachmentUrl ? (
-                <a
-                  href={attachmentUrl}
-                  target="_blank"
-                  className="text-blue-600 hover:underline"
-                >
-                  View File
-                </a>
-              ) : (
-                <span className="text-slate-400 italic">None attached</span>
-              )
-            }
+            icon={<FileText size={14} />}
+            label="Amount"
+            value={`₹${voucher.totalAmount.toLocaleString("en-IN")}`}
           />
         </div>
 
-        {/* ✅ INVENTORY ITEMS SECTION */}
-        {isInventoryVoucher && (
-          <div className="p-4 border-b border-slate-100">
-            <div className="flex items-center gap-2 mb-3 text-blue-600">
-              <Package size={14} />
-              <h3 className="text-[10px] font-black uppercase tracking-widest">
+        {/* ✅ INVENTORY TABLE */}
+        {hasInventory && (
+          <div className="p-6 border-b border-slate-100">
+            <div className="flex items-center gap-2 mb-4 text-blue-600">
+              <Package size={18} />
+              <h3 className="text-xs font-black uppercase tracking-widest">
                 Inventory Details
               </h3>
             </div>
-            <table className="w-full text-left border border-slate-200 rounded-lg overflow-hidden text-[11px]">
-              <thead className="bg-slate-50 font-black text-slate-500 uppercase tracking-widest text-[9px]">
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3">Item Name</th>
+                    <th className="px-4 py-3 text-right">Qty</th>
+                    <th className="px-4 py-3 text-right">Rate</th>
+                    <th className="px-4 py-3 text-right bg-slate-100/50">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {voucher.inventory.map((inv: any) => (
+                    <tr
+                      key={inv.id}
+                      className="hover:bg-blue-50/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-bold text-slate-700">
+                        {inv.stockItem?.name || "Unknown Item"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-medium text-slate-600">
+                        {Math.abs(inv.quantity)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-medium text-slate-600">
+                        {inv.rate.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 bg-slate-50/30">
+                        {inv.amount.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* LEDGER TABLE */}
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-4 text-orange-600">
+            <Layers size={18} />
+            <h3 className="text-xs font-black uppercase tracking-widest">
+              Ledger Distribution
+            </h3>
+          </div>
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
-                  <th className="p-2 pl-3">Item Name</th>
-                  <th className="p-2 text-right">Quantity</th>
-                  <th className="p-2 text-right">Rate</th>
-                  <th className="p-2 text-right pr-3">Amount</th>
+                  <th className="px-4 py-3">Particulars</th>
+                  <th className="px-4 py-3 text-right w-32">Debit</th>
+                  <th className="px-4 py-3 text-right w-32">Credit</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {voucher.inventory.map((inv: any) => (
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {voucher.entries.map((e: any) => (
                   <tr
-                    key={inv.id}
+                    key={e.id}
                     className="hover:bg-slate-50 transition-colors"
                   >
-                    <td className="p-2 pl-3 font-bold text-slate-800">
-                      {inv.stockItem?.name || inv.itemName}
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-slate-800 text-sm">
+                        {e.ledger?.name}
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mt-0.5">
+                        {e.ledger?.group?.name}
+                      </div>
                     </td>
-                    <td className="p-2 text-right font-mono font-bold text-slate-600">
-                      {Math.abs(inv.quantity).toFixed(2)}
+                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700 bg-emerald-50/10">
+                      {e.amount < 0 ? Math.abs(e.amount).toFixed(2) : ""}
                     </td>
-                    <td className="p-2 text-right font-mono text-slate-500">
-                      {inv.rate.toFixed(2)}
-                    </td>
-                    <td className="p-2 text-right pr-3 font-mono font-black text-slate-900">
-                      {inv.amount.toFixed(2)}
+                    <td className="px-4 py-3 text-right font-mono font-bold text-rose-700 bg-rose-50/10">
+                      {e.amount > 0 ? e.amount.toFixed(2) : ""}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-
-        {/* ENTRIES TABLE */}
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-3 text-slate-500">
-            <Hash size={14} />
-            <h3 className="text-[10px] font-black uppercase tracking-widest">
-              Accounting Distribution
-            </h3>
-          </div>
-          <table className="w-full text-left border border-slate-200 rounded-lg overflow-hidden text-[11px]">
-            <thead className="bg-slate-100 font-black text-slate-500 uppercase tracking-widest text-[9px]">
-              <tr>
-                <th className="p-2 pl-3">Ledger Account</th>
-                <th className="p-2 text-right">Debit</th>
-                <th className="p-2 text-right pr-3">Credit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {voucher.entries.map((e: any) => (
-                <tr key={e.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-2 pl-3">
-                    <div className="font-bold text-slate-800">
-                      {e.ledger?.name}
-                    </div>
-                    <div className="text-[9px] text-slate-400 font-black uppercase tracking-tight">
-                      {e.ledger?.group?.name}
-                    </div>
-                  </td>
-                  <td className="p-2 text-right font-mono font-bold text-blue-700">
-                    {e.amount > 0 ? e.amount.toFixed(2) : ""}
-                  </td>
-                  <td className="p-2 text-right pr-3 font-mono font-bold text-orange-700">
-                    {e.amount < 0 ? Math.abs(e.amount).toFixed(2) : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
 
-        {/* NARRATION SECTION */}
+        {/* NARRATION */}
         {voucher.narration && (
-          <div className="px-6 py-3 bg-slate-50/50 border-t border-slate-100 italic text-slate-600 text-[11px]">
-            <span className="font-bold uppercase text-[9px] text-slate-400 not-italic block mb-1 tracking-widest">
-              Narration
-            </span>
-            &ldquo;{voucher.narration}&rdquo;
+          <div className="px-6 pb-6">
+            <div className="p-4 bg-yellow-50/50 border border-yellow-100 rounded-xl text-slate-700 text-xs leading-relaxed">
+              <span className="font-black uppercase text-[9px] text-yellow-600/70 tracking-widest block mb-1">
+                Narration
+              </span>
+              "{voucher.narration}"
+            </div>
           </div>
         )}
 
-        {/* FOOTER ACTIONS */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          {isMaker ? (
-            <div className="flex items-center gap-2 text-amber-700 text-[10px] font-bold bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
-              <AlertTriangle size={12} /> Verification restricted for maker.
-            </div>
-          ) : (
-            <div className="text-[10px] text-slate-400 font-medium italic">
-              Review details carefully before authorizing.
-            </div>
-          )}
-          {/* ✅ PASS TYPE HERE */}
+        {/* ACTIONS */}
+        <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-xs text-slate-400 italic">
+            {isMaker ? "Creator cannot verify." : "Review carefully."}
+          </div>
           <VerifyActionBtn
             voucherId={voucher.id}
             type={voucher.type}
@@ -253,10 +263,13 @@ export default async function VerifyPage({
 function InfoItem({ icon, label, value }: any) {
   return (
     <div>
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-0.5">
-        {icon} {label}
-      </p>
-      <div className="text-xs font-bold text-slate-900 truncate">{value}</div>
+      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+        {icon}
+        <p className="text-[9px] font-black uppercase tracking-widest">
+          {label}
+        </p>
+      </div>
+      <div className="text-sm font-bold text-slate-900 truncate">{value}</div>
     </div>
   );
 }

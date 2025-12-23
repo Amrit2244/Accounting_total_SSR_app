@@ -57,6 +57,31 @@ function getName(obj: any): string {
   ).trim();
 }
 
+// ✅ HELPER: Extract Inventory
+function extractInventoryFromVoucher(v: any): any[] {
+  let items: any[] = [];
+  const asArray = (x: any) => (Array.isArray(x) ? x : [x]);
+
+  // 1. Top-Level
+  if (v["ALLINVENTORYENTRIES.LIST"])
+    items.push(...asArray(v["ALLINVENTORYENTRIES.LIST"]));
+  if (v["INVENTORYENTRIES.LIST"])
+    items.push(...asArray(v["INVENTORYENTRIES.LIST"]));
+
+  // 2. Nested inside Ledgers
+  let leds = v["ALLLEDGERENTRIES.LIST"] || v["LEDGERENTRIES.LIST"];
+  if (leds) {
+    leds = asArray(leds);
+    for (const led of leds) {
+      if (led["INVENTORYENTRIES.LIST"])
+        items.push(...asArray(led["INVENTORYENTRIES.LIST"]));
+      if (led["ALLINVENTORYENTRIES.LIST"])
+        items.push(...asArray(led["ALLINVENTORYENTRIES.LIST"]));
+    }
+  }
+  return items;
+}
+
 export async function processTallyXML(
   xmlContent: string,
   companyId: number,
@@ -66,6 +91,7 @@ export async function processTallyXML(
     let text = xmlContent
       .replace(/<[\/]{0,1}[a-zA-Z0-9]+:/g, "<")
       .replace(/\sxmlns[^"]+"[^"]+"/g, "");
+
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
@@ -84,12 +110,11 @@ export async function processTallyXML(
     }
     if (rawChunks.length === 0) return { error: `No valid Tally Data found.` };
 
-    // ✅ STATS (Detailed)
     const stats = {
-      groups: 0,
       ledgers: 0,
-      stockGroups: 0,
+      groups: 0,
       stockItems: 0,
+      stockGroups: 0,
       units: 0,
       sales: 0,
       purchase: 0,
@@ -101,22 +126,13 @@ export async function processTallyXML(
     };
 
     // --- DB CACHE ---
-    interface IdName {
-      name: string;
-      id: number;
-    }
-    interface IdSymbol {
-      symbol: string;
-      id: number;
-    }
-
     const groupMap = new Map<string, number>(
       (
         await prisma.group.findMany({
           where: { companyId },
           select: { name: true, id: true },
         })
-      ).map((g: IdName) => [g.name.toLowerCase(), g.id])
+      ).map((g: any) => [g.name.toLowerCase(), g.id])
     );
     const ledgerMap = new Map<string, number>(
       (
@@ -124,7 +140,7 @@ export async function processTallyXML(
           where: { companyId },
           select: { name: true, id: true },
         })
-      ).map((l: IdName) => [l.name.toLowerCase(), l.id])
+      ).map((l: any) => [l.name.toLowerCase(), l.id])
     );
     const stockGroupMap = new Map<string, number>(
       (
@@ -132,7 +148,7 @@ export async function processTallyXML(
           where: { companyId },
           select: { name: true, id: true },
         })
-      ).map((g: IdName) => [g.name.toLowerCase(), g.id])
+      ).map((g: any) => [g.name.toLowerCase(), g.id])
     );
     const itemMap = new Map<string, number>(
       (
@@ -140,7 +156,7 @@ export async function processTallyXML(
           where: { companyId },
           select: { name: true, id: true },
         })
-      ).map((i: IdName) => [i.name.toLowerCase(), i.id])
+      ).map((i: any) => [i.name.toLowerCase(), i.id])
     );
     const unitMap = new Map<string, number>(
       (
@@ -148,10 +164,9 @@ export async function processTallyXML(
           where: { companyId },
           select: { symbol: true, id: true },
         })
-      ).map((u: IdSymbol) => [u.symbol.toLowerCase(), u.id])
+      ).map((u: any) => [u.symbol.toLowerCase(), u.id])
     );
 
-    // Helpers
     const getPrimaryGroupId = async () => {
       const ex = groupMap.get("primary");
       if (ex !== undefined) return ex;
@@ -172,7 +187,6 @@ export async function processTallyXML(
       return g.id;
     };
 
-    // Separate Data into Lists
     const masters = {
       groups: [] as any[],
       ledgers: [] as any[],
@@ -188,7 +202,6 @@ export async function processTallyXML(
       );
       const data = jsonObj.TALLYMESSAGE || jsonObj;
 
-      // Independent checks to catch everything
       if (data.GROUP) masters.groups.push(data.GROUP);
       if (data.LEDGER) masters.ledgers.push(data.LEDGER);
       if (data.STOCKGROUP) masters.stockGroups.push(data.STOCKGROUP);
@@ -197,11 +210,7 @@ export async function processTallyXML(
       if (data.VOUCHER) masters.vouchers.push(data.VOUCHER);
     }
 
-    // =========================================================
-    // 1. PROCESS MASTERS (From Code 1 - Fixes Suspense Issue)
-    // =========================================================
-
-    // Groups
+    // --- 1. PROCESS MASTERS ---
     for (const g of masters.groups) {
       const name = getName(g);
       if (name && !groupMap.has(name.toLowerCase())) {
@@ -210,8 +219,6 @@ export async function processTallyXML(
         stats.groups++;
       }
     }
-
-    // Stock Groups
     for (const sg of masters.stockGroups) {
       const name = getName(sg);
       if (name && !stockGroupMap.has(name.toLowerCase())) {
@@ -222,8 +229,6 @@ export async function processTallyXML(
         stats.stockGroups++;
       }
     }
-
-    // Units
     for (const u of masters.units) {
       const symbol = u.ORIGINALNAME || u.NAME || getName(u);
       if (symbol && !unitMap.has(String(symbol).toLowerCase())) {
@@ -234,19 +239,14 @@ export async function processTallyXML(
         stats.units++;
       }
     }
-
-    // Ledgers (Correct Parent Logic)
     for (const led of masters.ledgers) {
       const name = getName(led);
       if (name && !ledgerMap.has(name.toLowerCase())) {
         let gid: number | undefined;
-
-        // 1. Check if Parent is explicitly defined
         const parentName = led.PARENT || led["@_PARENT"];
         if (parentName && typeof parentName === "string") {
           const pNameLower = parentName.trim().toLowerCase();
           gid = groupMap.get(pNameLower);
-
           if (gid === undefined && pNameLower) {
             const newGroup = await prisma.group.create({
               data: { name: parentName, companyId },
@@ -256,16 +256,9 @@ export async function processTallyXML(
             stats.groups++;
           }
         }
-
-        // 2. Handle Special "Profit & Loss" Case
-        if (name.toLowerCase().includes("profit & loss")) {
+        if (name.toLowerCase().includes("profit & loss"))
           gid = await getPrimaryGroupId();
-        }
-
-        // 3. Fallback
-        if (gid === undefined) {
-          gid = await getFallbackId();
-        }
+        if (gid === undefined) gid = await getFallbackId();
 
         const nl = await prisma.ledger.create({
           data: {
@@ -279,8 +272,6 @@ export async function processTallyXML(
         stats.ledgers++;
       }
     }
-
-    // Stock Items
     for (const itm of masters.stockItems) {
       const name = getName(itm);
       if (name && !itemMap.has(name.toLowerCase())) {
@@ -304,11 +295,7 @@ export async function processTallyXML(
       }
     }
 
-    // =========================================================
-    // 2. PROCESS VOUCHERS (From Code 2 - Logic for 297 count)
-    // =========================================================
-
-    // We reuse the list parsed earlier
+    // --- 2. PROCESS VOUCHERS ---
     const rawVouchers = masters.vouchers;
 
     for (let i = 0; i < rawVouchers.length; i += BATCH_SIZE) {
@@ -332,10 +319,10 @@ export async function processTallyXML(
               v.VOUCHERNUMBER || v["@_VOUCHERNUMBER"] || txCode
             );
 
+            // A. Ledgers
             let rawLeds =
               v["ALLLEDGERENTRIES.LIST"] || v["LEDGERENTRIES.LIST"] || [];
             if (!Array.isArray(rawLeds)) rawLeds = [rawLeds];
-
             const ledgerEntries: any[] = [];
             let totalAmount = 0;
 
@@ -353,13 +340,45 @@ export async function processTallyXML(
                 });
                 lid = nl.id;
                 ledgerMap.set(lName.toLowerCase(), lid);
-                stats.ledgers++; // Created on-the-fly
+                stats.ledgers++;
               }
               ledgerEntries.push({ ledgerId: lid, amount: amt });
             }
 
-            // ✅ FORCE STATUS "APPROVED"
-            const base = {
+            // B. Inventory (With Master Creation)
+            const rawInv = extractInventoryFromVoucher(v);
+            const inventoryEntries: any[] = [];
+
+            for (const item of rawInv) {
+              const itemName = getName(item);
+              if (!itemName) continue;
+
+              let itemId = itemMap.get(itemName.toLowerCase());
+              if (!itemId) {
+                const ni = await prisma.stockItem.create({
+                  data: { name: itemName, companyId, quantity: 0, gstRate: 0 },
+                });
+                itemId = ni.id;
+                itemMap.set(itemName.toLowerCase(), itemId);
+                stats.stockItems++;
+              }
+
+              const qty = parseTallyNumber(item.ACTUALQTY || item.BILLEDQTY);
+              const rateStr = String(item.RATE || "0").split("/")[0];
+              const rate = parseTallyNumber(rateStr);
+              const amt = parseTallyNumber(item.AMOUNT);
+
+              inventoryEntries.push({
+                stockItemId: itemId,
+                quantity: qty,
+                rate: rate,
+                amount: amt,
+                unit: "",
+              });
+            }
+
+            // C. Save to DB (Conditional Inventory)
+            const commonData = {
               companyId,
               date,
               narration: String(v.NARRATION || ""),
@@ -373,38 +392,49 @@ export async function processTallyXML(
             const saveVoucher = async (
               db: any,
               vNumber: any,
-              isInt: boolean = false
+              isInt: boolean = false,
+              withInventory: boolean = false
             ) => {
+              const dataToSave = withInventory
+                ? {
+                    ...commonData,
+                    inventoryEntries: { create: inventoryEntries },
+                    voucherNo: vNumber,
+                  }
+                : { ...commonData, voucherNo: vNumber };
+
               try {
-                return await db.create({
-                  data: { ...base, voucherNo: vNumber },
-                });
+                return await db.create({ data: dataToSave });
               } catch (e: any) {
                 if (e.code === "P2002") {
                   const newVno = isInt
                     ? Math.floor(Math.random() * 1000000)
                     : `${vNumber}-${Math.random().toString(36).substring(7)}`;
-                  return await db.create({
-                    data: { ...base, voucherNo: newVno },
-                  });
+                  const newData = { ...dataToSave, voucherNo: newVno };
+                  return await db.create({ data: newData });
                 }
                 throw e;
               }
             };
 
-            if (eff === "sales") await saveVoucher(prisma.salesVoucher, rawVNo);
-            else if (eff === "purchase")
-              await saveVoucher(prisma.purchaseVoucher, rawVNo);
-            else {
+            if (eff === "sales") {
+              await saveVoucher(prisma.salesVoucher, rawVNo, false, true); // ✅ Has Inventory
+            } else if (eff === "purchase") {
+              await saveVoucher(prisma.purchaseVoucher, rawVNo, false, true); // ✅ Has Inventory
+            } else {
               const cleanInt =
                 parseInt(rawVNo.replace(/\D/g, "")) || parseInt(txCode);
               if (eff === "payment")
-                await saveVoucher(prisma.paymentVoucher, cleanInt, true);
+                await saveVoucher(prisma.paymentVoucher, cleanInt, true, false);
+              // ❌ No Inventory
               else if (eff === "receipt")
-                await saveVoucher(prisma.receiptVoucher, cleanInt, true);
+                await saveVoucher(prisma.receiptVoucher, cleanInt, true, false);
+              // ❌ No Inventory
               else if (eff === "contra")
-                await saveVoucher(prisma.contraVoucher, cleanInt, true);
-              else await saveVoucher(prisma.journalVoucher, cleanInt, true);
+                await saveVoucher(prisma.contraVoucher, cleanInt, true, false);
+              // ❌ No Inventory
+              else
+                await saveVoucher(prisma.journalVoucher, cleanInt, true, false); // ❌ No Inventory
             }
             stats[eff as keyof typeof stats]++;
           } catch (err) {
@@ -415,13 +445,11 @@ export async function processTallyXML(
     }
 
     revalidatePath(`/companies/${companyId}/vouchers`);
-
-    // ✅ SUCCESS MESSAGE
     return {
       success: true,
       message: `Import Summary:
-      Masters: ${stats.ledgers} Ledgers, ${stats.groups} Groups, ${stats.stockItems} Items, ${stats.stockGroups} StkGroups, ${stats.units} Units.
-      Vouchers: ${stats.sales} Sales, ${stats.purchase} Purchase, ${stats.payment} Payment, ${stats.receipt} Receipt, ${stats.contra} Contra, ${stats.journal} Journal.
+      Masters: ${stats.ledgers} Ledgers, ${stats.groups} Groups, ${stats.stockItems} Items.
+      Vouchers: ${stats.sales} Sales, ${stats.purchase} Purchase, ${stats.payment} Payment, ${stats.receipt} Receipt.
       (Errors/Skipped: ${stats.skipped})`,
     };
   } catch (err: any) {

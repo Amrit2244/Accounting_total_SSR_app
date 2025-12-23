@@ -12,7 +12,6 @@ import {
   X,
   Package,
 } from "lucide-react";
-// Ensure this path matches where you defined deleteBulkVouchers (likely actions/voucher or actions/masters)
 import { deleteBulkVouchers } from "@/app/actions/voucher";
 import { useRouter } from "next/navigation";
 
@@ -52,7 +51,6 @@ export default function VoucherTable({
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedIds.length} vouchers permanently?`)) return;
 
-    // ✅ FIX: Map IDs to objects with { id, type } for the server action
     const itemsToDelete = selectedIds.map((id) => {
       const v = vouchers.find((item) => item.id === id);
       return { id, type: v?.type || "" };
@@ -64,7 +62,9 @@ export default function VoucherTable({
         setSelectedIds([]);
         router.refresh();
       } else {
-        alert("Error: " + (res.message || "Could not delete"));
+        // ✅ Safe Access to Message
+        const msg = res.message || (res as any).error || "Could not delete";
+        alert("Error: " + msg);
       }
     });
   };
@@ -76,6 +76,7 @@ export default function VoucherTable({
 
   return (
     <div className="relative font-sans">
+      {/* ... (Rest of your JSX remains exactly the same) ... */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-2">
           <span className="text-[10px] font-black uppercase tracking-widest">
@@ -242,7 +243,7 @@ export default function VoucherTable({
                                     size={10}
                                     className="inline mr-1 text-slate-300"
                                   />
-                                )}
+                                )}{" "}
                                 {row.ledger?.name || "Unknown"}
                               </span>
                             )}
@@ -262,7 +263,6 @@ export default function VoucherTable({
                               className="p-3 text-center border-l border-slate-50 align-top"
                               rowSpan={rowsToRender.length}
                             >
-                              {/* ✅ FIXED: Added type to URL for correct routing */}
                               <Link
                                 href={`/companies/${companyId}/vouchers/${voucher.type}/${voucher.id}/edit`}
                                 className="text-slate-400 hover:text-blue-600 transition-colors p-1 inline-block"
