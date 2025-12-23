@@ -13,7 +13,6 @@ export default async function LedgerReportPage({
   const sp = await searchParams;
   const ledgerId = sp.ledgerId ? parseInt(sp.ledgerId) : null;
 
-  // Defaults
   const today = new Date();
   const currentYear =
     today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
@@ -24,7 +23,6 @@ export default async function LedgerReportPage({
   const toDateEnd = new Date(to);
   toDateEnd.setHours(23, 59, 59, 999);
 
-  // 1. Fetch Ledgers for Dropdown
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
@@ -39,7 +37,6 @@ export default async function LedgerReportPage({
     const ledger = ledgers.find((l: any) => l.id === ledgerId);
 
     if (ledger) {
-      // 2. Calculate Opening Balance
       const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
       const [prevSales, prevPur, prevPay, prevRcpt, prevCntr, prevJrnl] =
         await Promise.all([
@@ -79,7 +76,6 @@ export default async function LedgerReportPage({
 
       openingBalance = ledger.openingBalance + totalPrevMovement;
 
-      // 3. Fetch Current Transactions
       const currentFilter = {
         date: { gte: fromDate, lte: toDateEnd },
         status: "APPROVED",
@@ -119,9 +115,11 @@ export default async function LedgerReportPage({
         voucherNo: entry[vKey].voucherNo.toString(),
         type: type,
         narration: entry[vKey].narration,
+        // ✅ Amount Mapping: Negative = Debit, Positive = Credit
+        debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
+        credit: entry.amount > 0 ? entry.amount : 0,
         amount: entry.amount,
         voucherId: entry[vKey].id,
-        balance: 0,
       });
 
       const rawTransactions = [
