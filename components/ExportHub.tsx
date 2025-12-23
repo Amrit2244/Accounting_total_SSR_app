@@ -17,44 +17,58 @@ export default function ExportHub({ companyId }: { companyId: number }) {
     a.href = URL.createObjectURL(file);
     a.download = fileName;
     a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const handleBackup = async () => {
     setLoading(true);
-    const result = await getFullCompanyData(companyId);
-    if (result.success) {
-      downloadFile(
-        JSON.stringify(result.data, null, 2),
-        `Backup_${companyId}_${new Date().toISOString().split("T")[0]}.json`,
-        "application/json"
-      );
+    try {
+      const result = await getFullCompanyData(companyId);
+      if (result.success && result.data) {
+        downloadFile(
+          JSON.stringify(result.data, null, 2),
+          `Backup_${companyId}_${new Date().toISOString().split("T")[0]}.json`,
+          "application/json"
+        );
+      } else {
+        alert(result.error || "Backup failed");
+      }
+    } catch (err) {
+      alert("An unexpected error occurred during backup.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleTallyXML = async () => {
     setLoading(true);
-    const result = await getFullCompanyData(companyId);
-    if (result.success && result.data) {
-      const d = result.data;
-      let xml = `<?xml version="1.0"?>\n<ENVELOPE>\n<HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC><REPORTNAME>All Masters</REPORTNAME></REQUESTDESC>\n<REQUESTDATA>\n`;
-      d.ledgers.forEach((l: any) => {
-        xml += `<TALLYMESSAGE xmlns:UDF="TallyUDF">\n<LEDGER NAME="${
-          l.name
-        }" RESERVEDNAME="">\n<NAME>${l.name}</NAME>\n<PARENT>${
-          l.groupId || "Suspense Account"
-        }</PARENT>\n<OPENINGBALANCE>${
-          l.openingBalance
-        }</OPENINGBALANCE>\n</LEDGER>\n</TALLYMESSAGE>\n`;
-      });
-      xml += `</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>`;
-      downloadFile(
-        xml,
-        `Tally_Sync_${d.name.replace(/\s+/g, "_")}.xml`,
-        "text/xml"
-      );
+    try {
+      const result = await getFullCompanyData(companyId);
+      if (result.success && result.data) {
+        const d = result.data;
+        let xml = `<?xml version="1.0"?>\n<ENVELOPE>\n<HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC><REPORTNAME>All Masters</REPORTNAME></REQUESTDESC>\n<REQUESTDATA>\n`;
+
+        // Map through ledgers to create Tally-compatible XML
+        d.ledgers.forEach((l: any) => {
+          const parentName = l.group?.name || "Suspense Account";
+          xml += `<TALLYMESSAGE xmlns:UDF="TallyUDF">\n<LEDGER NAME="${l.name}" RESERVEDNAME="">\n<NAME>${l.name}</NAME>\n<PARENT>${parentName}</PARENT>\n<OPENINGBALANCE>${l.openingBalance}</OPENINGBALANCE>\n</LEDGER>\n</TALLYMESSAGE>\n`;
+        });
+
+        xml += `</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>`;
+
+        const fileName = d.company?.name
+          ? `Tally_Sync_${d.company.name.replace(/\s+/g, "_")}.xml`
+          : `Tally_Sync_${companyId}.xml`;
+
+        downloadFile(xml, fileName, "text/xml");
+      } else {
+        alert(result.error || "XML generation failed");
+      }
+    } catch (err) {
+      alert("An unexpected error occurred during XML generation.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

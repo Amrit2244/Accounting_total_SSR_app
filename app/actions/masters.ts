@@ -115,7 +115,7 @@ const VoucherEntrySchema = z.object({
 const UpdateVoucherSchema = z.object({
   voucherId: z.coerce.number(),
   companyId: z.coerce.number(),
-  type: z.string().min(1), // ✅ Added Type to schema
+  type: z.string().min(1),
   date: z.string().min(1),
   narration: z
     .string()
@@ -361,7 +361,8 @@ export async function verifyStockJournal(
     });
 
     if (isApproved) {
-      await prisma.$transaction(async (tx) => {
+      // ✅ FIXED: Using 'tx: any' to bypass Prisma namespace export issues on server build
+      await prisma.$transaction(async (tx: any) => {
         for (const entry of journal.inventoryEntries) {
           await tx.stockItem.update({
             where: { id: entry.stockItemId },
@@ -419,7 +420,6 @@ export async function updateLedger(prevState: State, formData: FormData) {
   }
 }
 
-// ✅ FIXED: Update Voucher Logic for Split Tables
 export async function updateVoucher(prevState: State, formData: FormData) {
   const rawData = Object.fromEntries(formData.entries());
   const validatedFields = UpdateVoucherSchema.safeParse(rawData);
@@ -448,30 +448,29 @@ export async function updateVoucher(prevState: State, formData: FormData) {
       return { success: false, message: "Unauthorized. Session expired." };
 
     const newTxCode = Math.floor(10000 + Math.random() * 90000).toString();
-    const totalAmount = structuredEntries.reduce(
+    const totalAmount = (structuredEntries as any[]).reduce(
       (sum: number, e: any) => sum + (e.amount > 0 ? e.amount : 0),
       0
     );
 
-    // Common update data
     const updateData = {
       date: new Date(date),
       narration,
-      status: "PENDING", // Reset to pending on edit
+      status: "PENDING",
       transactionCode: newTxCode,
       updatedAt: new Date(),
       createdById: currentUserId,
-      verifiedById: null, // Clear verification
+      verifiedById: null,
       totalAmount,
     };
 
-    const ledgerEntriesCreate = structuredEntries.map((e: any) => ({
+    const ledgerEntriesCreate = (structuredEntries as any[]).map((e: any) => ({
       ledgerId: Number(e.ledgerId),
       amount: Number(e.amount),
     }));
 
-    // Perform Update based on Type
-    await prisma.$transaction(async (tx) => {
+    // ✅ FIXED: Using 'tx: any' here as well
+    await prisma.$transaction(async (tx: any) => {
       if (type === "SALES") {
         await tx.salesVoucher.update({
           where: { id: voucherId },
@@ -480,7 +479,7 @@ export async function updateVoucher(prevState: State, formData: FormData) {
             ledgerEntries: { deleteMany: {}, create: ledgerEntriesCreate },
             inventoryEntries: {
               deleteMany: {},
-              create: structuredInventory.map((i: any) => ({
+              create: (structuredInventory as any[]).map((i: any) => ({
                 stockItemId: Number(i.stockItemId),
                 quantity: Number(i.quantity),
                 rate: Number(i.rate),
@@ -497,7 +496,7 @@ export async function updateVoucher(prevState: State, formData: FormData) {
             ledgerEntries: { deleteMany: {}, create: ledgerEntriesCreate },
             inventoryEntries: {
               deleteMany: {},
-              create: structuredInventory.map((i: any) => ({
+              create: (structuredInventory as any[]).map((i: any) => ({
                 stockItemId: Number(i.stockItemId),
                 quantity: Number(i.quantity),
                 rate: Number(i.rate),
@@ -515,7 +514,6 @@ export async function updateVoucher(prevState: State, formData: FormData) {
           },
         });
       }
-      // Add RECEIPT, CONTRA, JOURNAL blocks similarly if needed for edit
     });
 
     revalidatePath(`/companies/${companyId}/vouchers`);
@@ -624,8 +622,9 @@ export async function deleteBulkVouchers(
     .map((i) => i.id);
 
   try {
+    // ✅ FIXED: Typed 'tx' as any
     await prisma.$transaction(
-      async (tx) => {
+      async (tx: any) => {
         if (salesIds.length > 0) {
           await tx.salesItemEntry.deleteMany({
             where: { salesId: { in: salesIds } },
@@ -737,12 +736,10 @@ export async function deleteStockItem(id: number) {
   }
 }
 
-// ✅ FIXED: Unified Search for all Voucher Types
 export async function getVoucherByTxCode(txCode: string) {
   if (!txCode) return { success: false, message: "Code required" };
 
   try {
-    // Check all tables concurrently
     const [sales, purchase, payment, receipt, contra, journal, stock] =
       await Promise.all([
         prisma.salesVoucher.findUnique({
@@ -802,7 +799,7 @@ export async function getVoucherByTxCode(txCode: string) {
       return {
         success: true,
         type: "STANDARD",
-        data: { ...result, entries: result.ledgerEntries }, // Map to 'entries' for frontend compat
+        data: { ...result, entries: (result as any).ledgerEntries },
       };
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import {
   Loader2,
   Save,
@@ -26,40 +26,55 @@ interface Company {
 }
 
 interface FormState {
-  error?: string;
+  message?: string;
+  errors?: Record<string, string[]>;
   success?: boolean;
 }
 
 interface EditCompanyFormProps {
   initialCompany: Company;
-  updateAction: (prevState: any, formData: FormData) => Promise<FormState>;
+  // Match the type signature used in your server action
+  updateAction: (prevState: any, formData: FormData) => Promise<any>;
 }
 
 export default function EditCompanyForm({
   initialCompany,
   updateAction,
 }: EditCompanyFormProps) {
-  const [state, action, isPending] = useActionState(updateAction, {});
+  // Initialize useActionState with the server action
+  const [state, action, isPending] = useActionState(updateAction, null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Auto-scroll to top if there is an error message
+  useEffect(() => {
+    if (state?.message || state?.errors) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [state]);
 
   return (
-    <form action={action} className="space-y-6">
+    <form action={action} ref={formRef} className="space-y-6">
+      {/* Hidden field to pass ID to the Server Action */}
       <input type="hidden" name="id" value={initialCompany.id} />
 
-      {state?.error && (
-        <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-lg flex items-center gap-3 text-sm font-medium animate-in fade-in">
+      {/* ERROR MESSAGE */}
+      {state?.message && !state?.success && (
+        <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-lg flex items-center gap-3 text-sm font-medium animate-in fade-in slide-in-from-top-2">
           <AlertCircle size={20} />
-          {state.error}
+          {state.message}
         </div>
       )}
 
+      {/* SUCCESS MESSAGE */}
       {state?.success && (
-        <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg flex items-center gap-3 text-sm font-medium animate-in fade-in">
+        <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg flex items-center gap-3 text-sm font-medium animate-in fade-in slide-in-from-top-2">
           <CheckCircle2 size={20} />
-          Company updated successfully!
+          Company profile updated successfully!
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* COMPANY NAME */}
         <div className="md:col-span-2 space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <Building2 size={16} className="text-blue-600" /> Company Name
@@ -67,11 +82,17 @@ export default function EditCompanyForm({
           <input
             name="name"
             defaultValue={initialCompany.name}
-            className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium"
             required
           />
+          {state?.errors?.name && (
+            <p className="text-xs text-red-500 font-bold">
+              {state.errors.name[0]}
+            </p>
+          )}
         </div>
 
+        {/* ADDRESS */}
         <div className="md:col-span-2 space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <MapPin size={16} className="text-blue-600" /> Address
@@ -84,6 +105,7 @@ export default function EditCompanyForm({
           />
         </div>
 
+        {/* STATE & PINCODE */}
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700">State</label>
           <input
@@ -104,10 +126,10 @@ export default function EditCompanyForm({
           />
         </div>
 
-        {/* ✅ NEW: Financial Year Configuration Section */}
-        <div className="md:col-span-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* FINANCIAL YEAR SECTION */}
+        <div className="md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-[11px] font-black uppercase tracking-widest text-blue-700 flex items-center gap-2">
+            <label className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
               <Calendar size={14} /> Financial Year From
             </label>
             <input
@@ -115,11 +137,11 @@ export default function EditCompanyForm({
               type="date"
               defaultValue={initialCompany.financialYearFrom}
               required
-              className="w-full p-2 border border-blue-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[11px] font-black uppercase tracking-widest text-blue-700 flex items-center gap-2">
+            <label className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
               <Calendar size={14} /> Books Begin From
             </label>
             <input
@@ -127,14 +149,15 @@ export default function EditCompanyForm({
               type="date"
               defaultValue={initialCompany.booksBeginFrom}
               required
-              className="w-full p-2 border border-blue-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
         </div>
 
+        {/* EMAIL & GSTIN */}
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-            <Mail size={16} className="text-blue-600" /> Email
+            <Mail size={16} className="text-blue-600" /> Email Address
           </label>
           <input
             name="email"
@@ -151,23 +174,30 @@ export default function EditCompanyForm({
           <input
             name="gstin"
             defaultValue={initialCompany.gstin || ""}
-            className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all uppercase"
+            className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all uppercase font-mono"
+            placeholder="22AAAAA0000A1Z5"
           />
         </div>
       </div>
 
-      <div className="pt-4 border-t border-slate-100 flex gap-4">
+      {/* FORM ACTIONS */}
+      <div className="pt-6 border-t border-slate-100">
         <button
           type="submit"
           disabled={isPending}
-          className="flex-1 bg-[#003366] hover:bg-black text-white py-3 rounded-lg font-bold shadow-lg transition-all flex justify-center items-center gap-2 disabled:opacity-70"
+          className="w-full bg-[#003366] hover:bg-slate-900 text-white py-3.5 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
         >
           {isPending ? (
-            <Loader2 className="animate-spin" size={20} />
+            <>
+              <Loader2 className="animate-spin" size={20} />
+              <span>Saving Changes...</span>
+            </>
           ) : (
-            <Save size={20} />
+            <>
+              <Save size={20} />
+              <span>Update Company Profile</span>
+            </>
           )}
-          {isPending ? "Updating..." : "Save Changes"}
         </button>
       </div>
     </form>

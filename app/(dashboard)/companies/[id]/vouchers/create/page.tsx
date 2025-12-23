@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import VoucherForm from "@/components/forms/VoucherForm";
 import SalesPurchaseForm from "@/components/forms/SalesPurchaseForm";
-import StockJournalForm from "@/components/forms/StockJournalForm"; // Import the new form
+import StockJournalForm from "@/components/forms/StockJournalForm";
 import Link from "next/link";
 import clsx from "clsx";
 import {
@@ -13,7 +13,7 @@ import {
   Truck,
   ArrowLeft,
   ChevronRight,
-  Factory, // Icon for Manufacturing/Stock Journal
+  Factory,
 } from "lucide-react";
 
 export default async function CreateVoucherPage({
@@ -71,7 +71,6 @@ export default async function CreateVoucherPage({
       color: "text-purple-600",
       active: "border-purple-500 text-purple-800",
     },
-    // ✅ NEW: Stock Journal Tab
     {
       id: "STOCK_JOURNAL",
       label: "Manufacturing",
@@ -82,23 +81,23 @@ export default async function CreateVoucherPage({
   ];
 
   const currentVoucher =
-    voucherTypes.find((v) => v.id === voucherType) || voucherTypes[3];
+    voucherTypes.find((v: any) => v.id === voucherType) || voucherTypes[3];
 
-  // Fetch Data
   const rawLedgers = await prisma.ledger.findMany({
     where: { companyId },
     select: { id: true, name: true, group: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
 
-  const ledgers = rawLedgers.map((l) => ({
+  // ✅ FIXED: Explicitly typed callback parameter
+  const ledgers = rawLedgers.map((l: any) => ({
     ...l,
     group: l.group || { name: "Uncategorized" },
   }));
 
   const items = await prisma.stockItem.findMany({
     where: { companyId },
-    select: { id: true, name: true, gstRate: true }, // Add current quantity if needed
+    select: { id: true, name: true, gstRate: true },
     orderBy: { name: "asc" },
   });
 
@@ -107,7 +106,6 @@ export default async function CreateVoucherPage({
 
   return (
     <div className="max-w-[1400px] mx-auto p-4 space-y-4">
-      {/* HEADER */}
       <div className="flex justify-between items-center pb-2 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 mb-0.5">
@@ -132,9 +130,8 @@ export default async function CreateVoucherPage({
         </Link>
       </div>
 
-      {/* TABS (Grid updated to 7 columns) */}
       <div className="grid grid-cols-2 md:grid-cols-7 gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-        {voucherTypes.map((v) => {
+        {voucherTypes.map((v: any) => {
           const isActive = voucherType === v.id;
           return (
             <Link
@@ -153,10 +150,8 @@ export default async function CreateVoucherPage({
         })}
       </div>
 
-      {/* FORM AREA */}
       <div className="bg-white p-6 border border-slate-200 shadow-sm rounded-xl min-h-[500px]">
         {isStockJournal ? (
-          // ✅ Render Stock Journal Form
           <StockJournalForm companyId={companyId} stockItems={items} />
         ) : isInventory ? (
           <SalesPurchaseForm

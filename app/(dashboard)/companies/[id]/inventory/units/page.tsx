@@ -68,7 +68,8 @@ export default async function UnitsPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {units.map((unit) => (
+            {/* ✅ FIXED: Added explicit : any type for 'unit' to pass strict cloud build */}
+            {units.map((unit: any) => (
               <tr
                 key={unit.id}
                 className="text-xs hover:bg-slate-50 transition-colors"

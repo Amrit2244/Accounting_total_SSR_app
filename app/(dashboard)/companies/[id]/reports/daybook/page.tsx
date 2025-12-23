@@ -43,10 +43,9 @@ export default async function DaybookPage({
   const whereClause: any = {
     companyId,
     date: { gte: startISO, lte: endISO },
-    status: "APPROVED", // Ideally filter only approved/posted vouchers
+    status: "APPROVED",
   };
 
-  // ✅ OPTIMIZED FETCH: Run one efficient parallel query
   const [sales, purchase, payment, receipt, contra, journal, stock] =
     await Promise.all([
       !type || type === "ALL" || type === "SALES"
@@ -90,30 +89,39 @@ export default async function DaybookPage({
         : [],
     ]);
 
+  // ✅ FIXED: Added explicit : any types to the mapping functions
   const vouchers = [
-    ...sales.map((v) => ({ ...v, type: "SALES", entries: v.ledgerEntries })),
-    ...purchase.map((v) => ({
+    ...sales.map((v: any) => ({
+      ...v,
+      type: "SALES",
+      entries: v.ledgerEntries,
+    })),
+    ...purchase.map((v: any) => ({
       ...v,
       type: "PURCHASE",
       entries: v.ledgerEntries,
     })),
-    ...payment.map((v) => ({
+    ...payment.map((v: any) => ({
       ...v,
       type: "PAYMENT",
       entries: v.ledgerEntries,
     })),
-    ...receipt.map((v) => ({
+    ...receipt.map((v: any) => ({
       ...v,
       type: "RECEIPT",
       entries: v.ledgerEntries,
     })),
-    ...contra.map((v) => ({ ...v, type: "CONTRA", entries: v.ledgerEntries })),
-    ...journal.map((v) => ({
+    ...contra.map((v: any) => ({
+      ...v,
+      type: "CONTRA",
+      entries: v.ledgerEntries,
+    })),
+    ...journal.map((v: any) => ({
       ...v,
       type: "JOURNAL",
       entries: v.ledgerEntries,
     })),
-    ...stock.map((v) => ({
+    ...stock.map((v: any) => ({
       ...v,
       type: "STOCK_JOURNAL",
       entries: [],
@@ -121,13 +129,15 @@ export default async function DaybookPage({
     })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Calculate Totals for the View
   const totalTransactions = vouchers.length;
-  const totalValue = vouchers.reduce((sum, v) => sum + (v.totalAmount || 0), 0);
+  // ✅ FIXED: Added explicit types to reduce
+  const totalValue = vouchers.reduce(
+    (sum: number, v: any) => sum + (v.totalAmount || 0),
+    0
+  );
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-3 animate-in fade-in duration-500 h-[calc(100vh-64px)] flex flex-col">
-      {/* COMPACT HEADER */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="p-1.5 bg-slate-900 rounded text-white shadow-sm">
@@ -144,9 +154,7 @@ export default async function DaybookPage({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* CLIENT FILTERS */}
           <DaybookFilters />
-
           <Link
             href={`/companies/${companyId}/reports`}
             className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 transition-all border border-slate-200 px-3 py-1.5 rounded-lg bg-white shadow-sm h-[34px]"
@@ -156,7 +164,6 @@ export default async function DaybookPage({
         </div>
       </div>
 
-      {/* MAIN REGISTER TABLE */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1">
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <table className="w-full border-collapse">
@@ -197,19 +204,13 @@ export default async function DaybookPage({
                 </tr>
               ) : (
                 vouchers.map((v: any) => {
-                  // Cast to 'any' allows accessing partyName safely
-                  // Display Logic
                   const primaryEntry = v.entries?.[0];
-
-                  // Safe Access to partyName
                   const pName = v.partyName ? v.partyName : null;
-
                   const ledgerName =
                     primaryEntry?.ledger?.name ||
                     pName ||
                     v.narration ||
                     "Unknown";
-
                   const amount = v.totalAmount || 0;
 
                   return (
@@ -218,7 +219,7 @@ export default async function DaybookPage({
                       className="group hover:bg-blue-50/40 transition-colors text-[11px]"
                     >
                       <td className="py-2 px-4 font-bold text-slate-700 whitespace-nowrap">
-                        {fmtDate(v.date)}
+                        {fmtDate(new Date(v.date))}
                       </td>
                       <td className="py-2 px-4">
                         <span
@@ -271,7 +272,6 @@ export default async function DaybookPage({
           </table>
         </div>
 
-        {/* COMPACT FOOTER */}
         <div className="bg-slate-900 text-white px-6 py-2 flex justify-between items-center text-[10px] font-black uppercase tracking-widest shrink-0">
           <div className="flex gap-4 opacity-70">
             <span>Rows: {totalTransactions}</span>

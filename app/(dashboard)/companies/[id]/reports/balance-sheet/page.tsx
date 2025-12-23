@@ -28,9 +28,8 @@ export default async function BalanceSheetPage({
 
   if (isNaN(companyId)) notFound();
 
-  // --- 1. DATA FETCHING (Updated for New Schema) ---
+  // --- 1. DATA FETCHING ---
   const [ledgers, stockItems] = await Promise.all([
-    // A. Fetch Ledgers + 6 Transaction Types
     prisma.ledger.findMany({
       where: { companyId },
       include: {
@@ -61,7 +60,6 @@ export default async function BalanceSheetPage({
         },
       },
     }),
-    // B. Fetch Stock Items + 3 Inventory Types
     prisma.stockItem.findMany({
       where: { companyId },
       include: {
@@ -72,31 +70,35 @@ export default async function BalanceSheetPage({
     }),
   ]);
 
-  // --- 2. CALCULATE STOCK & P&L (Required for Balance Sheet) ---
+  // --- 2. CALCULATE STOCK & P&L ---
   let openingStock = 0;
   let closingStock = 0;
   let closingStockDetails: { name: string; amount: number }[] = [];
 
-  // Stock Valuation Logic (WAC)
-  stockItems.forEach((item) => {
+  // ✅ FIXED: Added : any to item
+  stockItems.forEach((item: any) => {
     const opVal = item.openingValue || 0;
     openingStock += opVal;
 
-    // Merge all entries
     const allEntries = [
-      ...item.salesItems.map((e) => ({ qty: e.quantity, val: 0 })),
-      ...item.purchaseItems.map((e) => ({ qty: e.quantity, val: e.amount })),
-      ...item.journalEntries.map((e) => ({ qty: e.quantity, val: e.amount })),
+      ...item.salesItems.map((e: any) => ({ qty: e.quantity, val: 0 })),
+      ...item.purchaseItems.map((e: any) => ({
+        qty: e.quantity,
+        val: e.amount,
+      })),
+      ...item.journalEntries.map((e: any) => ({
+        qty: e.quantity,
+        val: e.amount,
+      })),
     ];
 
     let currentQty = item.openingQty || 0;
     let totalInwardQty = item.openingQty || 0;
     let totalInwardVal = opVal;
 
-    allEntries.forEach((e) => {
+    allEntries.forEach((e: any) => {
       currentQty += e.qty;
       if (e.qty > 0) {
-        // Only Inwards affect Cost
         totalInwardQty += e.qty;
         totalInwardVal += e.val;
       }
@@ -111,12 +113,10 @@ export default async function BalanceSheetPage({
     }
   });
 
-  // Calculate Net Profit Internally
   let totalExpense = openingStock;
   let totalIncome = closingStock;
 
-  ledgers.forEach((l) => {
-    // Sum from all 6 tables
+  ledgers.forEach((l: any) => {
     const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
     const txTotal =
       sum(l.salesEntries) +
@@ -135,7 +135,6 @@ export default async function BalanceSheetPage({
     const gName = l.group.name.toLowerCase();
     const amt = Math.abs(net);
 
-    // Identify P&L Items
     const isExp =
       nature === "EXPENSE" ||
       gName.includes("purchase") ||
@@ -151,7 +150,7 @@ export default async function BalanceSheetPage({
     else if (isInc) totalIncome += amt;
   });
 
-  const netResult = totalIncome - totalExpense; // +ve Profit, -ve Loss
+  const netResult = totalIncome - totalExpense;
   const isProfit = netResult >= 0;
 
   // --- 3. CLASSIFY ASSETS & LIABILITIES ---
@@ -171,8 +170,7 @@ export default async function BalanceSheetPage({
     g.ledgers.push({ name: ledgerName, amount });
   };
 
-  ledgers.forEach((l) => {
-    // Re-calculate net balance for Asset/Liability classification
+  ledgers.forEach((l: any) => {
     const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
     const txTotal =
       sum(l.salesEntries) +
@@ -190,7 +188,6 @@ export default async function BalanceSheetPage({
     const nature = l.group.nature?.toUpperCase();
     const gName = l.group.name.toLowerCase();
 
-    // Skip P&L items
     if (
       nature === "EXPENSE" ||
       nature === "INCOME" ||
@@ -201,7 +198,6 @@ export default async function BalanceSheetPage({
     )
       return;
 
-    // Classify
     if (
       nature === "LIABILITY" ||
       nature === "CAPITAL" ||
@@ -220,9 +216,6 @@ export default async function BalanceSheetPage({
     }
   });
 
-  // --- 4. INJECT SYSTEM ROWS ---
-
-  // A. Net Profit -> Liability (Reserves)
   if (isProfit && netResult > 0) {
     liabMap.set("Reserves & Surplus", {
       groupName: "Reserves & Surplus",
@@ -230,9 +223,7 @@ export default async function BalanceSheetPage({
       ledgers: [{ name: "Net Profit (Current Year)", amount: netResult }],
       isSystem: true,
     });
-  }
-  // B. Net Loss -> Asset (P&L A/c)
-  else if (!isProfit && Math.abs(netResult) > 0) {
+  } else if (!isProfit && Math.abs(netResult) > 0) {
     assetMap.set("Profit & Loss A/c", {
       groupName: "Profit & Loss A/c",
       amount: Math.abs(netResult),
@@ -243,7 +234,6 @@ export default async function BalanceSheetPage({
     });
   }
 
-  // C. Closing Stock -> Asset
   if (closingStock > 0) {
     assetMap.set("Closing Stock", {
       groupName: "Closing Stock",
@@ -253,12 +243,12 @@ export default async function BalanceSheetPage({
     });
   }
 
-  // --- 5. BUILD LISTS ---
   const liabilities = Array.from(liabMap.values());
   const assets = Array.from(assetMap.values());
 
-  const totalLiab = liabilities.reduce((s, i) => s + i.amount, 0);
-  const totalAsset = assets.reduce((s, i) => s + i.amount, 0);
+  // ✅ FIXED: Added : any to s and i
+  const totalLiab = liabilities.reduce((s: number, i: any) => s + i.amount, 0);
+  const totalAsset = assets.reduce((s: number, i: any) => s + i.amount, 0);
   const grandTotal = Math.max(totalLiab, totalAsset);
   const diff = totalLiab - totalAsset;
   const isBalanced = Math.abs(diff) < 0.01;
@@ -272,7 +262,6 @@ export default async function BalanceSheetPage({
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500 h-[calc(100vh-64px)] flex flex-col font-sans">
-      {/* HEADER */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
@@ -303,9 +292,7 @@ export default async function BalanceSheetPage({
         </div>
       </div>
 
-      {/* REPORT CONTENT */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1">
-        {/* HEADERS */}
         <div className="flex border-b border-slate-200 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shrink-0">
           <div className="w-1/2 flex justify-between px-4 py-2 border-r border-slate-700">
             <span>Liabilities</span>
@@ -317,9 +304,7 @@ export default async function BalanceSheetPage({
           </div>
         </div>
 
-        {/* COLUMNS */}
         <div className="flex flex-1 min-h-0">
-          {/* LIABILITIES */}
           <div className="w-1/2 border-r border-slate-200 flex flex-col overflow-y-auto custom-scrollbar">
             <div className="flex-1 p-1">
               {liabilities.length === 0 ? (
@@ -327,7 +312,7 @@ export default async function BalanceSheetPage({
                   No Liabilities Recorded
                 </div>
               ) : (
-                liabilities.map((group) => (
+                liabilities.map((group: any) => (
                   <ProfitLossDrillDown key={group.groupName} item={group} />
                 ))
               )}
@@ -340,7 +325,6 @@ export default async function BalanceSheetPage({
             <TotalRow amount={grandTotal} />
           </div>
 
-          {/* ASSETS */}
           <div className="w-1/2 flex flex-col overflow-y-auto custom-scrollbar">
             <div className="flex-1 p-1">
               {assets.length === 0 ? (
@@ -348,7 +332,7 @@ export default async function BalanceSheetPage({
                   No Assets Recorded
                 </div>
               ) : (
-                assets.map((group) => (
+                assets.map((group: any) => (
                   <ProfitLossDrillDown key={group.groupName} item={group} />
                 ))
               )}

@@ -10,8 +10,6 @@ export default async function TrialBalancePage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // 1. Fetch Ledgers with entries from ALL 6 separate tables
-  // We only fetch "APPROVED" transactions
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     include: {
@@ -44,7 +42,6 @@ export default async function TrialBalancePage({
     orderBy: { name: "asc" },
   });
 
-  // 2. Process Data: Group by "Group Name"
   const groupMap: Record<
     string,
     { name: string; debit: number; credit: number }
@@ -52,9 +49,10 @@ export default async function TrialBalancePage({
   let totalDebit = 0;
   let totalCredit = 0;
 
-  ledgers.forEach((l) => {
-    // Sum all transactions from the 6 arrays
-    const sum = (arr: any[]) => arr.reduce((acc, curr) => acc + curr.amount, 0);
+  ledgers.forEach((l: any) => {
+    // ✅ FIXED: Added explicit types to sum function and reduce parameters
+    const sum = (arr: any[]) =>
+      arr.reduce((acc: number, curr: any) => acc + curr.amount, 0);
 
     const txTotal =
       sum(l.salesEntries) +
@@ -64,18 +62,14 @@ export default async function TrialBalancePage({
       sum(l.contraEntries) +
       sum(l.journalEntries);
 
-    // Calculate Closing Balance
     const closing = l.openingBalance + txTotal;
-
-    if (closing === 0) return; // Skip zero balance ledgers
+    if (closing === 0) return;
 
     const groupName = l.group?.name || "Ungrouped";
-
     if (!groupMap[groupName]) {
       groupMap[groupName] = { name: groupName, debit: 0, credit: 0 };
     }
 
-    // Positive = Debit, Negative = Credit
     if (closing > 0) {
       groupMap[groupName].debit += closing;
       totalDebit += closing;
@@ -85,25 +79,19 @@ export default async function TrialBalancePage({
     }
   });
 
-  // Convert to array and sort
   const trialData = Object.values(groupMap).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
-
   const fmt = (val: number) =>
     val.toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-
-  // 3. Mismatch Calculation
-  // We use a small epsilon for float comparison to avoid tiny rounding errors (e.g. 0.0000001)
   const difference = Math.abs(totalDebit - totalCredit);
   const isMismatch = difference > 0.01;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 py-8 font-sans">
-      {/* HEADER */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
@@ -126,11 +114,10 @@ export default async function TrialBalancePage({
         </Link>
       </div>
 
-      {/* WARNING BANNER */}
       {isMismatch && (
         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-2">
-            <AlertTriangle size={18} />
+            <AlertTriangle size={18} />{" "}
             <span className="text-sm font-bold">Trial Balance Mismatch!</span>
           </div>
           <div className="text-sm font-mono font-bold">
@@ -139,7 +126,6 @@ export default async function TrialBalancePage({
         </div>
       )}
 
-      {/* TABLE */}
       <div
         className={`bg-white border rounded-xl shadow-lg overflow-hidden ${
           isMismatch ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"
@@ -150,14 +136,13 @@ export default async function TrialBalancePage({
           <div className="w-40 text-right">Debit (₹)</div>
           <div className="w-40 text-right">Credit (₹)</div>
         </div>
-
         <div className="divide-y divide-slate-100">
           {trialData.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-xs uppercase font-bold">
               No data available
             </div>
           ) : (
-            trialData.map((group) => (
+            trialData.map((group: any) => (
               <div
                 key={group.name}
                 className="flex items-center p-3 hover:bg-slate-50 transition-colors text-sm"
@@ -175,8 +160,6 @@ export default async function TrialBalancePage({
             ))
           )}
         </div>
-
-        {/* TOTALS */}
         <div className="bg-slate-100 border-t border-slate-200 flex items-center p-3 text-xs font-black uppercase">
           <div className="flex-1 text-right pr-4 text-slate-500">
             Grand Total

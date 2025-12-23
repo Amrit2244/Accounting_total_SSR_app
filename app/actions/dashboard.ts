@@ -29,7 +29,6 @@ export async function getDashboardMetrics(
   endDate: Date
 ): Promise<DashboardMetrics> {
   try {
-    // --- 1. CALCULATE CARD BALANCES (Your existing logic) ---
     const allLedgers = await prisma.ledger.findMany({
       where: { companyId },
       include: {
@@ -96,12 +95,11 @@ export async function getDashboardMetrics(
       totalDebtors = 0,
       totalCreditors = 0;
 
-    allLedgers.forEach((l) => {
+    // ✅ FIXED: Added (l: any) to satisfy TypeScript build
+    allLedgers.forEach((l: any) => {
       const sum = (arr: any[]) =>
         arr.reduce((acc, curr) => acc + curr.amount, 0);
 
-      // Calculate closing balance based on schema logic
-      // Note: Verify if Debit/Credit logic (pos/neg) is consistent across all tables
       const movement =
         sum(l.salesEntries) +
         sum(l.purchaseEntries) +
@@ -111,7 +109,6 @@ export async function getDashboardMetrics(
         sum(l.journalEntries);
 
       const balance = l.openingBalance + movement;
-
       const n = l.name.toLowerCase();
       const g = l.group?.name.toLowerCase() || "";
 
@@ -121,7 +118,6 @@ export async function getDashboardMetrics(
       else if (g.includes("creditor")) totalCreditors += Math.abs(balance);
     });
 
-    // --- 2. CALCULATE REVENUE & EXPENSE ---
     const salesAgg = await prisma.salesVoucher.aggregate({
       where: {
         companyId,
@@ -139,15 +135,13 @@ export async function getDashboardMetrics(
       _sum: { totalAmount: true },
     });
 
-    // --- 3. GENERATE CHART DATA (The Missing Piece!) ---
-    // Generates monthly totals for the last 6 months
     const last6Months = eachMonthOfInterval({
       start: subMonths(new Date(), 5),
       end: new Date(),
     });
 
     const chart = await Promise.all(
-      last6Months.map(async (month) => {
+      last6Months.map(async (month: Date) => {
         const mStart = startOfMonth(month);
         const mEnd = endOfMonth(month);
 
@@ -178,7 +172,6 @@ export async function getDashboardMetrics(
       })
     );
 
-    // --- 4. FETCH RECENTS ---
     const [recentSales, recentPurchases] = await Promise.all([
       prisma.salesVoucher.findMany({
         where: { companyId, status: "APPROVED" },
@@ -195,27 +188,29 @@ export async function getDashboardMetrics(
     ]);
 
     const recents = [
-      ...recentSales.map((v) => ({
+      ...recentSales.map((v: any) => ({
         ...v,
         type: "SALES",
         entries: v.ledgerEntries,
       })),
-      ...recentPurchases.map((v) => ({
+      ...recentPurchases.map((v: any) => ({
         ...v,
         type: "PURCHASE",
         entries: v.ledgerEntries,
       })),
     ]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
       .slice(0, 5);
 
-    // --- 5. RETURN COMPLETE OBJECT ---
     return {
       cards: { totalCash, totalBank, totalDebtors, totalCreditors },
       revenue: salesAgg._sum.totalAmount || 0,
       expense: purchaseAgg._sum.totalAmount || 0,
-      chart, // ✅ Added
-      recents, // ✅ Populated
+      chart,
+      recents,
     };
   } catch (error) {
     console.error("Metric Error", error);

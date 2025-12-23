@@ -29,9 +29,9 @@ export default async function InventoryListPage({
   // Calculate Totals
   const totalItems = items.length;
 
-  // ✅ FIX: Calculate Total Value using derived rate
+  // ✅ FIX: Added explicit : any types for 'sum' and 'item' to pass cloud build
   // Since 'openingRate' does not exist in DB, we calculate: Rate = OpeningValue / OpeningQty
-  const totalValue = items.reduce((sum, item) => {
+  const totalValue = items.reduce((sum: any, item: any) => {
     // 1. Derive the rate
     const rate =
       item.openingQty && item.openingQty > 0

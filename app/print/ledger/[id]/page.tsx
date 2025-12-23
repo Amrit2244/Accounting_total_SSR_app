@@ -133,6 +133,7 @@ export default async function LedgerPrintPage({
       }),
     ]);
 
+  // ✅ FIXED: Added explicit types for entry and vKey
   const formatTx = (entry: any, type: string, vKey: string): Transaction => ({
     id: entry.id,
     date: entry[vKey].date,
@@ -142,13 +143,14 @@ export default async function LedgerPrintPage({
     amount: entry.amount,
   });
 
+  // ✅ FIXED: Added explicit types for 'e' to satisfy build worker
   const transactions = [
-    ...sales.map((e) => formatTx(e, "SALES", "salesVoucher")),
-    ...purchase.map((e) => formatTx(e, "PURCHASE", "purchaseVoucher")),
-    ...payment.map((e) => formatTx(e, "PAYMENT", "paymentVoucher")),
-    ...receipt.map((e) => formatTx(e, "RECEIPT", "receiptVoucher")),
-    ...contra.map((e) => formatTx(e, "CONTRA", "contraVoucher")),
-    ...journal.map((e) => formatTx(e, "JOURNAL", "journalVoucher")),
+    ...sales.map((e: any) => formatTx(e, "SALES", "salesVoucher")),
+    ...purchase.map((e: any) => formatTx(e, "PURCHASE", "purchaseVoucher")),
+    ...payment.map((e: any) => formatTx(e, "PAYMENT", "paymentVoucher")),
+    ...receipt.map((e: any) => formatTx(e, "RECEIPT", "receiptVoucher")),
+    ...contra.map((e: any) => formatTx(e, "CONTRA", "contraVoucher")),
+    ...journal.map((e: any) => formatTx(e, "JOURNAL", "journalVoucher")),
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
   // --- Calculate Totals ---
@@ -173,7 +175,6 @@ export default async function LedgerPrintPage({
       {/* --- HEADER --- */}
       <div className="mb-8 border-b border-slate-900 pb-6 flex justify-between items-start">
         <div className="flex gap-4">
-          {/* Stylish Logo Placeholder */}
           <div className="h-14 w-14 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-2xl shadow-lg print:shadow-none">
             {company?.name.substring(0, 1) || "C"}
           </div>
@@ -236,7 +237,6 @@ export default async function LedgerPrintPage({
           </div>
         </div>
 
-        {/* 4-Grid Summary */}
         <div className="grid grid-cols-4 gap-4 pt-4 border-t border-slate-200">
           <div>
             <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -302,7 +302,6 @@ export default async function LedgerPrintPage({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200">
-          {/* Opening Row */}
           <tr className="bg-slate-50/50 print:bg-transparent">
             <td className="py-3 pl-2 font-medium text-slate-400">—</td>
             <td className="py-3 font-medium text-slate-400">—</td>
@@ -321,8 +320,7 @@ export default async function LedgerPrintPage({
             </td>
           </tr>
 
-          {/* Transactions */}
-          {transactions.map((tx) => {
+          {transactions.map((tx: Transaction) => {
             runningBalance += tx.amount;
             const isDebit = tx.amount < 0;
             const isCredit = tx.amount > 0;
@@ -363,7 +361,6 @@ export default async function LedgerPrintPage({
           })}
         </tbody>
 
-        {/* Footer Totals */}
         <tfoot>
           <tr className="border-t-2 border-slate-900 font-bold bg-slate-50 print:bg-transparent">
             <td

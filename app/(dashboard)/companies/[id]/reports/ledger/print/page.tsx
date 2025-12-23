@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 
-// --- Types ---
 type Transaction = {
   id: number;
   date: Date;
@@ -45,7 +44,6 @@ export default async function LedgerPrintPage({
 
   if (!ledger) return <div className="p-10 text-center">Ledger not found.</div>;
 
-  // --- Dates ---
   const today = new Date();
   const currentYear =
     today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
@@ -56,9 +54,6 @@ export default async function LedgerPrintPage({
   const toDateEnd = new Date(toStr);
   toDateEnd.setHours(23, 59, 59, 999);
 
-  // ====================================================
-  // 1. CALCULATE OPENING BALANCE (Complex Aggregation)
-  // ====================================================
   const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
 
   const [prevSales, prevPur, prevPay, prevRcpt, prevCntr, prevJrnl] =
@@ -99,9 +94,6 @@ export default async function LedgerPrintPage({
 
   const openingBalance = ledger.openingBalance + totalPrevMovement;
 
-  // ====================================================
-  // 2. FETCH TRANSACTIONS (Multi-Table Fetch)
-  // ====================================================
   const currentFilter = {
     date: { gte: fromDate, lte: toDateEnd },
     status: "APPROVED",
@@ -145,26 +137,23 @@ export default async function LedgerPrintPage({
   });
 
   const transactions = [
-    ...sales.map((e) => formatTx(e, "SALES", "salesVoucher")),
-    ...purchase.map((e) => formatTx(e, "PURCHASE", "purchaseVoucher")),
-    ...payment.map((e) => formatTx(e, "PAYMENT", "paymentVoucher")),
-    ...receipt.map((e) => formatTx(e, "RECEIPT", "receiptVoucher")),
-    ...contra.map((e) => formatTx(e, "CONTRA", "contraVoucher")),
-    ...journal.map((e) => formatTx(e, "JOURNAL", "journalVoucher")),
+    ...sales.map((e: any) => formatTx(e, "SALES", "salesVoucher")),
+    ...purchase.map((e: any) => formatTx(e, "PURCHASE", "purchaseVoucher")),
+    ...payment.map((e: any) => formatTx(e, "PAYMENT", "paymentVoucher")),
+    ...receipt.map((e: any) => formatTx(e, "RECEIPT", "receiptVoucher")),
+    ...contra.map((e: any) => formatTx(e, "CONTRA", "contraVoucher")),
+    ...journal.map((e: any) => formatTx(e, "JOURNAL", "journalVoucher")),
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
   let runningBalance = openingBalance;
 
   return (
     <div className="bg-white p-10 min-h-screen text-black font-sans leading-tight print:p-0">
-      {/* Auto-Print Script */}
       <script
         dangerouslySetInnerHTML={{
           __html: "window.onload = () => { window.print(); }",
         }}
       />
-
-      {/* HEADER */}
       <div className="border-b-4 border-black pb-6 mb-8 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-black uppercase tracking-tighter">
@@ -188,8 +177,6 @@ export default async function LedgerPrintPage({
           </p>
         </div>
       </div>
-
-      {/* TABLE */}
       <table className="w-full text-[11px] border-collapse">
         <thead>
           <tr className="border-b-2 border-black text-left font-bold uppercase text-[10px]">
@@ -203,7 +190,6 @@ export default async function LedgerPrintPage({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-300">
-          {/* OPENING ROW */}
           <tr className="font-bold italic bg-gray-50">
             <td className="py-3">—</td>
             <td className="py-3">—</td>
@@ -221,22 +207,10 @@ export default async function LedgerPrintPage({
               {fmt(Math.abs(openingBalance))} {openingBalance < 0 ? "Dr" : "Cr"}
             </td>
           </tr>
-
-          {/* TRANSACTIONS */}
-          {transactions.map((tx) => {
-            runningBalance += tx.amount; // Add because Debit is negative, Credit is positive in schema?
-            // WAIT! Check your schema logic. Usually:
-            // Debit = Positive, Credit = Negative? OR
-            // Tally XML: Debit is Positive, Credit is Negative.
-            // Let's assume standard: Dr = Neg, Cr = Pos (Based on previous logic)
-            // If Schema: Dr = Neg, then Dr column shows when amt < 0.
-
-            // Adjusting display logic to match standard Tally behavior
-            // Usually in DB: Dr is stored as negative for easy Sum.
-
-            const isDebit = tx.amount < 0; // Assuming DB stores Dr as negative
+          {transactions.map((tx: any) => {
+            runningBalance += tx.amount;
+            const isDebit = tx.amount < 0;
             const isCredit = tx.amount > 0;
-
             return (
               <tr key={`${tx.type}-${tx.id}`} className="break-inside-avoid">
                 <td className="py-3 align-top font-bold">{fmtDate(tx.date)}</td>
@@ -267,8 +241,6 @@ export default async function LedgerPrintPage({
             );
           })}
         </tbody>
-
-        {/* FOOTER */}
         <tfoot>
           <tr className="border-t-4 border-black font-black bg-gray-50">
             <td
@@ -277,23 +249,14 @@ export default async function LedgerPrintPage({
             >
               Closing Balance
             </td>
-            <td className="py-4 text-right">
-              {/* Total Debits logic if needed, usually just closing balance */}
-            </td>
-            <td className="py-4 text-right">
-              {/* Total Credits logic if needed */}
-            </td>
+            <td className="py-4 text-right"></td>
+            <td className="py-4 text-right"></td>
             <td className="py-4 text-right text-lg font-mono">
               {fmt(Math.abs(runningBalance))} {runningBalance < 0 ? "Dr" : "Cr"}
             </td>
           </tr>
         </tfoot>
       </table>
-
-      <div className="mt-12 pt-4 border-t border-gray-200 flex justify-between items-center text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-        <span>Generated by Accounting App</span>
-        <span>{new Date().toLocaleString("en-IN")}</span>
-      </div>
     </div>
   );
 }

@@ -36,7 +36,7 @@ export default async function LedgerReportPage({
   let closingBalance = 0;
 
   if (ledgerId) {
-    const ledger = ledgers.find((l) => l.id === ledgerId);
+    const ledger = ledgers.find((l: any) => l.id === ledgerId);
 
     if (ledger) {
       // 2. Calculate Opening Balance
@@ -125,16 +125,19 @@ export default async function LedgerReportPage({
       });
 
       const rawTransactions = [
-        ...sales.map((e) => formatTx(e, "SALES", "salesVoucher")),
-        ...purchase.map((e) => formatTx(e, "PURCHASE", "purchaseVoucher")),
-        ...payment.map((e) => formatTx(e, "PAYMENT", "paymentVoucher")),
-        ...receipt.map((e) => formatTx(e, "RECEIPT", "receiptVoucher")),
-        ...contra.map((e) => formatTx(e, "CONTRA", "contraVoucher")),
-        ...journal.map((e) => formatTx(e, "JOURNAL", "journalVoucher")),
-      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        ...sales.map((e: any) => formatTx(e, "SALES", "salesVoucher")),
+        ...purchase.map((e: any) => formatTx(e, "PURCHASE", "purchaseVoucher")),
+        ...payment.map((e: any) => formatTx(e, "PAYMENT", "paymentVoucher")),
+        ...receipt.map((e: any) => formatTx(e, "RECEIPT", "receiptVoucher")),
+        ...contra.map((e: any) => formatTx(e, "CONTRA", "contraVoucher")),
+        ...journal.map((e: any) => formatTx(e, "JOURNAL", "journalVoucher")),
+      ].sort(
+        (a: any, b: any) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
 
       let running = openingBalance;
-      transactions = rawTransactions.map((t) => {
+      transactions = rawTransactions.map((t: any) => {
         running += t.amount;
         return { ...t, balance: running };
       });
@@ -145,7 +148,7 @@ export default async function LedgerReportPage({
 
   return (
     <LedgerReportClient
-      companyId={companyId} // <--- Added this prop
+      companyId={companyId}
       ledgers={ledgers}
       transactions={transactions}
       openingBalance={openingBalance}

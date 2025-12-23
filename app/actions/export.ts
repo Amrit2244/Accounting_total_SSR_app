@@ -2,72 +2,100 @@
 
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Fetches all company-related data for a full JSON export/backup.
+ * Returns a standardized response object for the client.
+ */
 export async function getFullCompanyData(companyId: number) {
   try {
-    const data = await prisma.company.findUnique({
-      where: { id: companyId },
-      include: {
-        // 1. Masters
-        groups: true,
-        ledgers: {
-          include: {
-            // ✅ Include entries from all separate tables
-            salesEntries: true,
-            purchaseEntries: true,
-            paymentEntries: true,
-            receiptEntries: true,
-            contraEntries: true,
-            journalEntries: true,
-          },
-        },
-        units: true,
-        stockGroups: true,
-        stockItems: true,
+    const [
+      company,
+      groups,
+      ledgers,
+      stockGroups,
+      units,
+      stockItems,
+      sales,
+      purchases,
+      payments,
+      receipts,
+      contras,
+      journals,
+      stockJournals,
+    ] = await Promise.all([
+      prisma.company.findUnique({ where: { id: companyId } }),
+      prisma.group.findMany({ where: { companyId } }),
+      prisma.ledger.findMany({
+        where: { companyId },
+        include: { group: true }, // Included to get group names for Tally XML
+      }),
+      prisma.stockGroup.findMany({ where: { companyId } }),
+      prisma.unit.findMany({ where: { companyId } }),
+      prisma.stockItem.findMany({ where: { companyId } }),
+      prisma.salesVoucher.findMany({
+        where: { companyId },
+        include: { ledgerEntries: true, inventoryEntries: true },
+      }),
+      prisma.purchaseVoucher.findMany({
+        where: { companyId },
+        include: { ledgerEntries: true, inventoryEntries: true },
+      }),
+      prisma.paymentVoucher.findMany({
+        where: { companyId },
+        include: { ledgerEntries: true },
+      }),
+      prisma.receiptVoucher.findMany({
+        where: { companyId },
+        include: { ledgerEntries: true },
+      }),
+      prisma.contraVoucher.findMany({
+        where: { companyId },
+        include: { ledgerEntries: true },
+      }),
+      prisma.journalVoucher.findMany({
+        where: { companyId },
+        include: { ledgerEntries: true },
+      }),
+      prisma.stockJournal.findMany({
+        where: { companyId },
+        include: { inventoryEntries: true },
+      }),
+    ]);
 
-        // 2. Vouchers (Fetch all types separately)
-        salesVouchers: {
-          include: {
-            ledgerEntries: { include: { ledger: true } },
-            inventoryEntries: { include: { stockItem: true } },
-          },
+    if (!company) {
+      return { success: false, error: "Company not found" };
+    }
+
+    return {
+      success: true,
+      data: {
+        company,
+        groups,
+        ledgers,
+        stockGroups,
+        units,
+        stockItems,
+        vouchers: {
+          sales,
+          purchases,
+          payments,
+          receipts,
+          contras,
+          journals,
+          stockJournals,
         },
-        purchaseVouchers: {
-          include: {
-            ledgerEntries: { include: { ledger: true } },
-            inventoryEntries: { include: { stockItem: true } },
-          },
-        },
-        paymentVouchers: {
-          include: {
-            ledgerEntries: { include: { ledger: true } },
-          },
-        },
-        receiptVouchers: {
-          include: {
-            ledgerEntries: { include: { ledger: true } },
-          },
-        },
-        contraVouchers: {
-          include: {
-            ledgerEntries: { include: { ledger: true } },
-          },
-        },
-        journalVouchers: {
-          include: {
-            ledgerEntries: { include: { ledger: true } },
-          },
-        },
-        stockJournals: {
-          include: {
-            inventoryEntries: { include: { stockItem: true } },
-          },
+        exportTimestamp: new Date().toISOString(),
+        metadata: {
+          app: "Accounting SSR",
+          version: "1.0.0",
         },
       },
-    });
-
-    return { success: true, data };
+    };
   } catch (error) {
-    console.error("Export Fetch Error:", error);
-    return { success: false, message: "Failed to fetch company records." };
+    console.error("Export Error:", error);
+    return {
+      success: false,
+      error: "Failed to collect company data for export.",
+    };
   }
 }

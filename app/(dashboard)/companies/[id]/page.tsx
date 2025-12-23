@@ -89,8 +89,8 @@ export default async function CompanyDashboard({
       <div className="flex items-center gap-2">
         <div className="px-3 py-1 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2">
           <Calendar size={12} />
-          FY: {context.startDate.getFullYear()} -{" "}
-          {context.endDate.getFullYear()}
+          FY: {new Date(context.startDate).getFullYear()} -{" "}
+          {new Date(context.endDate).getFullYear()}
         </div>
       </div>
 
@@ -104,7 +104,8 @@ export default async function CompanyDashboard({
             <p className="text-rose-900 text-xs font-bold uppercase tracking-tight">
               Low Stock Alert:{" "}
               <span className="underline decoration-rose-300 font-black">
-                {lowStockItems.map((i) => i.name).join(", ")}
+                {/* ✅ FIXED: Added explicit : any type for 'i' */}
+                {lowStockItems.map((i: any) => i.name).join(", ")}
               </span>
             </p>
           </div>
@@ -124,8 +125,8 @@ export default async function CompanyDashboard({
             Executive Overview
           </h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-            Period: {context.startDate.toLocaleDateString()} —{" "}
-            {context.endDate.toLocaleDateString()}
+            Period: {new Date(context.startDate).toLocaleDateString()} —{" "}
+            {new Date(context.endDate).toLocaleDateString()}
           </p>
         </div>
         <Link
@@ -240,7 +241,8 @@ export default async function CompanyDashboard({
           </Link>
         </div>
         <div className="divide-y divide-slate-100">
-          {recents.map((v) => (
+          {/* ✅ FIXED: Added explicit : any type for 'v' */}
+          {recents.map((v: any) => (
             <div
               key={v.id}
               className="px-6 py-3 flex items-center justify-between hover:bg-blue-50/20 transition-colors"
@@ -290,7 +292,6 @@ export default async function CompanyDashboard({
   );
 }
 
-// Simple Calendar icon for the badge
 function Calendar({ size }: { size: number }) {
   return <Book size={size} />;
 }

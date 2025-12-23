@@ -17,7 +17,6 @@ export default async function VerificationQueuePage({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // ✅ FIX: Fetch from all 7 distinct tables instead of a single 'voucher' table
   const [sales, purchase, payment, receipt, contra, journal, stock] =
     await Promise.all([
       prisma.salesVoucher.findMany({
@@ -73,55 +72,56 @@ export default async function VerificationQueuePage({
       }),
     ]);
 
-  // ✅ Normalize data so the 'VoucherTable' component can read it
+  // ✅ FIXED: Added explicit : any to mapping callbacks
   const pendingVouchers = [
-    ...sales.map((v) => ({
+    ...sales.map((v: any) => ({
       ...v,
       type: "SALES",
       entries: v.ledgerEntries,
       inventory: v.inventoryEntries,
     })),
-    ...purchase.map((v) => ({
+    ...purchase.map((v: any) => ({
       ...v,
       type: "PURCHASE",
       entries: v.ledgerEntries,
       inventory: v.inventoryEntries,
     })),
-    ...payment.map((v) => ({
+    ...payment.map((v: any) => ({
       ...v,
       type: "PAYMENT",
       entries: v.ledgerEntries,
       inventory: [],
     })),
-    ...receipt.map((v) => ({
+    ...receipt.map((v: any) => ({
       ...v,
       type: "RECEIPT",
       entries: v.ledgerEntries,
       inventory: [],
     })),
-    ...contra.map((v) => ({
+    ...contra.map((v: any) => ({
       ...v,
       type: "CONTRA",
       entries: v.ledgerEntries,
       inventory: [],
     })),
-    ...journal.map((v) => ({
+    ...journal.map((v: any) => ({
       ...v,
       type: "JOURNAL",
       entries: v.ledgerEntries,
       inventory: [],
     })),
-    ...stock.map((v) => ({
+    ...stock.map((v: any) => ({
       ...v,
       type: "STOCK_JOURNAL",
       entries: [],
       inventory: v.inventoryEntries,
     })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  ].sort(
+    (a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500">
-      {/* COMPACT HEADER */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg shadow-sm border border-amber-200">
@@ -143,7 +143,6 @@ export default async function VerificationQueuePage({
             </h1>
           </div>
         </div>
-
         <div className="flex items-center gap-3">
           {pendingVouchers.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg shadow-md">
@@ -156,17 +155,13 @@ export default async function VerificationQueuePage({
           <Link
             href={`/companies/${companyId}/vouchers`}
             className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 rounded-lg transition-all"
-            title="Back to Daybook"
           >
             <ArrowLeft size={16} />
           </Link>
         </div>
       </div>
-
-      {/* CONTENT AREA */}
       {pendingVouchers.length > 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          {/* Note: Ensure VoucherTable handles the 'type' field to perform correct actions */}
           <VoucherTable
             vouchers={pendingVouchers as any}
             companyId={companyId}

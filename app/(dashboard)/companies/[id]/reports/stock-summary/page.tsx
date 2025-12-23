@@ -44,7 +44,7 @@ export default async function StockSummaryPage({
   });
 
   // 2. Process Data for Valuation
-  const stockData = items.map((item) => {
+  const stockData = items.map((item: any) => {
     const openingQty = item.openingQty || 0;
     const openingVal = item.openingValue || 0;
 
@@ -53,19 +53,18 @@ export default async function StockSummaryPage({
     let outwardQty = 0;
 
     // Process Purchases (Inwards)
-    item.purchaseItems.forEach((p) => {
+    item.purchaseItems.forEach((p: any) => {
       inwardQty += p.quantity;
       inwardVal += p.amount;
     });
 
     // Process Sales (Outwards)
-    // Note: Sales quantity is stored as negative in our logic
-    item.salesItems.forEach((s) => {
+    item.salesItems.forEach((s: any) => {
       outwardQty += Math.abs(s.quantity);
     });
 
     // Process Stock Journals (Can be In or Out)
-    item.journalEntries.forEach((j) => {
+    item.journalEntries.forEach((j: any) => {
       if (j.quantity > 0) {
         inwardQty += j.quantity;
         inwardVal += j.amount;
@@ -77,7 +76,6 @@ export default async function StockSummaryPage({
     const closingQty = openingQty + inwardQty - outwardQty;
 
     // Weighted Average Cost (WAC) Calculation
-    // (Opening Value + Inward Value) / (Opening Qty + Inward Qty)
     const totalBasisQty = openingQty + inwardQty;
     const totalBasisVal = openingVal + inwardVal;
     const avgRate = totalBasisQty > 0 ? totalBasisVal / totalBasisQty : 0;
@@ -97,9 +95,9 @@ export default async function StockSummaryPage({
     };
   });
 
-  // Grand Totals
+  // Grand Totals - Added explicit types for accumulator and current item
   const totals = stockData.reduce(
-    (acc, curr) => ({
+    (acc: any, curr: any) => ({
       op: acc.op + curr.openingVal,
       in: acc.in + curr.inwardVal,
       cl: acc.cl + curr.closingVal,
@@ -109,7 +107,6 @@ export default async function StockSummaryPage({
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-6 py-8 font-sans">
-      {/* HEADER */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
@@ -132,7 +129,6 @@ export default async function StockSummaryPage({
         </Link>
       </div>
 
-      {/* SUMMARY TABLE */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-[11px] border-collapse">
@@ -176,7 +172,7 @@ export default async function StockSummaryPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {stockData.map((row) => (
+              {stockData.map((row: any) => (
                 <tr
                   key={row.id}
                   className="hover:bg-slate-50 transition-colors"

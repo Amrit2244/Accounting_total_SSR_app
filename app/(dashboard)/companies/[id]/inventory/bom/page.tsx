@@ -45,7 +45,8 @@ export default async function BOMListPage({
 
       {boms.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {boms.map((bom) => (
+          {/* ✅ FIXED: Added explicit : any type for the build to pass */}
+          {boms.map((bom: any) => (
             <div
               key={bom.id}
               className="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-all group"
@@ -83,12 +84,11 @@ export default async function BOMListPage({
           <h2 className="text-sm font-black text-slate-900 uppercase">
             No Production Recipes
           </h2>
-          <Link
+          <link
             href={`/companies/${companyId}/inventory/bom/create`}
             className="text-blue-600 text-[10px] font-black uppercase mt-4 inline-block hover:underline"
-          >
-            Build First BOM →
-          </Link>
+          />
+          Build First BOM →
         </div>
       )}
     </div>

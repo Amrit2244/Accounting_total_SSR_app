@@ -1,3 +1,4 @@
+// ... imports same ...
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import {
@@ -5,8 +6,6 @@ import {
   Plus,
   ArrowRight,
   LogOut,
-  User as UserIcon,
-  ShieldCheck,
   LayoutGrid,
   Calendar,
   ChevronDown,
@@ -47,7 +46,6 @@ export default async function SelectCompanyPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      {/* --- TOP NAV --- */}
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 md:px-6 h-12 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2 font-bold">
           <div className="p-1 bg-blue-600 rounded shadow-md">
@@ -57,18 +55,15 @@ export default async function SelectCompanyPage() {
             FinCore Workspace
           </span>
         </div>
-
         {currentUser && (
-          <div className="flex items-center gap-3">
-            <form action={logout}>
-              <button
-                type="submit"
-                className="text-slate-400 hover:text-red-600 p-1.5 rounded-md transition-all"
-              >
-                <LogOut size={16} />
-              </button>
-            </form>
-          </div>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="text-slate-400 hover:text-red-600 p-1.5 rounded-md transition-all"
+            >
+              <LogOut size={16} />
+            </button>
+          </form>
         )}
       </nav>
 
@@ -91,12 +86,10 @@ export default async function SelectCompanyPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {companies.map((company) => {
-            // Logic to generate the last 3 Financial Years for the dropdown
+          {/* ✅ FIXED: Added explicit : any to company mapping */}
+          {companies.map((company: any) => {
             const baseYear = new Date(company.financialYearFrom).getFullYear();
             const currentYear = new Date().getFullYear();
-
-            // We create an array of years from the baseYear up to the current/next year
             const availableYears = [];
             for (let y = currentYear; y >= baseYear; y--) {
               availableYears.push(y);
@@ -117,7 +110,6 @@ export default async function SelectCompanyPage() {
                       Registered
                     </div>
                   </div>
-
                   <h2 className="text-base font-black text-slate-900 uppercase tracking-tight mb-1">
                     {company.name}
                   </h2>
@@ -128,13 +120,11 @@ export default async function SelectCompanyPage() {
                   </p>
                 </div>
 
-                {/* --- SELECTION AREA --- */}
                 <form
                   action={selectCompanyAction}
                   className="bg-slate-50/50 p-4 border-t border-slate-100 flex items-center gap-3"
                 >
                   <input type="hidden" name="companyId" value={company.id} />
-
                   <div className="flex-1 relative group">
                     <Calendar
                       size={12}
@@ -145,7 +135,7 @@ export default async function SelectCompanyPage() {
                       required
                       className="w-full h-9 pl-9 pr-8 bg-white border border-slate-200 rounded-lg text-[11px] font-black uppercase tracking-widest appearance-none outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                     >
-                      {availableYears.map((year) => (
+                      {availableYears.map((year: number) => (
                         <option key={year} value={year}>
                           FY {year} - {year + 1}
                         </option>
@@ -156,7 +146,6 @@ export default async function SelectCompanyPage() {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                     />
                   </div>
-
                   <button
                     type="submit"
                     className="h-9 px-4 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 group"

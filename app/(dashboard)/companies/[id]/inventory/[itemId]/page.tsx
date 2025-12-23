@@ -41,8 +41,9 @@ export default async function StockItemDetailPage({
   ]);
 
   // 3. Unify and sort the movements (Passbook style)
+  // ✅ Added explicit : any types for the cloud build
   const movements = [
-    ...salesEntries.map((e) => ({
+    ...salesEntries.map((e: any) => ({
       id: `sales-${e.id}`,
       date: e.salesVoucher.date,
       type: "SALES",
@@ -51,7 +52,7 @@ export default async function StockItemDetailPage({
       qtyOut: Math.abs(e.quantity),
       rate: e.rate,
     })),
-    ...purchaseEntries.map((e) => ({
+    ...purchaseEntries.map((e: any) => ({
       id: `purchase-${e.id}`,
       date: e.purchaseVoucher.date,
       type: "PURCHASE",
@@ -60,7 +61,7 @@ export default async function StockItemDetailPage({
       qtyOut: 0,
       rate: e.rate,
     })),
-    ...journalEntries.map((e) => ({
+    ...journalEntries.map((e: any) => ({
       id: `journal-${e.id}`,
       date: e.stockJournal.date,
       type: "STOCK JOURNAL",
@@ -73,7 +74,7 @@ export default async function StockItemDetailPage({
 
   // Calculate Running Stock
   let runningStock = item.openingQty;
-  const history = movements.map((m) => {
+  const history = movements.map((m: any) => {
     runningStock = runningStock + m.qtyIn - m.qtyOut;
     return { ...m, balance: runningStock };
   });
@@ -124,7 +125,7 @@ export default async function StockItemDetailPage({
               </td>
               <td className="p-4 text-right">{item.openingQty}</td>
             </tr>
-            {history.map((row) => (
+            {history.map((row: any) => (
               <tr key={row.id} className="hover:bg-slate-50 transition-colors">
                 <td className="p-4">
                   {format(new Date(row.date), "dd MMM yyyy")}

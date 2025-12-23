@@ -11,7 +11,7 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
-// ✅ 1. Define and Export State Type
+// ✅ Define and Export State Type
 export type State = {
   success?: boolean;
   error?: string;
@@ -104,16 +104,10 @@ export async function createVoucher(
   const d = new Date(date);
   const transactionCode = Math.floor(10000 + Math.random() * 90000).toString();
 
-  // File Upload
-  const file = formData.get("attachment") as File;
-  let attachmentUrl = null;
-  if (file && file.size > 0) attachmentUrl = await uploadFile(file);
-
   let finalVoucherNo = "";
   let createdId = 0;
 
   try {
-    // --- CASE A: SALES & PURCHASE ---
     if (type === "SALES" || type === "PURCHASE") {
       if (!voucherNo) return { error: "Voucher Number is required" };
       finalVoucherNo = voucherNo;
@@ -170,10 +164,7 @@ export async function createVoucher(
         res = await prisma.salesVoucher.create({ data: commonData });
       else res = await prisma.purchaseVoucher.create({ data: commonData });
       createdId = res.id;
-    }
-
-    // --- CASE B: OTHER VOUCHERS (Payment, Receipt, Contra, Journal) ---
-    else {
+    } else {
       const autoNo = await getNextAutoNumber(cid, type);
       finalVoucherNo = autoNo.toString();
 
@@ -217,7 +208,6 @@ export async function createVoucher(
     }
 
     revalidatePath(`/companies/${cid}/vouchers`);
-
     return {
       success: true,
       code: finalVoucherNo,
@@ -226,9 +216,6 @@ export async function createVoucher(
     };
   } catch (err: any) {
     console.error("Voucher Creation Error:", err);
-    if (err.code === "P2002") {
-      return { error: `Voucher Number already exists.` };
-    }
     return { error: err.message || "Failed to save voucher" };
   }
 }
@@ -273,12 +260,11 @@ export async function updateVoucher(
   const newTxCode = Math.floor(10000 + Math.random() * 90000).toString();
 
   try {
-    await prisma.$transaction(async (tx) => {
-      // 1. Prepare Data specific to type
+    // ✅ FIXED: Explicitly typed 'tx: any'
+    await prisma.$transaction(async (tx: any) => {
       let ledgerData = [];
       let inventoryData = [];
 
-      // Sales/Purchase Logic (Fixed Ledger Slots)
       if (type === "SALES" || type === "PURCHASE") {
         ledgerData.push({
           ledgerId: partyLedgerId!,
@@ -306,9 +292,7 @@ export async function updateVoucher(
           amount: parseFloat(i.qty) * parseFloat(i.rate),
           unit: "",
         }));
-      }
-      // Standard Vouchers Logic (Dynamic Rows)
-      else {
+      } else {
         ledgerData = rows.map((e: any) => ({
           ledgerId: parseInt(e.ledgerId),
           amount:
@@ -318,66 +302,36 @@ export async function updateVoucher(
         }));
       }
 
-      // 2. Execute Update based on Specific Table
       const updateData = {
         date,
         narration,
         totalAmount: Math.abs(totalAmount),
         transactionCode: newTxCode,
         createdById: currentUserId,
-        verifiedById: null, // Reset verification
+        verifiedById: null,
         status: "PENDING",
         updatedAt: new Date(),
       };
 
-      if (type === "SALES") {
-        await tx.salesVoucher.update({
+      const tableMap: Record<string, any> = {
+        SALES: tx.salesVoucher,
+        PURCHASE: tx.purchaseVoucher,
+        PAYMENT: tx.paymentVoucher,
+        RECEIPT: tx.receiptVoucher,
+        CONTRA: tx.contraVoucher,
+        JOURNAL: tx.journalVoucher,
+      };
+
+      const dbTable = tableMap[type];
+      if (dbTable) {
+        await dbTable.update({
           where: { id: voucherId },
           data: {
             ...updateData,
             ledgerEntries: { deleteMany: {}, create: ledgerData },
-            inventoryEntries: { deleteMany: {}, create: inventoryData },
-          },
-        });
-      } else if (type === "PURCHASE") {
-        await tx.purchaseVoucher.update({
-          where: { id: voucherId },
-          data: {
-            ...updateData,
-            ledgerEntries: { deleteMany: {}, create: ledgerData },
-            inventoryEntries: { deleteMany: {}, create: inventoryData },
-          },
-        });
-      } else if (type === "PAYMENT") {
-        await tx.paymentVoucher.update({
-          where: { id: voucherId },
-          data: {
-            ...updateData,
-            ledgerEntries: { deleteMany: {}, create: ledgerData },
-          },
-        });
-      } else if (type === "RECEIPT") {
-        await tx.receiptVoucher.update({
-          where: { id: voucherId },
-          data: {
-            ...updateData,
-            ledgerEntries: { deleteMany: {}, create: ledgerData },
-          },
-        });
-      } else if (type === "CONTRA") {
-        await tx.contraVoucher.update({
-          where: { id: voucherId },
-          data: {
-            ...updateData,
-            ledgerEntries: { deleteMany: {}, create: ledgerData },
-          },
-        });
-      } else if (type === "JOURNAL") {
-        await tx.journalVoucher.update({
-          where: { id: voucherId },
-          data: {
-            ...updateData,
-            ledgerEntries: { deleteMany: {}, create: ledgerData },
+            ...(inventoryData.length > 0 && {
+              inventoryEntries: { deleteMany: {}, create: inventoryData },
+            }),
           },
         });
       }
@@ -394,169 +348,68 @@ export async function updateVoucher(
 // ==========================================
 // 3. DELETE VOUCHER
 // ==========================================
-
-// ... existing imports and code ...
-
-// ==========================================
-// 9. BULK DELETE VOUCHERS
-// ==========================================
-export async function deleteBulkVouchers(
-  items: { id: number; type: string }[],
-  companyId: number
-) {
-  if (!items || items.length === 0) return { error: "No items selected" };
-
-  // Group IDs by Type to perform batch deletions efficiently
-  const salesIds = items.filter((i) => i.type === "SALES").map((i) => i.id);
-  const purchaseIds = items
-    .filter((i) => i.type === "PURCHASE")
-    .map((i) => i.id);
-  const paymentIds = items.filter((i) => i.type === "PAYMENT").map((i) => i.id);
-  const receiptIds = items.filter((i) => i.type === "RECEIPT").map((i) => i.id);
-  const contraIds = items.filter((i) => i.type === "CONTRA").map((i) => i.id);
-  const journalIds = items.filter((i) => i.type === "JOURNAL").map((i) => i.id);
-  const stockJournalIds = items
-    .filter((i) => i.type === "STOCK_JOURNAL")
-    .map((i) => i.id);
-
-  try {
-    await prisma.$transaction(
-      async (tx) => {
-        // --- SALES ---
-        if (salesIds.length > 0) {
-          // Delete child entries first (Cascade usually handles this, but explicit is safer for some DB configs)
-          await tx.salesVoucher.deleteMany({ where: { id: { in: salesIds } } });
-        }
-
-        // --- PURCHASE ---
-        if (purchaseIds.length > 0) {
-          await tx.purchaseVoucher.deleteMany({
-            where: { id: { in: purchaseIds } },
-          });
-        }
-
-        // --- PAYMENT ---
-        if (paymentIds.length > 0) {
-          await tx.paymentVoucher.deleteMany({
-            where: { id: { in: paymentIds } },
-          });
-        }
-
-        // --- RECEIPT ---
-        if (receiptIds.length > 0) {
-          await tx.receiptVoucher.deleteMany({
-            where: { id: { in: receiptIds } },
-          });
-        }
-
-        // --- CONTRA ---
-        if (contraIds.length > 0) {
-          await tx.contraVoucher.deleteMany({
-            where: { id: { in: contraIds } },
-          });
-        }
-
-        // --- JOURNAL ---
-        if (journalIds.length > 0) {
-          await tx.journalVoucher.deleteMany({
-            where: { id: { in: journalIds } },
-          });
-        }
-
-        // --- STOCK JOURNAL ---
-        if (stockJournalIds.length > 0) {
-          await tx.stockJournal.deleteMany({
-            where: { id: { in: stockJournalIds } },
-          });
-        }
-      },
-      { timeout: 20000 } // Increased timeout for bulk ops
-    );
-
-    revalidatePath(`/companies/${companyId}/vouchers`);
-
-    return {
-      success: true,
-      message: `Successfully deleted ${items.length} vouchers.`,
-    };
-  } catch (error: any) {
-    console.error("Bulk Delete Error:", error);
-    return { success: false, message: "Database Error: " + error.message };
-  }
-}
-
 export async function deleteVoucher(voucherId: number, type: string) {
   try {
-    if (type === "SALES")
-      await prisma.salesVoucher.delete({ where: { id: voucherId } });
-    else if (type === "PURCHASE")
-      await prisma.purchaseVoucher.delete({ where: { id: voucherId } });
-    else if (type === "PAYMENT")
-      await prisma.paymentVoucher.delete({ where: { id: voucherId } });
-    else if (type === "RECEIPT")
-      await prisma.receiptVoucher.delete({ where: { id: voucherId } });
-    else if (type === "CONTRA")
-      await prisma.contraVoucher.delete({ where: { id: voucherId } });
-    else if (type === "JOURNAL")
-      await prisma.journalVoucher.delete({ where: { id: voucherId } });
-    else if (type === "STOCK_JOURNAL")
-      await prisma.stockJournal.delete({ where: { id: voucherId } });
+    const t = type.toUpperCase();
+    const tableMap: Record<string, any> = {
+      SALES: prisma.salesVoucher,
+      PURCHASE: prisma.purchaseVoucher,
+      PAYMENT: prisma.paymentVoucher,
+      RECEIPT: prisma.receiptVoucher,
+      CONTRA: prisma.contraVoucher,
+      JOURNAL: prisma.journalVoucher,
+      STOCK_JOURNAL: prisma.stockJournal,
+    };
 
+    const dbTable = tableMap[t];
+    if (dbTable) {
+      await dbTable.delete({ where: { id: voucherId } });
+    }
     return { success: true };
-  } catch (e) {
-    return { error: "Delete Failed." };
+  } catch (e: any) {
+    return { error: "Delete Failed: " + e.message };
   }
 }
 
 // ==========================================
-// 4. VERIFY VOUCHER (Maker-Checker Enforced)
+// 4. VERIFY VOUCHER
 // ==========================================
 export async function verifyVoucher(voucherId: number, type: string) {
   const userId = await getCurrentUserId();
   if (!userId) return { error: "Unauthorized" };
 
   const t = type.toUpperCase();
-  let db: any = null;
+  const tableMap: Record<string, any> = {
+    SALES: prisma.salesVoucher,
+    PURCHASE: prisma.purchaseVoucher,
+    PAYMENT: prisma.paymentVoucher,
+    RECEIPT: prisma.receiptVoucher,
+    CONTRA: prisma.contraVoucher,
+    JOURNAL: prisma.journalVoucher,
+    STOCK_JOURNAL: prisma.stockJournal,
+  };
 
-  if (t === "SALES") db = prisma.salesVoucher;
-  else if (t === "PURCHASE") db = prisma.purchaseVoucher;
-  else if (t === "PAYMENT") db = prisma.paymentVoucher;
-  else if (t === "RECEIPT") db = prisma.receiptVoucher;
-  else if (t === "CONTRA") db = prisma.contraVoucher;
-  else if (t === "JOURNAL") db = prisma.journalVoucher;
-  else if (t === "STOCK_JOURNAL") db = prisma.stockJournal;
-
-  if (!db) return { error: "Invalid Type" };
+  const dbTable = tableMap[t];
+  if (!dbTable) return { error: "Invalid Type" };
 
   try {
-    const voucher = await db.findUnique({
+    const voucher = await dbTable.findUnique({
       where: { id: voucherId },
       select: { createdById: true, status: true },
     });
 
     if (!voucher) return { error: "Voucher not found" };
+    if (voucher.createdById === userId)
+      return { error: "Security Rule: Maker cannot be Checker." };
+    if (voucher.status === "APPROVED") return { error: "Already Approved" };
 
-    if (voucher.createdById === userId) {
-      return {
-        error: "Security Rule: You cannot verify a voucher you created.",
-      };
-    }
-
-    if (voucher.status === "APPROVED") {
-      return { error: "Already Approved" };
-    }
-
-    await db.update({
+    await dbTable.update({
       where: { id: voucherId },
-      data: {
-        status: "APPROVED",
-        verifiedById: userId,
-        updatedAt: new Date(),
-      },
+      data: { status: "APPROVED", verifiedById: userId, updatedAt: new Date() },
     });
 
     return { success: true };
-  } catch (e) {
+  } catch (e: any) {
     return { error: "Verification Failed" };
   }
 }
@@ -572,32 +425,36 @@ export async function rejectVoucher(
   const userId = await getCurrentUserId();
   if (!userId) return { error: "Unauthorized" };
 
-  const updateData = {
-    status: "REJECTED",
-    rejectionReason: reason,
-    updatedAt: new Date(),
+  const t = type.toUpperCase();
+  const tableMap: Record<string, any> = {
+    SALES: prisma.salesVoucher,
+    PURCHASE: prisma.purchaseVoucher,
+    PAYMENT: prisma.paymentVoucher,
+    RECEIPT: prisma.receiptVoucher,
+    CONTRA: prisma.contraVoucher,
+    JOURNAL: prisma.journalVoucher,
   };
 
-  const t = type.toUpperCase();
-  let db: any = null;
-
-  if (t === "SALES") db = prisma.salesVoucher;
-  else if (t === "PURCHASE") db = prisma.purchaseVoucher;
-  else if (t === "PAYMENT") db = prisma.paymentVoucher;
-  else if (t === "RECEIPT") db = prisma.receiptVoucher;
-  else if (t === "CONTRA") db = prisma.contraVoucher;
-  else if (t === "JOURNAL") db = prisma.journalVoucher;
+  const dbTable = tableMap[t];
+  if (!dbTable) return { error: "Invalid Type" };
 
   try {
-    if (db) await db.update({ where: { id: voucherId }, data: updateData });
+    await dbTable.update({
+      where: { id: voucherId },
+      data: {
+        status: "REJECTED",
+        rejectionReason: reason,
+        updatedAt: new Date(),
+      },
+    });
     return { success: true };
-  } catch (e) {
+  } catch (e: any) {
     return { error: "Rejection Failed" };
   }
 }
 
 // ==========================================
-// 6. GET VOUCHERS (Aggregator + Search)
+// 6. GET VOUCHERS
 // ==========================================
 export async function getVouchers(
   companyId: number,
@@ -606,75 +463,42 @@ export async function getVouchers(
   searchQuery?: string
 ) {
   const baseWhere: any = { companyId };
-  if (startDate && endDate) {
-    baseWhere.date = { gte: startDate, lte: endDate };
-  }
-
-  // --- Prepare Search Filters ---
-  let searchFilterString: any = {};
-  let searchFilterInt: any = {};
-
-  if (searchQuery) {
-    const commonOR = [
-      { transactionCode: { contains: searchQuery } },
-      { narration: { contains: searchQuery } },
-      {
-        ledgerEntries: {
-          some: { ledger: { name: { contains: searchQuery } } },
-        },
-      },
-    ];
-
-    searchFilterString = {
-      OR: [...commonOR, { voucherNo: { contains: searchQuery } }],
-    };
-
-    const searchNum = parseInt(searchQuery);
-    if (!isNaN(searchNum)) {
-      searchFilterInt = {
-        OR: [...commonOR, { voucherNo: searchNum }],
-      };
-    } else {
-      searchFilterInt = { OR: commonOR };
-    }
-  }
+  if (startDate && endDate) baseWhere.date = { gte: startDate, lte: endDate };
 
   const includeEntries = {
-    ledgerEntries: {
-      include: { ledger: { select: { name: true } } },
-    },
+    ledgerEntries: { include: { ledger: { select: { name: true } } } },
   };
 
   try {
     const [sales, purchase, payment, receipt, contra, journal, stockJournal] =
       await Promise.all([
         prisma.salesVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterString },
+          where: baseWhere,
           orderBy: { date: "desc" },
           include: { ...includeEntries, partyLedger: true },
         }),
         prisma.purchaseVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterString },
+          where: baseWhere,
           orderBy: { date: "desc" },
           include: { ...includeEntries, partyLedger: true },
         }),
         prisma.paymentVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterInt },
+          where: baseWhere,
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
         prisma.receiptVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterInt },
+          where: baseWhere,
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
         prisma.contraVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterInt },
+          where: baseWhere,
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
         prisma.journalVoucher.findMany({
-          where: { ...baseWhere, ...searchFilterInt },
+          where: baseWhere,
           orderBy: { date: "desc" },
           include: includeEntries,
         }),
@@ -685,60 +509,57 @@ export async function getVouchers(
       ]);
 
     const allVouchers = [
-      ...sales.map((v) => ({
+      ...sales.map((v: any) => ({
         ...v,
         type: "SALES",
         partyName: v.partyLedger?.name || v.partyName,
         entries: v.ledgerEntries,
       })),
-      ...purchase.map((v) => ({
+      ...purchase.map((v: any) => ({
         ...v,
         type: "PURCHASE",
         partyName: v.partyLedger?.name || v.partyName,
         entries: v.ledgerEntries,
       })),
-      ...payment.map((v) => ({
+      ...payment.map((v: any) => ({
         ...v,
         type: "PAYMENT",
-        partyName: null,
         entries: v.ledgerEntries,
       })),
-      ...receipt.map((v) => ({
+      ...receipt.map((v: any) => ({
         ...v,
         type: "RECEIPT",
-        partyName: null,
         entries: v.ledgerEntries,
       })),
-      ...contra.map((v) => ({
+      ...contra.map((v: any) => ({
         ...v,
         type: "CONTRA",
-        partyName: null,
         entries: v.ledgerEntries,
       })),
-      ...journal.map((v) => ({
+      ...journal.map((v: any) => ({
         ...v,
         type: "JOURNAL",
-        partyName: null,
         entries: v.ledgerEntries,
       })),
-      ...stockJournal.map((v) => ({
+      ...stockJournal.map((v: any) => ({
         ...v,
         type: "STOCK_JOURNAL",
         totalAmount: 0,
-        partyName: null,
         entries: [],
       })),
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    ].sort(
+      (a: any, b: any) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
 
     return allVouchers;
   } catch (error) {
-    console.error("Search Error:", error);
     return [];
   }
 }
 
 // ==========================================
-// 7. FIND VOUCHER BY TXID (Lightweight Lookup)
+// 7. FIND VOUCHER BY TXID
 // ==========================================
 export async function findVoucherByCode(txCode: string, companyId: number) {
   const where = { transactionCode: txCode, companyId };
@@ -792,7 +613,7 @@ export async function findVoucherByCode(txCode: string, companyId: number) {
 }
 
 // ==========================================
-// 8. GET FULL VOUCHER BY CODE (For Verification Page)
+// 8. GET FULL VOUCHER BY CODE
 // ==========================================
 export async function getVoucherByCode(code: string, companyId: number) {
   const where = { transactionCode: code, companyId };
@@ -888,4 +709,68 @@ export async function getVoucherByCode(code: string, companyId: number) {
     };
 
   return null;
+}
+
+// ==========================================
+// 9. BULK DELETE
+// ==========================================
+export async function deleteBulkVouchers(
+  items: { id: number; type: string }[],
+  companyId: number
+) {
+  if (!items || items.length === 0) return { error: "No items selected" };
+
+  const salesIds = items.filter((i) => i.type === "SALES").map((i) => i.id);
+  const purchaseIds = items
+    .filter((i) => i.type === "PURCHASE")
+    .map((i) => i.id);
+  const paymentIds = items.filter((i) => i.type === "PAYMENT").map((i) => i.id);
+  const receiptIds = items.filter((i) => i.type === "RECEIPT").map((i) => i.id);
+  const contraIds = items.filter((i) => i.type === "CONTRA").map((i) => i.id);
+  const journalIds = items.filter((i) => i.type === "JOURNAL").map((i) => i.id);
+  const stockJournalIds = items
+    .filter((i) => i.type === "STOCK_JOURNAL")
+    .map((i) => i.id);
+
+  try {
+    await prisma.$transaction(
+      async (tx: any) => {
+        if (salesIds.length > 0)
+          await tx.salesVoucher.deleteMany({ where: { id: { in: salesIds } } });
+        if (purchaseIds.length > 0)
+          await tx.purchaseVoucher.deleteMany({
+            where: { id: { in: purchaseIds } },
+          });
+        if (paymentIds.length > 0)
+          await tx.paymentVoucher.deleteMany({
+            where: { id: { in: paymentIds } },
+          });
+        if (receiptIds.length > 0)
+          await tx.receiptVoucher.deleteMany({
+            where: { id: { in: receiptIds } },
+          });
+        if (contraIds.length > 0)
+          await tx.contraVoucher.deleteMany({
+            where: { id: { in: contraIds } },
+          });
+        if (journalIds.length > 0)
+          await tx.journalVoucher.deleteMany({
+            where: { id: { in: journalIds } },
+          });
+        if (stockJournalIds.length > 0)
+          await tx.stockJournal.deleteMany({
+            where: { id: { in: stockJournalIds } },
+          });
+      },
+      { timeout: 20000 }
+    );
+
+    revalidatePath(`/companies/${companyId}/vouchers`);
+    return {
+      success: true,
+      message: `Successfully deleted ${items.length} vouchers.`,
+    };
+  } catch (error: any) {
+    return { success: false, message: "Database Error: " + error.message };
+  }
 }
