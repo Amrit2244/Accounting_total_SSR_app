@@ -34,6 +34,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           icon: LayoutDashboard,
           exact: true,
         },
+
         {
           name: "Vouchers",
           href: `/companies/${companyId}/vouchers`,
@@ -98,6 +99,11 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           name: "Settings",
           href: `/companies/${companyId}/edit`,
           icon: Settings,
+        },
+        {
+          name: "UserManagement",
+          href: `/admin`,
+          icon: FileText,
         },
       ],
     },
