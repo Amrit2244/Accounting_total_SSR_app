@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Database, FileCode, Loader2 } from "lucide-react";
+import {
+  Database,
+  FileCode,
+  Loader2,
+  Download,
+  CloudDownload,
+} from "lucide-react";
 import { getFullCompanyData } from "@/app/actions/export";
 
 export default function ExportHub({ companyId }: { companyId: number }) {
@@ -72,57 +78,79 @@ export default function ExportHub({ companyId }: { companyId: number }) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all group flex flex-col justify-between">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      {/* JSON Backup Card */}
+      <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-              <Database size={20} />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
+              <Database size={24} />
             </div>
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-              System Backup
-            </h2>
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                System Backup
+              </h2>
+              <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
+                JSON Format
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] text-slate-500 font-medium mb-4">
-            Download complete JSON dump of Ledgers, Groups & Vouchers.
+          <p className="text-xs text-slate-500 font-medium mb-6 leading-relaxed">
+            Download a complete JSON dump including all Ledgers, Groups,
+            Vouchers, and Inventory Masters for offline storage.
           </p>
         </div>
         <button
           onClick={handleBackup}
           disabled={loading}
-          className="w-full h-9 bg-slate-900 text-white rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
+          className="w-full h-11 bg-slate-900 hover:bg-blue-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 hover:shadow-blue-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
-            <Loader2 className="animate-spin" size={14} />
+            <Loader2 className="animate-spin" size={16} />
           ) : (
-            "Download JSON"
+            <>
+              <Download size={16} />
+              <span>Download Backup</span>
+            </>
           )}
         </button>
       </div>
 
-      <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all group flex flex-col justify-between">
+      {/* XML Export Card */}
+      <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-orange-500" />
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-orange-50 group-hover:text-orange-600 transition-colors">
-              <FileCode size={20} />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-orange-50 text-orange-600 rounded-xl group-hover:scale-110 transition-transform">
+              <FileCode size={24} />
             </div>
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-              Tally Prime Sync
-            </h2>
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                Tally Prime Sync
+              </h2>
+              <span className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">
+                XML Format
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] text-slate-500 font-medium mb-4">
-            Export masters in XML format compatible with Tally import.
+          <p className="text-xs text-slate-500 font-medium mb-6 leading-relaxed">
+            Generate an XML file compatible with Tally Prime's import feature to
+            synchronize your Masters and Vouchers.
           </p>
         </div>
         <button
           onClick={handleTallyXML}
           disabled={loading}
-          className="w-full h-9 border border-slate-300 text-slate-600 rounded-lg font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+          className="w-full h-11 bg-white border-2 border-slate-100 hover:border-orange-200 text-slate-600 hover:text-orange-700 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
-            <Loader2 className="animate-spin" size={14} />
+            <Loader2 className="animate-spin" size={16} />
           ) : (
-            "Generate XML"
+            <>
+              <CloudDownload size={16} />
+              <span>Generate XML</span>
+            </>
           )}
         </button>
       </div>

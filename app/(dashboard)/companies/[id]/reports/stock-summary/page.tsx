@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Package } from "lucide-react";
+import { ArrowLeft, Package, ChevronRight, Boxes } from "lucide-react";
 import { notFound } from "next/navigation";
 
 const fmt = (v: number) =>
@@ -95,7 +95,7 @@ export default async function StockSummaryPage({
     };
   });
 
-  // Grand Totals - Added explicit types for accumulator and current item
+  // Grand Totals
   const totals = stockData.reduce(
     (acc: any, curr: any) => ({
       op: acc.op + curr.openingVal,
@@ -106,129 +106,212 @@ export default async function StockSummaryPage({
   );
 
   return (
-    <div className="max-w-[1200px] mx-auto space-y-6 py-8 font-sans">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
-            <Package size={20} />
-          </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6 flex-1">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
           <div>
-            <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Dashboard
+              </Link>
+              <ChevronRight size={10} />
+              <Link
+                href={`/companies/${companyId}/reports`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Reports
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">Stock Summary</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <Boxes className="text-indigo-600" size={32} />
               Stock Summary
             </h1>
-            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-              Inventory Valuation (WAC Method)
+            <p className="text-slate-500 font-medium mt-2 max-w-xl">
+              Detailed inventory valuation using Weighted Average Cost (WAC)
+              method.
             </p>
           </div>
-        </div>
-        <Link
-          href={`/companies/${companyId}/reports`}
-          className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 transition-all border border-slate-200 px-4 py-2 rounded-lg bg-white shadow-sm"
-        >
-          <ArrowLeft size={14} /> Back
-        </Link>
-      </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-[11px] border-collapse">
-            <thead>
-              <tr className="bg-slate-900 text-white font-black uppercase tracking-widest text-center">
-                <th
-                  rowSpan={2}
-                  className="p-3 text-left border-r border-slate-700 w-64"
-                >
-                  Particulars
-                </th>
-                <th
-                  colSpan={2}
-                  className="p-2 border-b border-slate-700 border-r border-slate-700"
-                >
-                  Opening Balance
-                </th>
-                <th
-                  colSpan={2}
-                  className="p-2 border-b border-slate-700 border-r border-slate-700"
-                >
-                  Inwards
-                </th>
-                <th className="p-2 border-b border-slate-700 border-r border-slate-700">
-                  Outwards
-                </th>
-                <th colSpan={2} className="p-2 border-b border-slate-700">
-                  Closing Balance
-                </th>
-              </tr>
-              <tr className="bg-slate-800 text-slate-300 font-bold uppercase tracking-tight text-[9px]">
-                <th className="p-2 border-r border-slate-700 w-24">Qty</th>
-                <th className="p-2 border-r border-slate-700 w-32">Value</th>
-                <th className="p-2 border-r border-slate-700 w-24">Qty</th>
-                <th className="p-2 border-r border-slate-700 w-32">Value</th>
-                <th className="p-2 border-r border-slate-700 w-24">Qty</th>
-                <th className="p-2 border-r border-slate-700 w-24 text-white">
-                  Qty
-                </th>
-                <th className="p-2 text-white">Value</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {stockData.map((row: any) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-slate-50 transition-colors"
-                >
-                  <td className="p-3 font-bold text-slate-700 border-r">
-                    {row.name}
+          <Link
+            href={`/companies/${companyId}/reports`}
+            className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
+            title="Back to Reports"
+          >
+            <ArrowLeft size={20} />
+          </Link>
+        </div>
+
+        {/* REPORT TABLE */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
+          <div className="flex-1 overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
+                {/* Super Header */}
+                <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest text-center">
+                  <th
+                    rowSpan={2}
+                    className="p-4 text-left border-r border-slate-700 w-64 bg-slate-900 sticky left-0 z-20"
+                  >
+                    Item Particulars
+                  </th>
+                  <th
+                    colSpan={2}
+                    className="p-2 border-b border-slate-700 border-r border-slate-700"
+                  >
+                    Opening Balance
+                  </th>
+                  <th
+                    colSpan={2}
+                    className="p-2 border-b border-slate-700 border-r border-slate-700 bg-emerald-900/50"
+                  >
+                    Inwards
+                  </th>
+                  <th className="p-2 border-b border-slate-700 border-r border-slate-700 bg-rose-900/50">
+                    Outwards
+                  </th>
+                  <th
+                    colSpan={2}
+                    className="p-2 border-b border-slate-700 bg-indigo-900/50"
+                  >
+                    Closing Balance
+                  </th>
+                </tr>
+                {/* Sub Header */}
+                <tr className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-200">
+                  <th className="p-2 text-right border-r border-slate-200 w-24">
+                    Qty
+                  </th>
+                  <th className="p-2 text-right border-r border-slate-200 w-32">
+                    Value
+                  </th>
+
+                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-emerald-50 text-emerald-700">
+                    Qty
+                  </th>
+                  <th className="p-2 text-right border-r border-slate-200 w-32 bg-emerald-50 text-emerald-700">
+                    Value
+                  </th>
+
+                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-rose-50 text-rose-700">
+                    Qty
+                  </th>
+
+                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-indigo-50 text-indigo-700">
+                    Qty
+                  </th>
+                  <th className="p-2 text-right w-32 bg-indigo-50 text-indigo-700">
+                    Value
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {stockData.map((row: any) => (
+                  <tr
+                    key={row.id}
+                    className="group hover:bg-slate-50 transition-colors text-xs"
+                  >
+                    <td className="p-4 font-bold text-slate-700 border-r border-slate-100 bg-white sticky left-0 group-hover:bg-slate-50 transition-colors">
+                      {row.name}
+                    </td>
+
+                    {/* Opening */}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-slate-500">
+                      {row.openingQty > 0 ? (
+                        `${fmtQty(row.openingQty)} ${row.unit}`
+                      ) : (
+                        <span className="opacity-20">-</span>
+                      )}
+                    </td>
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-slate-500">
+                      {row.openingVal > 0 ? (
+                        fmt(row.openingVal)
+                      ) : (
+                        <span className="opacity-20">-</span>
+                      )}
+                    </td>
+
+                    {/* Inwards */}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-emerald-600 bg-emerald-50/5 group-hover:bg-emerald-50/20">
+                      {row.inwardQty > 0 ? (
+                        `${fmtQty(row.inwardQty)} ${row.unit}`
+                      ) : (
+                        <span className="opacity-20">-</span>
+                      )}
+                    </td>
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-emerald-600 bg-emerald-50/5 group-hover:bg-emerald-50/20">
+                      {row.inwardVal > 0 ? (
+                        fmt(row.inwardVal)
+                      ) : (
+                        <span className="opacity-20">-</span>
+                      )}
+                    </td>
+
+                    {/* Outwards */}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-rose-600 bg-rose-50/5 group-hover:bg-rose-50/20">
+                      {row.outwardQty > 0 ? (
+                        `${fmtQty(row.outwardQty)} ${row.unit}`
+                      ) : (
+                        <span className="opacity-20">-</span>
+                      )}
+                    </td>
+
+                    {/* Closing */}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono font-bold text-slate-900 bg-indigo-50/5 group-hover:bg-indigo-50/20">
+                      {fmtQty(row.closingQty)}{" "}
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {row.unit}
+                      </span>
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold text-slate-900 bg-indigo-50/5 group-hover:bg-indigo-50/20">
+                      {fmt(row.closingVal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+
+              {/* Footer Totals */}
+              <tfoot className="bg-slate-100 font-black text-xs uppercase border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-lg">
+                <tr>
+                  <td className="p-4 text-right text-slate-600 sticky left-0 bg-slate-100 border-r border-slate-300">
+                    Grand Total
                   </td>
-                  <td className="p-2 text-right border-r font-mono text-slate-500">
-                    {row.openingQty > 0
-                      ? `${fmtQty(row.openingQty)} ${row.unit}`
-                      : ""}
+
+                  <td className="p-2 border-r border-slate-300"></td>
+                  <td className="p-2 text-right border-r border-slate-300 font-mono text-slate-700">
+                    {fmt(totals.op)}
                   </td>
-                  <td className="p-2 text-right border-r font-mono text-slate-500">
-                    {row.openingVal > 0 ? fmt(row.openingVal) : ""}
+
+                  <td className="p-2 border-r border-slate-300"></td>
+                  <td className="p-2 text-right border-r border-slate-300 font-mono text-emerald-700">
+                    {fmt(totals.in)}
                   </td>
-                  <td className="p-2 text-right border-r font-mono text-emerald-600">
-                    {row.inwardQty > 0
-                      ? `${fmtQty(row.inwardQty)} ${row.unit}`
-                      : ""}
-                  </td>
-                  <td className="p-2 text-right border-r font-mono text-emerald-600">
-                    {row.inwardVal > 0 ? fmt(row.inwardVal) : ""}
-                  </td>
-                  <td className="p-2 text-right border-r font-mono text-rose-500">
-                    {row.outwardQty > 0
-                      ? `${fmtQty(row.outwardQty)} ${row.unit}`
-                      : ""}
-                  </td>
-                  <td className="p-2 text-right border-r font-mono font-bold text-slate-900">
-                    {fmtQty(row.closingQty)} {row.unit}
-                  </td>
-                  <td className="p-2 text-right font-mono font-bold text-slate-900 bg-slate-50/50">
-                    {fmt(row.closingVal)}
+
+                  <td className="p-2 border-r border-slate-300"></td>
+
+                  <td className="p-2 border-r border-slate-300 bg-slate-200"></td>
+                  <td className="p-2 text-right font-mono bg-slate-200 text-indigo-900 border-l border-slate-300">
+                    {fmt(totals.cl)}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot className="bg-slate-100 font-black uppercase text-[10px] border-t-2 border-slate-300">
-              <tr>
-                <td className="p-3 text-right">Grand Total</td>
-                <td className="p-2 border-r"></td>
-                <td className="p-2 text-right border-r font-mono">
-                  {fmt(totals.op)}
-                </td>
-                <td className="p-2 border-r"></td>
-                <td className="p-2 text-right border-r font-mono">
-                  {fmt(totals.in)}
-                </td>
-                <td className="p-2 border-r"></td>
-                <td className="p-2 border-r"></td>
-                <td className="p-2 text-right font-mono bg-slate-200">
-                  {fmt(totals.cl)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            </table>
+          </div>
         </div>
       </div>
     </div>

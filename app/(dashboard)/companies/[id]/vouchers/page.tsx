@@ -1,6 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { Plus, Calendar, ListFilter, Search } from "lucide-react";
+import {
+  Plus,
+  Calendar,
+  Search,
+  ArrowLeft,
+  ListFilter,
+  CreditCard,
+  FileText,
+} from "lucide-react";
 import { format } from "date-fns";
 import { getVouchers } from "@/app/actions/voucher";
 import QuickVerify from "@/components/QuickVerify";
@@ -27,14 +35,12 @@ export default async function VoucherListPage({
   let endDate: Date;
   let isLatestData = false;
 
-  // --- Date Logic: Default to "Latest Transaction Date" if not provided ---
+  // --- Date Logic ---
   if (p.from && p.to) {
-    // Case 1: User explicitly filtered dates
     startDate = new Date(p.from);
     endDate = new Date(p.to);
   } else {
-    // Case 2: Auto-detect the last day with activity
-    // Query all voucher tables to find the most recent date
+    // Auto-detect the last day with activity
     const [s, pu, pa, r, c, j] = await Promise.all([
       prisma.salesVoucher.findFirst({
         where: { companyId },
@@ -68,93 +74,103 @@ export default async function VoucherListPage({
       }),
     ]);
 
-    // Collect all dates found
     const allDates = [s?.date, pu?.date, pa?.date, r?.date, c?.date, j?.date]
       .filter((d): d is Date => !!d)
       .map((d) => d.getTime());
 
     if (allDates.length > 0) {
-      // Found data: Set range to that specific single day
       const maxTimestamp = Math.max(...allDates);
       const maxDateStr = new Date(maxTimestamp).toISOString().split("T")[0];
-
       startDate = new Date(maxDateStr);
       endDate = new Date(maxDateStr);
       isLatestData = true;
     } else {
-      // No data: Default to Today
       const todayStr = new Date().toISOString().split("T")[0];
       startDate = new Date(todayStr);
       endDate = new Date(todayStr);
     }
   }
 
-  // Ensure end date covers the full day (23:59:59)
   endDate.setHours(23, 59, 59, 999);
 
-  // Fetch Data
   const vouchers = await getVouchers(companyId, startDate, endDate, p.q);
   const baseUrl = `/companies/${id}/vouchers`;
-
-  // Flag to adjust UI badge (Blue if filtered, Gray/Latest if default)
   const isFiltered = !!(p.from && p.to);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50/50 font-sans">
-      {/* --- TOP NAVIGATION / HEADER --- */}
-      <div className="flex-none px-8 py-6 border-b border-gray-200 bg-white/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-[1920px] mx-auto flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-          {/* Title & Context */}
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              Daybook
-              <span className="text-gray-400 font-light">/</span>
-              <span className="text-gray-600">Transactions</span>
-            </h1>
-            <div className="flex items-center gap-3 mt-2">
-              {/* Date Badge */}
-              <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-100">
-                <Calendar size={14} />
-                <span>
-                  {format(startDate, "dd MMM yyyy")}
-                  {startDate.toDateString() !== endDate.toDateString() &&
-                    ` — ${format(endDate, "dd MMM yyyy")}`}
-                </span>
-              </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
 
-              {/* Status Indicator */}
-              {!isFiltered && (
-                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                  {isLatestData ? "(Latest Activity)" : "(Today)"}
-                </span>
-              )}
+      {/* --- STICKY HEADER --- */}
+      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
+        <div className="max-w-[1920px] mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          {/* Left: Title & Breadcrumbs */}
+          <div className="flex items-start gap-4">
+            <Link
+              href={`/companies/${id}`}
+              className="mt-1 p-2 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all"
+            >
+              <ArrowLeft size={20} />
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <CreditCard size={20} className="text-slate-400" />
+                Daybook Transactions
+              </h1>
 
-              {/* Count */}
-              <div className="text-xs text-gray-400 font-medium px-2 border-l border-gray-300">
-                {vouchers.length} Entries Found
+              <div className="flex items-center gap-3 mt-1.5">
+                {/* Date Pill */}
+                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-slate-50 border border-slate-200 rounded-md">
+                  <Calendar size={12} className="text-slate-500" />
+                  <span className="text-xs font-bold text-slate-700">
+                    {format(startDate, "dd MMM yyyy")}
+                    {startDate.toDateString() !== endDate.toDateString() &&
+                      ` — ${format(endDate, "dd MMM yyyy")}`}
+                  </span>
+                </div>
+
+                {/* Status Text */}
+                {!isFiltered && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {isLatestData ? "Latest Activity" : "Today"}
+                  </span>
+                )}
+
+                {/* Counter Separator */}
+                <span className="text-slate-300">|</span>
+                <span className="text-xs font-bold text-slate-500">
+                  {vouchers.length} Entries
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Action Toolbar */}
+          {/* Right: Controls Toolbar */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Search & Date - Grouped for visual consistency */}
-            <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
+            {/* Filter Group */}
+            <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl shadow-sm">
               <DateRangeFilter />
-              <div className="w-px h-6 bg-gray-200 mx-1"></div>
+              <div className="w-px h-5 bg-slate-200 mx-1" />
               <VoucherSearch />
             </div>
 
-            {/* Quick Actions */}
+            {/* Actions */}
             <div className="flex items-center gap-3 pl-2">
               <QuickVerify companyId={companyId} />
 
               <Link
                 href={`/companies/${companyId}/vouchers/create`}
-                className="group flex items-center gap-2 bg-gray-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-gray-900/20 transition-all hover:scale-[1.02] active:scale-95"
+                className="group flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-slate-900/10 hover:bg-indigo-600 hover:shadow-indigo-600/20 transition-all hover:-translate-y-0.5"
               >
                 <Plus
-                  size={18}
+                  size={16}
                   className="group-hover:rotate-90 transition-transform duration-300"
                 />
                 <span>New Entry</span>
@@ -164,28 +180,32 @@ export default async function VoucherListPage({
         </div>
       </div>
 
-      {/* --- MAIN CONTENT AREA --- */}
-      <div className="flex-1 overflow-hidden p-6">
+      {/* --- MAIN CONTENT --- */}
+      <div className="flex-1 relative z-10 p-6 overflow-hidden">
         <div className="h-full max-w-[1920px] mx-auto flex flex-col">
           {/* Table Container */}
-          <div className="flex-1 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
-            {/* Empty State */}
+          <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
+            {/* Empty State Overlay */}
             {vouchers.length === 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white z-20">
-                <div className="bg-gray-50 p-4 rounded-full mb-3">
-                  <Search size={32} className="opacity-50" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20 bg-white/50 backdrop-blur-sm">
+                <div className="w-16 h-16 bg-white border-2 border-dashed border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                  <ListFilter className="text-slate-300" size={24} />
                 </div>
-                <p className="text-sm font-medium">
-                  No transactions found for this date.
+                <h3 className="text-lg font-bold text-slate-900">
+                  No Transactions Found
+                </h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-xs">
+                  There are no vouchers recorded for this date range.
                 </p>
                 {!isFiltered && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    Try changing the date filter to see other records.
+                  <p className="text-xs font-bold text-indigo-600 mt-2 uppercase tracking-wide">
+                    Try adjusting the date filter
                   </p>
                 )}
               </div>
             )}
 
+            {/* The Client List Component */}
             <VoucherListClient
               vouchers={vouchers}
               companyId={companyId}

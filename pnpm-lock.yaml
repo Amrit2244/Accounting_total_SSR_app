@@ -77,6 +77,9 @@ importers:
       next:
         specifier: 16.0.8
         version: 16.0.8(@babel/core@7.28.5)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
+      number-to-words:
+        specifier: ^1.2.4
+        version: 1.2.4
       react:
         specifier: 19.2.1
         version: 19.2.1
@@ -3011,6 +3014,9 @@ packages:
   number-is-nan@1.0.1:
     resolution: {integrity: sha512-4jbtZXNAsfZbAHiiqjLPBiCl16dES1zI4Hpzzxw61Tk+loF+sBDBKx1ICKKKwIqQ7M0mFn1TmkN7euSncWgHiQ==}
     engines: {node: '>=0.10.0'}
+
+  number-to-words@1.2.4:
+    resolution: {integrity: sha512-/fYevVkXRcyBiZDg6yzZbm0RuaD6i0qRfn8yr+6D0KgBMOndFPxuW10qCHpzs50nN8qKuv78k8MuotZhcVX6Pw==}
 
   nypm@0.6.2:
     resolution: {integrity: sha512-7eM+hpOtrKrBDCh7Ypu2lJ9Z7PNZBdi/8AT3AX8xoCj43BBVHD0hPSTEvMtkMpfs8FCqBGhxB+uToIQimA111g==}
@@ -6835,6 +6841,8 @@ snapshots:
       unicorn-magic: 0.3.0
 
   number-is-nan@1.0.1: {}
+
+  number-to-words@1.2.4: {}
 
   nypm@0.6.2:
     dependencies:

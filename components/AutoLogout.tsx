@@ -1,52 +1,70 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { logout } from "@/app/actions/auth";
 
-const TIMEOUT_MS = 15 * 60 * 1000; // 15 Minutes idle time
+const TIMEOUT_MS = 15 * 60 * 1000; // 15 Minutes
+const THROTTLE_MS = 1000; // Only reset timer max once per second
 
 export default function AutoLogout() {
-  useEffect(() => {
-    let logoutTimer: NodeJS.Timeout;
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastActivity = useRef<number>(Date.now());
 
+  useEffect(() => {
+    // 1. The Logout Execution
     const performAutoLogout = async () => {
-      console.log("User inactive. Logging out...");
       try {
-        // 1. Clear the session on the server
         await logout();
       } catch (error) {
-        console.error("Logout failed", error);
+        console.error("Auto-logout server action failed:", error);
       } finally {
-        // 2. Force the browser to redirect to the login page
-        // This ensures the user is actually moved away from the sensitive data
+        // Hard redirect ensures client-side state is completely flushed
         window.location.href = "/login";
       }
     };
 
-    const resetTimer = () => {
-      if (logoutTimer) clearTimeout(logoutTimer);
-      logoutTimer = setTimeout(performAutoLogout, TIMEOUT_MS);
+    // 2. Timer Logic
+    const startTimer = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(performAutoLogout, TIMEOUT_MS);
     };
 
-    // Listen for these interactions to consider the user "active"
+    // 3. Event Handler (Throttled for Performance)
+    const handleActivity = () => {
+      const now = Date.now();
+      // Optimization: Don't reset on every single pixel of mouse movement
+      if (now - lastActivity.current > THROTTLE_MS) {
+        lastActivity.current = now;
+        startTimer();
+      }
+    };
+
+    // 4. Setup Listeners
+    // 'passive: true' improves scrolling performance
     const events = [
       "mousedown",
       "mousemove",
-      "keypress",
+      "keydown",
       "scroll",
       "touchstart",
     ];
 
-    events.forEach((event) => window.addEventListener(event, resetTimer));
+    events.forEach((event) => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
 
-    // Initial start of the timer
-    resetTimer();
+    // Initial Start
+    startTimer();
 
+    // 5. Cleanup
     return () => {
-      if (logoutTimer) clearTimeout(logoutTimer);
-      events.forEach((event) => window.removeEventListener(event, resetTimer));
+      if (timerRef.current) clearTimeout(timerRef.current);
+      events.forEach((event) => {
+        window.removeEventListener(event, handleActivity);
+      });
     };
   }, []);
 
+  // This component is purely functional and renders nothing
   return null;
 }

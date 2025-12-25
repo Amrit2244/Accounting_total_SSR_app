@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search } from "lucide-react";
+import { Search, ChevronDown, Layers } from "lucide-react";
 
 export default function SearchableRowLedgerSelect({
   rowIndex,
@@ -41,11 +41,11 @@ export default function SearchableRowLedgerSelect({
   }, []);
 
   return (
-    <div className="relative w-full" ref={searchRef}>
+    <div className="relative w-full group" ref={searchRef}>
       <div className="relative">
         <Search
-          size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"
+          size={14}
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors"
         />
         <input
           type="text"
@@ -53,33 +53,55 @@ export default function SearchableRowLedgerSelect({
           onChange={(e) => {
             updateRow(rowIndex, "ledgerSearchTerm", e.target.value);
             setIsOpen(true);
+            // Clear ID when typing new search to prevent mismatch
             if (row.ledgerId) updateRow(rowIndex, "ledgerId", "");
           }}
           onFocus={() => setIsOpen(true)}
-          placeholder="Search Ledger..."
-          className="w-full h-8 pl-7 pr-2 bg-slate-50 border-none rounded-lg text-[11px] font-bold text-slate-800 uppercase focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none placeholder:normal-case"
+          placeholder="Select Ledger..."
+          className="w-full h-9 pl-9 pr-8 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-300 placeholder:font-normal"
+        />
+        <ChevronDown
+          size={12}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-slate-500 transition-colors"
         />
       </div>
+
       {isOpen && (
-        <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 p-1 max-h-48 overflow-y-auto custom-scrollbar">
-          {filteredOptions.map((l: any) => (
-            <div
-              key={l.id}
-              onClick={() => {
-                updateRow(rowIndex, "ledgerId", l.id.toString());
-                updateRow(rowIndex, "ledgerSearchTerm", l.name);
-                setIsOpen(false);
-              }}
-              className="px-3 py-2 hover:bg-blue-50 rounded cursor-pointer flex justify-between items-center transition-colors"
-            >
-              <span className="text-[10px] font-bold text-slate-700 uppercase truncate">
-                {l.name}
-              </span>
-              <span className="text-[8px] font-black uppercase text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                {l.group.name}
-              </span>
-            </div>
-          ))}
+        <div className="absolute z-[100] w-[250px] bg-white border border-slate-200 rounded-xl shadow-2xl mt-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-left">
+          <div className="max-h-60 overflow-y-auto custom-scrollbar">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((l: any) => (
+                <div
+                  key={l.id}
+                  onClick={() => {
+                    updateRow(rowIndex, "ledgerId", l.id.toString());
+                    updateRow(rowIndex, "ledgerSearchTerm", l.name);
+                    setIsOpen(false);
+                  }}
+                  className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 transition-colors group/item"
+                >
+                  <div className="text-xs font-bold text-slate-700 group-hover/item:text-indigo-700 transition-colors">
+                    {l.name}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Layers
+                      size={10}
+                      className="text-slate-300 group-hover/item:text-indigo-300"
+                    />
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 group-hover/item:text-indigo-400">
+                      {l.group.name}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center">
+                <span className="text-xs text-slate-400 italic">
+                  No ledger found
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

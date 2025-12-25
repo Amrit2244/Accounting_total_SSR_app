@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Calendar, Loader2 } from "lucide-react";
+import { Calendar, Loader2, Filter, ArrowRight } from "lucide-react";
 
 export default function BalanceSheetFilter() {
   const router = useRouter();
@@ -24,27 +24,44 @@ export default function BalanceSheetFilter() {
   };
 
   return (
-    <div className="flex items-center gap-3 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm">
-      <div className="flex items-center gap-2 px-2 bg-slate-50 rounded border border-slate-100 py-1">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-          As Of
+    <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+      {/* Label Badge (Hidden on mobile for space) */}
+      <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100">
+        <Filter size={12} className="text-slate-400" />
+        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+          As Of Date
         </span>
-        <Calendar size={12} className="text-slate-400" />
+      </div>
+
+      {/* Date Input Wrapper */}
+      <div className="relative group flex-1 sm:flex-none">
+        <Calendar
+          size={14}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none"
+        />
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="bg-transparent text-xs font-bold text-slate-700 outline-none uppercase"
+          className="h-9 pl-9 pr-3 bg-white border border-transparent hover:bg-slate-50 focus:bg-white rounded-lg text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer uppercase tracking-wide w-full sm:w-auto"
         />
       </div>
 
+      {/* Separator */}
+      <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+
+      {/* Apply Button */}
       <button
         onClick={handleApply}
         disabled={isPending}
-        className="px-3 py-1 bg-blue-600 text-white text-[10px] font-black uppercase rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 transition-all"
+        className="h-9 px-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95 shadow-sm"
       >
-        {isPending && <Loader2 size={10} className="animate-spin" />}
-        Update
+        {isPending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <ArrowRight size={12} />
+        )}
+        <span>Apply Filter</span>
       </button>
     </div>
   );

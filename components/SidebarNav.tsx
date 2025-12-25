@@ -13,9 +13,10 @@ import {
   Layers,
   UserCog,
   ShieldCheck,
-  Cpu,
   Beaker,
   Factory,
+  Zap,
+  Users,
 } from "lucide-react";
 import clsx from "clsx";
 import packageJson from "@/package.json";
@@ -26,7 +27,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
 
   const menuGroups = [
     {
-      label: "Main Menu",
+      label: "Overview",
       items: [
         {
           name: "Dashboard",
@@ -34,7 +35,6 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           icon: LayoutDashboard,
           exact: true,
         },
-
         {
           name: "Vouchers",
           href: `/companies/${companyId}/vouchers`,
@@ -78,7 +78,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
       ],
     },
     {
-      label: "Utilities & Config",
+      label: "Utilities & System",
       items: [
         {
           name: "Import Data",
@@ -101,80 +101,84 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           icon: Settings,
         },
         {
-          name: "UserManagement",
+          name: "User Management",
           href: `/admin`,
-          icon: FileText,
+          icon: Users,
         },
       ],
     },
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[#0f172a] text-slate-300 select-none">
-      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
-        {menuGroups.map((group, idx) => (
-          <div key={idx} className="mb-6">
-            <h3 className="px-3 mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">
-              {group.label}
-            </h3>
+    <div className="px-4 space-y-8 select-none py-6">
+      {menuGroups.map((group, idx) => (
+        <div key={idx}>
+          {/* Group Label */}
+          <h3 className="px-4 mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400/80">
+            {group.label}
+          </h3>
 
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const isActive = item.exact
-                  ? pathname === item.href
-                  : pathname.startsWith(item.href);
+          <div className="space-y-1">
+            {group.items.map((item) => {
+              const isActive = item.exact
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={clsx(
+                    "group relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300",
+                    isActive
+                      ? "bg-indigo-50 text-indigo-700 shadow-sm"
+                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                  )}
+                >
+                  {/* Active Indicator Line (Left) */}
+                  {isActive && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-indigo-600 rounded-r-full" />
+                  )}
+
+                  {/* Icon */}
+                  <item.icon
+                    size={18}
                     className={clsx(
-                      "relative flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-200 group",
+                      "transition-colors duration-300",
                       isActive
-                        ? "bg-blue-600/10 text-white border border-blue-500/20 shadow-[0_0_15px_rgba(37,99,235,0.1)]"
-                        : "hover:bg-slate-800/50 hover:text-slate-100"
+                        ? "text-indigo-600"
+                        : "text-slate-400 group-hover:text-slate-600"
                     )}
-                  >
-                    {isActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-r-full shadow-[0_0_8px_#3b82f6]" />
-                    )}
-                    <item.icon
-                      size={16}
-                      className={clsx(
-                        "transition-transform duration-200 group-hover:scale-110",
-                        isActive
-                          ? "text-blue-400"
-                          : "text-slate-500 group-hover:text-blue-400"
-                      )}
-                    />
-                    <span className="tracking-tight">{item.name}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+                  />
 
-      <div className="p-4 mx-3 mb-4 rounded-xl bg-slate-800/40 border border-slate-700/50 backdrop-blur-sm">
-        <div className="flex items-center justify-between mb-2">
-          <div className="p-1 bg-blue-500/10 rounded flex items-center justify-center">
-            <Cpu size={12} className="text-blue-400" />
-          </div>
-          <div className="flex items-center gap-1 text-[8px] font-black text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full uppercase tracking-tighter border border-emerald-500/20">
-            <ShieldCheck size={8} /> Secure
+                  <span>{item.name}</span>
+
+                  {/* Subtle Glow on Hover */}
+                  {!isActive && (
+                    <div className="absolute inset-0 rounded-xl bg-current opacity-0 group-hover:opacity-5 transition-opacity pointer-events-none" />
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </div>
-        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">
-          System Version
-        </p>
-        <div className="flex items-end justify-between">
-          <span className="text-sm font-mono font-black text-white leading-none">
-            {appVersion}
-          </span>
-          <span className="text-[8px] text-slate-600 font-bold uppercase tracking-widest">
-            Stable
-          </span>
+      ))}
+
+      {/* --- SYSTEM CARD --- */}
+      <div className="mt-8 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-xl">
+        <div className="absolute top-0 right-0 p-3 opacity-20">
+          <Zap size={40} />
+        </div>
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+              Online
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mb-1">System Version</p>
+          <p className="text-xl font-mono font-bold">{appVersion}</p>
         </div>
       </div>
     </div>

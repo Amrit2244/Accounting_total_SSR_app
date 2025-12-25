@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, TrendingUp } from "lucide-react";
+import { ArrowLeft, TrendingUp, ChevronRight } from "lucide-react";
 import { notFound } from "next/navigation";
 import PrintButton from "@/components/PrintButton";
 import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown";
-import BalanceSheetFilter from "@/components/reports/BalanceSheetFilter"; // Reuse the existing filter
+import BalanceSheetFilter from "@/components/reports/BalanceSheetFilter";
 
 const fmt = (v: number) =>
   Math.abs(v).toLocaleString("en-IN", {
@@ -229,141 +229,193 @@ export default async function ProfitLossPage({
   const plTotal = Math.max(sumPLDr, sumPLCr);
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500 h-[calc(100vh-64px)] flex flex-col font-sans">
-      <div className="flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
-            <TrendingUp size={18} />
-          </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20 print:hidden">
           <div>
-            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">
-              Trading & Profit Loss A/c
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Dashboard
+              </Link>
+              <ChevronRight size={10} />
+              <Link
+                href={`/companies/${companyId}/reports`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Reports
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">Profit & Loss</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <TrendingUp className="text-indigo-600" size={32} />
+              Profit & Loss A/c
             </h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-              As on{" "}
+            <p className="text-slate-500 font-medium mt-2 max-w-xl">
+              Statement of financial performance as of{" "}
               {asOfDate.toLocaleDateString("en-IN", {
                 day: "numeric",
                 month: "long",
                 year: "numeric",
               })}
+              .
             </p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          {/* NEW FILTER COMPONENT */}
-          <BalanceSheetFilter />
 
-          <PrintButton />
-          <Link
-            href={`/companies/${companyId}/reports`}
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 transition-all border border-slate-200 px-4 py-2 rounded-lg bg-white shadow-sm"
-          >
-            <ArrowLeft size={14} /> Back
-          </Link>
-        </div>
-      </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1">
-        <div className="flex border-b border-slate-200 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shrink-0">
-          <div className="w-1/2 flex justify-between px-4 py-2 border-r border-slate-700">
-            <span>Particulars</span>
-            <span>Debit (₹)</span>
-          </div>
-          <div className="w-1/2 flex justify-between px-4 py-2">
-            <span>Particulars</span>
-            <span>Credit (₹)</span>
+          <div className="flex items-center gap-3">
+            <BalanceSheetFilter />
+
+            <div className="h-8 w-px bg-slate-200 mx-1" />
+
+            <PrintButton />
+
+            <Link
+              href={`/companies/${companyId}/reports`}
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
+              title="Back to Reports"
+            >
+              <ArrowLeft size={20} />
+            </Link>
           </div>
         </div>
-        <div className="flex flex-1 min-h-0">
-          <div className="w-1/2 border-r border-slate-200 flex flex-col overflow-y-auto custom-scrollbar">
-            <div className="flex-1">
-              <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
-                Trading Account
-              </div>
-              {tradingDr.map((g: any) => (
-                <ProfitLossDrillDown key={g.groupName} item={g} />
-              ))}
-              {isGrossProfit && (
-                <div className="flex justify-between py-2 px-3 my-1 border-y bg-rose-50 border-rose-100 text-rose-800">
-                  <span className="text-[11px] font-black uppercase tracking-tight">
-                    To Gross Profit c/d
-                  </span>
-                  <span className="font-mono text-xs font-bold">
-                    {fmt(Math.abs(grossDiff))}
-                  </span>
-                </div>
-              )}
+
+        {/* REPORT CARD */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[600px] print:shadow-none print:border-none">
+          {/* Main Header Row */}
+          <div className="flex border-b border-slate-200 bg-slate-50">
+            <div className="w-1/2 px-6 py-3 border-r border-slate-200 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
+              <span>Particulars</span>
+              <span>Debit (₹)</span>
             </div>
-            <div className="bg-slate-100 px-3 py-1.5 flex justify-between text-[10px] font-black text-slate-500 border-t border-b border-slate-200">
-              <span>Total Trading</span>
-              <span className="font-mono">{fmt(tradingTotal)}</span>
-            </div>
-            <div className="flex-1 mt-2">
-              <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
-                P & L Account
-              </div>
-              {plDr.map((g: any) => (
-                <ProfitLossDrillDown key={g.groupName} item={g} />
-              ))}
-              {isNetProfit && (
-                <div className="flex justify-between py-2 px-3 my-1 border-y bg-emerald-50 border-emerald-100 text-emerald-800">
-                  <span className="text-[11px] font-black uppercase tracking-tight">
-                    To Net Profit
-                  </span>
-                  <span className="font-mono text-xs font-bold">
-                    {fmt(netDiff)}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-between px-3 py-2 bg-slate-100 border-t border-slate-200 border-b-4 border-double border-b-slate-400 font-black text-xs text-slate-900 mt-auto">
-              <span>Total</span>
-              <span className="font-mono">{fmt(plTotal)}</span>
+            <div className="w-1/2 px-6 py-3 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
+              <span>Particulars</span>
+              <span>Credit (₹)</span>
             </div>
           </div>
-          <div className="w-1/2 flex flex-col overflow-y-auto custom-scrollbar">
-            <div className="flex-1">
-              <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
-                Trading Account
-              </div>
-              {tradingCr.map((g: any) => (
-                <ProfitLossDrillDown key={g.groupName} item={g} />
-              ))}
-              {!isGrossProfit && (
-                <div className="flex justify-between py-2 px-3 my-1 border-y bg-rose-50 border-rose-100 text-rose-800">
-                  <span className="text-[11px] font-black uppercase tracking-tight">
-                    By Gross Loss c/d
-                  </span>
-                  <span className="font-mono text-xs font-bold">
-                    {fmt(Math.abs(grossDiff))}
-                  </span>
+
+          {/* Content Body */}
+          <div className="flex flex-1 min-h-0">
+            {/* --- DEBIT SIDE (Left) --- */}
+            <div className="w-1/2 border-r border-slate-200 flex flex-col bg-slate-50/10">
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {/* Trading Account Dr */}
+                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10">
+                  Trading Account
                 </div>
-              )}
-            </div>
-            <div className="bg-slate-100 px-3 py-1.5 flex justify-between text-[10px] font-black text-slate-500 border-t border-b border-slate-200">
-              <span>Total Trading</span>
-              <span className="font-mono">{fmt(tradingTotal)}</span>
-            </div>
-            <div className="flex-1 mt-2">
-              <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
-                P & L Account
-              </div>
-              {plCr.map((g: any) => (
-                <ProfitLossDrillDown key={g.groupName} item={g} />
-              ))}
-              {!isNetProfit && (
-                <div className="flex justify-between py-2 px-3 my-1 border-y bg-rose-50 border-rose-100 text-rose-800">
-                  <span className="text-[11px] font-black uppercase tracking-tight">
-                    By Net Loss
-                  </span>
-                  <span className="font-mono text-xs font-bold">
-                    {fmt(Math.abs(netDiff))}
-                  </span>
+                <div className="p-2 space-y-1">
+                  {tradingDr.map((g: any) => (
+                    <ProfitLossDrillDown key={g.groupName} item={g} />
+                  ))}
+                  {isGrossProfit && (
+                    <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
+                      <span className="text-xs font-bold">
+                        To Gross Profit c/d
+                      </span>
+                      <span className="font-mono text-xs font-bold">
+                        {fmt(Math.abs(grossDiff))}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Trading Total Dr */}
+                <div className="flex justify-between px-6 py-2 bg-slate-50 border-y border-slate-200 text-xs font-bold text-slate-700">
+                  <span>Total Trading</span>
+                  <span className="font-mono">{fmt(tradingTotal)}</span>
+                </div>
+
+                {/* P&L Account Dr */}
+                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10 mt-4">
+                  Profit & Loss Account
+                </div>
+                <div className="p-2 space-y-1">
+                  {plDr.map((g: any) => (
+                    <ProfitLossDrillDown key={g.groupName} item={g} />
+                  ))}
+                  {isNetProfit && (
+                    <div className="flex justify-between py-2 px-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-800">
+                      <span className="text-xs font-bold">To Net Profit</span>
+                      <span className="font-mono text-xs font-bold">
+                        {fmt(netDiff)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Grand Total Dr */}
+              <div className="flex justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 border-b-4 border-b-slate-300 text-sm font-black text-slate-900 mt-auto">
+                <span>TOTAL</span>
+                <span className="font-mono">{fmt(plTotal)}</span>
+              </div>
             </div>
-            <div className="flex justify-between px-3 py-2 bg-slate-100 border-t border-slate-200 border-b-4 border-double border-b-slate-400 font-black text-xs text-slate-900 mt-auto">
-              <span>Total</span>
-              <span className="font-mono">{fmt(plTotal)}</span>
+
+            {/* --- CREDIT SIDE (Right) --- */}
+            <div className="w-1/2 flex flex-col">
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {/* Trading Account Cr */}
+                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10">
+                  Trading Account
+                </div>
+                <div className="p-2 space-y-1">
+                  {tradingCr.map((g: any) => (
+                    <ProfitLossDrillDown key={g.groupName} item={g} />
+                  ))}
+                  {!isGrossProfit && (
+                    <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
+                      <span className="text-xs font-bold">
+                        By Gross Loss c/d
+                      </span>
+                      <span className="font-mono text-xs font-bold">
+                        {fmt(Math.abs(grossDiff))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Trading Total Cr */}
+                <div className="flex justify-between px-6 py-2 bg-slate-50 border-y border-slate-200 text-xs font-bold text-slate-700">
+                  <span>Total Trading</span>
+                  <span className="font-mono">{fmt(tradingTotal)}</span>
+                </div>
+
+                {/* P&L Account Cr */}
+                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10 mt-4">
+                  Profit & Loss Account
+                </div>
+                <div className="p-2 space-y-1">
+                  {plCr.map((g: any) => (
+                    <ProfitLossDrillDown key={g.groupName} item={g} />
+                  ))}
+                  {!isNetProfit && (
+                    <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
+                      <span className="text-xs font-bold">By Net Loss</span>
+                      <span className="font-mono text-xs font-bold">
+                        {fmt(Math.abs(netDiff))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Grand Total Cr */}
+              <div className="flex justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 border-b-4 border-b-slate-300 text-sm font-black text-slate-900 mt-auto">
+                <span>TOTAL</span>
+                <span className="font-mono">{fmt(plTotal)}</span>
+              </div>
             </div>
           </div>
         </div>

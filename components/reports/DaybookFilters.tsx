@@ -2,7 +2,14 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Calendar, Filter, Loader2, X } from "lucide-react";
+import {
+  Calendar,
+  Filter,
+  Loader2,
+  X,
+  ArrowRight,
+  ChevronDown,
+} from "lucide-react";
 
 export default function DaybookFilters() {
   const router = useRouter();
@@ -43,40 +50,49 @@ export default function DaybookFilters() {
     router.push("?");
   };
 
+  const hasActiveFilters =
+    searchParams.has("type") ||
+    searchParams.get("from") !== new Date().toISOString().split("T")[0] ||
+    searchParams.get("to") !== new Date().toISOString().split("T")[0];
+
   return (
-    <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
-      {/* Date Range Inputs */}
-      <div className="flex items-center gap-2 px-2">
-        <Calendar size={12} className="text-slate-400" />
+    <div className="flex flex-wrap items-center gap-2 p-1 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all">
+      {/* Date Range Group */}
+      <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 group focus-within:border-indigo-200 focus-within:ring-2 focus-within:ring-indigo-50 transition-all">
+        <Calendar
+          size={14}
+          className="text-slate-400 group-focus-within:text-indigo-500"
+        />
+
         <input
           type="date"
           value={filters.from}
           onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-          className="bg-transparent text-[10px] font-bold text-slate-700 outline-none w-20 uppercase"
+          className="bg-transparent text-xs font-bold text-slate-700 outline-none w-24 uppercase cursor-pointer"
         />
-        <span className="text-slate-300 text-[10px] font-black">TO</span>
+
+        <span className="text-slate-300 text-[9px] font-black px-1">TO</span>
+
         <input
           type="date"
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-          className="bg-transparent text-[10px] font-bold text-slate-700 outline-none w-20 uppercase"
+          className="bg-transparent text-xs font-bold text-slate-700 outline-none w-24 uppercase cursor-pointer"
         />
       </div>
 
-      <div className="h-4 w-px bg-slate-300" />
-
-      {/* Voucher Type Select */}
-      <div className="relative">
+      {/* Type Select */}
+      <div className="relative group">
         <Filter
-          size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"
+          size={14}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none"
         />
         <select
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-          className="pl-7 pr-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer w-28 uppercase"
+          className="h-9 pl-9 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer w-32 uppercase tracking-wide hover:border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
         >
-          <option value="ALL">All Vouchers</option>
+          <option value="ALL">All Types</option>
           <option value="SALES">Sales</option>
           <option value="PURCHASE">Purchase</option>
           <option value="PAYMENT">Payment</option>
@@ -84,24 +100,36 @@ export default function DaybookFilters() {
           <option value="JOURNAL">Journal</option>
           <option value="CONTRA">Contra</option>
         </select>
+        <ChevronDown
+          size={12}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+        />
       </div>
 
-      {/* Action Buttons */}
+      {/* Apply Button */}
       <button
         onClick={handleApply}
         disabled={isPending}
-        className="px-3 py-1 bg-blue-600 text-white text-[9px] font-black uppercase rounded shadow-sm hover:bg-blue-700 disabled:opacity-50 min-w-[60px] flex justify-center"
+        className="h-9 px-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-sm hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95"
       >
-        {isPending ? <Loader2 size={12} className="animate-spin" /> : "GO"}
+        {isPending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <>
+            <span>Filter</span>
+            <ArrowRight size={12} />
+          </>
+        )}
       </button>
 
-      {(searchParams.has("type") || searchParams.has("from")) && (
+      {/* Reset Button */}
+      {hasActiveFilters && (
         <button
           onClick={handleReset}
-          className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+          className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
           title="Reset Filters"
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       )}
     </div>

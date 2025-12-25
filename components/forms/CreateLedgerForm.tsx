@@ -19,8 +19,7 @@ async function createLedgerWrapper(prevState: any, formData: FormData) {
   return await createLedger(prevState, formData);
 }
 
-// ✅ FIX: Define a proper initial state object instead of 'undefined'
-// to prevent "Object is possibly null" errors in the UI
+// ✅ FIX: Define a proper initial state object
 const initialState = {
   success: false,
   message: "",
@@ -40,62 +39,65 @@ export default function CreateLedgerForm({
   );
 
   return (
-    <form action={action} className="space-y-4 font-sans">
+    <form action={action} className="space-y-6 font-sans p-1">
       <input type="hidden" name="companyId" value={companyId} />
 
-      {/* ✅ Updated to check state.message or specific error keys based on your master action */}
+      {/* FEEDBACK BANNERS */}
       {state?.message && !state.success && (
-        <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2 animate-in fade-in">
-          <AlertCircle size={12} /> {state.message}
+        <div className="bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
+          <AlertCircle size={16} /> {state.message}
         </div>
       )}
 
       {state?.success && (
-        <div className="bg-emerald-50 text-emerald-600 px-3 py-2 rounded-lg text-[10px] font-bold uppercase flex items-center gap-2 animate-in fade-in">
-          <CheckCircle size={12} /> Ledger Created!
+        <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 px-4 py-3 rounded-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
+          <CheckCircle size={16} /> Ledger Created Successfully!
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
-            Ledger Name <span className="text-red-500">*</span>
+      {/* FORM FIELDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Ledger Name */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">
+            Ledger Name <span className="text-rose-500">*</span>
           </label>
-          <div className="relative">
+          <div className="relative group">
             <BookOpen
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors"
             />
             <input
               name="name"
               required
               placeholder="e.g. HDFC Bank"
-              className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none transition-all"
+              className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all placeholder:text-slate-400"
             />
           </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">
-            Group <span className="text-red-500">*</span>
+        {/* Group Selector */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">
+            Account Group <span className="text-rose-500">*</span>
           </label>
-          <div className="relative">
+          <div className="relative group">
             <Layers
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors"
             />
             <select
               name="groupId"
               required
               defaultValue=""
-              className="w-full h-10 pl-9 pr-8 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer"
+              className="w-full h-11 pl-10 pr-8 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none cursor-pointer transition-all"
             >
               <option value="" disabled>
-                Select...
+                Select Group...
               </option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.name} ({g.nature || "Group"})
+                  {g.name} ({g.nature || "General"})
                 </option>
               ))}
             </select>
@@ -103,48 +105,57 @@ export default function CreateLedgerForm({
         </div>
       </div>
 
-      <div className="bg-slate-900 p-4 rounded-xl shadow-md border border-white/5">
-        <div className="flex items-center gap-2 mb-2 text-blue-400 font-black uppercase text-[9px] tracking-widest">
-          <IndianRupee size={12} /> Opening Balance
+      {/* OPENING BALANCE CARD */}
+      <div className="bg-slate-900 p-5 rounded-2xl shadow-lg border border-slate-800 relative overflow-hidden group">
+        {/* Decorative Glow */}
+        <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-600/20 rounded-full blur-3xl group-hover:bg-blue-600/30 transition-all duration-500" />
+
+        <div className="flex items-center gap-2 mb-3 text-blue-400 font-black uppercase text-[10px] tracking-widest relative z-10">
+          <IndianRupee size={14} /> Opening Balance Configuration
         </div>
-        <div className="grid grid-cols-12 gap-3">
+
+        <div className="grid grid-cols-12 gap-4 relative z-10">
           <div className="col-span-8">
             <input
               name="openingBalance"
               type="number"
               step="0.01"
               defaultValue={0}
-              className="w-full h-9 px-3 bg-white/10 border border-white/10 rounded-lg text-white font-mono text-sm font-bold text-right outline-none focus:bg-white/20"
+              className="w-full h-10 px-4 bg-white/10 border border-white/10 rounded-xl text-white font-mono text-lg font-bold text-right outline-none focus:bg-white/20 focus:border-blue-500/50 transition-all placeholder:text-white/30"
             />
           </div>
           <div className="col-span-4">
             <select
               name="balanceType"
-              className="w-full h-9 px-2 rounded-lg border border-white/10 bg-white/10 text-white text-[10px] font-black outline-none cursor-pointer"
+              className="w-full h-10 px-3 rounded-xl border border-white/10 bg-white/10 text-white text-xs font-bold uppercase tracking-wide outline-none cursor-pointer hover:bg-white/20 focus:ring-2 focus:ring-blue-500/50 transition-all"
             >
-              <option value="Dr" className="text-black">
-                DEBIT
+              <option value="Dr" className="text-slate-900 font-bold">
+                Debit
               </option>
-              <option value="Cr" className="text-black">
-                CREDIT
+              <option value="Cr" className="text-slate-900 font-bold">
+                Credit
               </option>
             </select>
           </div>
         </div>
       </div>
 
-      <div className="pt-2 flex justify-end">
+      {/* ACTION BUTTON */}
+      <div className="flex justify-end pt-2">
         <button
           disabled={isPending}
           type="submit"
-          className="bg-[#003366] hover:bg-black text-white px-6 h-10 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-md flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="group relative flex items-center justify-center gap-2 bg-slate-900 hover:bg-blue-600 text-white px-8 h-11 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-slate-900/10 hover:shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
         >
           {isPending ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={16} className="animate-spin" />
           ) : (
-            <Save size={14} />
-          )}{" "}
-          CREATE LEDGER
+            <Save
+              size={16}
+              className="group-hover:scale-110 transition-transform"
+            />
+          )}
+          <span>Create Ledger</span>
         </button>
       </div>
     </form>

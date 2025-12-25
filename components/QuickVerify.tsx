@@ -1,29 +1,33 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Search, Loader2, ArrowRight } from "lucide-react";
-import { findVoucherByCode } from "@/app/actions/voucher"; // Updated import
+import {
+  Search,
+  Loader2,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
+} from "lucide-react";
+import { findVoucherByCode } from "@/app/actions/voucher";
 import { useRouter } from "next/navigation";
 
 export default function QuickVerify({ companyId }: { companyId: number }) {
   const [txid, setTxid] = useState("");
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState("");
+  const [error, setError] = useState(false);
   const router = useRouter();
 
   const handleSearch = () => {
-    if (!txid || txid.length < 5) {
-      setError("Enter valid ID");
+    if (!txid || txid.length < 3) {
+      setError(true);
       return;
     }
-    setError("");
+    setError(false);
 
     startTransition(async () => {
-      // ✅ Call the new Find function (Search Only)
       const result = await findVoucherByCode(txid, companyId);
 
       if (result.success && result.id && result.type) {
-        // ✅ Redirect to the Voucher Details Page
         router.push(
           `/companies/${companyId}/vouchers/${result.type.toLowerCase()}/${
             result.id
@@ -31,42 +35,61 @@ export default function QuickVerify({ companyId }: { companyId: number }) {
         );
         setTxid("");
       } else {
-        setError("Not Found");
+        setError(true);
       }
     });
   };
 
   return (
-    <div className="bg-white p-1 rounded-lg flex items-center shadow-sm border border-slate-200">
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-slate-400">
-          <Search size={14} />
+    <div
+      className={`group flex items-center bg-white p-1 rounded-xl border shadow-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-indigo-500/20 w-full sm:w-auto
+        ${
+          error
+            ? "border-rose-300 ring-2 ring-rose-100"
+            : "border-slate-200 focus-within:border-indigo-500"
+        }
+      `}
+    >
+      <div className="relative flex-1">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          {error ? (
+            <AlertCircle size={14} className="text-rose-500" />
+          ) : (
+            <Search
+              size={14}
+              className="text-slate-400 group-focus-within:text-indigo-500 transition-colors"
+            />
+          )}
         </div>
         <input
           type="text"
           value={txid}
           onChange={(e) => {
             setTxid(e.target.value.toUpperCase());
-            setError("");
+            if (error) setError(false);
           }}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          placeholder="TXID Search..."
-          className={`text-xs font-mono pl-7 pr-2 py-1.5 rounded-md border-none focus:ring-0 w-32 placeholder:text-slate-400 uppercase tracking-widest ${
-            error ? "text-red-600 bg-red-50" : "text-slate-700 bg-transparent"
-          }`}
+          placeholder="Verify TXID..."
+          className={`h-9 w-32 sm:w-40 pl-9 pr-2 bg-transparent border-none rounded-lg text-xs font-mono font-bold outline-none uppercase tracking-wider placeholder:normal-case placeholder:font-sans placeholder:tracking-normal transition-colors
+            ${
+              error
+                ? "text-rose-600 placeholder:text-rose-300"
+                : "text-slate-700 placeholder:text-slate-400"
+            }
+          `}
         />
       </div>
 
       <button
         onClick={handleSearch}
-        disabled={isPending}
-        className="ml-1 bg-slate-900 hover:bg-slate-800 text-white p-1.5 rounded disabled:opacity-50 transition-colors"
-        title="Open Voucher"
+        disabled={isPending || !txid}
+        className="h-9 w-9 flex items-center justify-center bg-slate-900 hover:bg-indigo-600 text-white rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+        title="Locate Voucher"
       >
         {isPending ? (
-          <Loader2 size={12} className="animate-spin" />
+          <Loader2 size={14} className="animate-spin" />
         ) : (
-          <ArrowRight size={12} />
+          <ArrowRight size={14} />
         )}
       </button>
     </div>

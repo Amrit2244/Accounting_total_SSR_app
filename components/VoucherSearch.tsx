@@ -36,26 +36,32 @@ export default function VoucherSearch() {
   }, [query, pathname, router, searchParams]);
 
   return (
-    <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex-1 relative">
-      <div className="relative flex-1">
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+    <div className="relative flex-1 group min-w-[200px]">
+      <div
+        className={`flex items-center w-full bg-white border border-slate-200 rounded-xl shadow-sm transition-all duration-200
+          focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 hover:shadow-md
+        `}
+      >
+        <div className="pl-3 flex items-center justify-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
           {isPending ? (
-            <Loader2 size={14} className="animate-spin text-blue-500" />
+            <Loader2 size={16} className="animate-spin text-indigo-500" />
           ) : (
-            <Search size={14} />
+            <Search size={16} />
           )}
         </div>
+
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by Voucher No, TXID, or Ledger Name..."
-          className="w-full pl-9 pr-8 py-1.5 text-xs border-none focus:ring-0 placeholder:text-slate-400 font-medium outline-none bg-transparent"
+          placeholder="Search vouchers, TXID, or ledgers..."
+          className="w-full h-10 pl-3 pr-8 bg-transparent text-xs font-bold text-slate-700 outline-none placeholder:text-slate-400 placeholder:font-medium placeholder:tracking-normal tracking-wide transition-all"
         />
+
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 hover:bg-slate-100 p-0.5 rounded-full transition-all active:scale-95"
           >
             <X size={14} />
           </button>

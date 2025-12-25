@@ -1,14 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import LedgerPrintTemplate from "@/components/reports/LedgerPrintTemplate";
-
-type Transaction = {
-  id: number;
-  date: Date;
-  voucherNo: string;
-  type: string;
-  narration: string | null;
-  amount: number;
-};
+import { notFound } from "next/navigation";
 
 export default async function LedgerPrintPage({
   params,
@@ -21,74 +13,63 @@ export default async function LedgerPrintPage({
   const { ledgerId, from, to } = await searchParams;
   const companyId = parseInt(id);
 
-  if (!ledgerId) {
-    return <div className="p-10 text-center font-bold">No Ledger Selected</div>;
-  }
+  if (!ledgerId) return notFound();
 
   const lid = parseInt(ledgerId);
-  const ledger = await prisma.ledger.findUnique({ where: { id: lid } });
+  const ledger = await prisma.ledger.findUnique({
+    where: { id: lid },
+    include: { group: true },
+  });
   const company = await prisma.company.findUnique({ where: { id: companyId } });
 
-  if (!ledger) return <div className="p-10 text-center">Ledger not found.</div>;
+  if (!ledger || !company) return notFound();
 
-  // --- Date Logic ---
   const today = new Date();
   const currentYear =
     today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
-  const fromStr = from || `${currentYear}-04-01`;
-  const toStr = to || today.toISOString().split("T")[0];
-
-  const fromDate = new Date(fromStr);
-  const toDateEnd = new Date(toStr);
+  const fromDate = new Date(from || `${currentYear}-04-01`);
+  const toDateEnd = new Date(to || today.toISOString().split("T")[0]);
   toDateEnd.setHours(23, 59, 59, 999);
 
-  // --- 1. Calculate Previous Balance ---
+  // --- Calculate Balances (Existing logic remains unchanged) ---
   const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
+  const prevMovement = await Promise.all([
+    prisma.salesLedgerEntry.aggregate({
+      where: { ledgerId: lid, salesVoucher: prevFilter },
+      _sum: { amount: true },
+    }),
+    prisma.purchaseLedgerEntry.aggregate({
+      where: { ledgerId: lid, purchaseVoucher: prevFilter },
+      _sum: { amount: true },
+    }),
+    prisma.paymentLedgerEntry.aggregate({
+      where: { ledgerId: lid, paymentVoucher: prevFilter },
+      _sum: { amount: true },
+    }),
+    prisma.receiptLedgerEntry.aggregate({
+      where: { ledgerId: lid, receiptVoucher: prevFilter },
+      _sum: { amount: true },
+    }),
+    prisma.contraLedgerEntry.aggregate({
+      where: { ledgerId: lid, contraVoucher: prevFilter },
+      _sum: { amount: true },
+    }),
+    prisma.journalLedgerEntry.aggregate({
+      where: { ledgerId: lid, journalVoucher: prevFilter },
+      _sum: { amount: true },
+    }),
+  ]);
 
-  const [prevSales, prevPur, prevPay, prevRcpt, prevCntr, prevJrnl] =
-    await Promise.all([
-      prisma.salesLedgerEntry.aggregate({
-        where: { ledgerId: lid, salesVoucher: prevFilter },
-        _sum: { amount: true },
-      }),
-      prisma.purchaseLedgerEntry.aggregate({
-        where: { ledgerId: lid, purchaseVoucher: prevFilter },
-        _sum: { amount: true },
-      }),
-      prisma.paymentLedgerEntry.aggregate({
-        where: { ledgerId: lid, paymentVoucher: prevFilter },
-        _sum: { amount: true },
-      }),
-      prisma.receiptLedgerEntry.aggregate({
-        where: { ledgerId: lid, receiptVoucher: prevFilter },
-        _sum: { amount: true },
-      }),
-      prisma.contraLedgerEntry.aggregate({
-        where: { ledgerId: lid, contraVoucher: prevFilter },
-        _sum: { amount: true },
-      }),
-      prisma.journalLedgerEntry.aggregate({
-        where: { ledgerId: lid, journalVoucher: prevFilter },
-        _sum: { amount: true },
-      }),
-    ]);
+  const totalPrevMovement = prevMovement.reduce(
+    (acc, curr) => acc + (curr._sum.amount || 0),
+    0
+  );
+  const openingBalanceAtDate = ledger.openingBalance + totalPrevMovement;
 
-  const totalPrevMovement =
-    (prevSales._sum.amount || 0) +
-    (prevPur._sum.amount || 0) +
-    (prevPay._sum.amount || 0) +
-    (prevRcpt._sum.amount || 0) +
-    (prevCntr._sum.amount || 0) +
-    (prevJrnl._sum.amount || 0);
-
-  const openingBalance = ledger.openingBalance + totalPrevMovement;
-
-  // --- 2. Fetch Current Transactions ---
   const currentFilter = {
     date: { gte: fromDate, lte: toDateEnd },
     status: "APPROVED",
   };
-
   const [sales, purchase, payment, receipt, contra, journal] =
     await Promise.all([
       prisma.salesLedgerEntry.findMany({
@@ -117,7 +98,7 @@ export default async function LedgerPrintPage({
       }),
     ]);
 
-  const formatTx = (entry: any, type: string, vKey: string): Transaction => ({
+  const formatTx = (entry: any, type: string, vKey: string) => ({
     id: entry.id,
     date: entry[vKey].date,
     voucherNo: entry[vKey].voucherNo.toString(),
@@ -127,22 +108,47 @@ export default async function LedgerPrintPage({
   });
 
   const transactions = [
-    ...sales.map((e: any) => formatTx(e, "SALES", "salesVoucher")),
-    ...purchase.map((e: any) => formatTx(e, "PURCHASE", "purchaseVoucher")),
-    ...payment.map((e: any) => formatTx(e, "PAYMENT", "paymentVoucher")),
-    ...receipt.map((e: any) => formatTx(e, "RECEIPT", "receiptVoucher")),
-    ...contra.map((e: any) => formatTx(e, "CONTRA", "contraVoucher")),
-    ...journal.map((e: any) => formatTx(e, "JOURNAL", "journalVoucher")),
+    ...sales.map((e) => formatTx(e, "SALES", "salesVoucher")),
+    ...purchase.map((e) => formatTx(e, "PURCHASE", "purchaseVoucher")),
+    ...payment.map((e) => formatTx(e, "PAYMENT", "paymentVoucher")),
+    ...receipt.map((e) => formatTx(e, "RECEIPT", "receiptVoucher")),
+    ...contra.map((e) => formatTx(e, "CONTRA", "contraVoucher")),
+    ...journal.map((e) => formatTx(e, "JOURNAL", "journalVoucher")),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
-    <LedgerPrintTemplate
-      company={company}
-      ledger={ledger}
-      transactions={transactions}
-      openingBalance={openingBalance}
-      fromDate={fromDate}
-      toDate={toDateEnd}
-    />
+    <div className="relative min-h-screen bg-white">
+      {/* GLOBAL PRINT OVERRIDE */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        @media print {
+          body * { visibility: hidden !important; }
+          #print-zone, #print-zone * { visibility: visible !important; }
+          #print-zone { 
+            position: absolute !important; 
+            left: 0 !important; 
+            top: 0 !important; 
+            width: 100% !important; 
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          nav, aside, footer, .no-print { display: none !important; height: 0 !important; width: 0 !important; }
+        }
+      `,
+        }}
+      />
+
+      <div id="print-zone" className="relative z-10">
+        <LedgerPrintTemplate
+          company={company}
+          ledger={ledger}
+          transactions={transactions}
+          openingBalance={openingBalanceAtDate}
+          fromDate={fromDate}
+          toDate={toDateEnd}
+        />
+      </div>
+    </div>
   );
 }

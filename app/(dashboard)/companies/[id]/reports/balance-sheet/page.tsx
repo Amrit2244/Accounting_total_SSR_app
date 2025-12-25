@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, PieChart } from "lucide-react";
+import { ArrowLeft, PieChart, ChevronRight } from "lucide-react";
 import { notFound } from "next/navigation";
-import PrintButton from "@/components/PrintButton"; // Ensure this exists or remove if unused
+import PrintButton from "@/components/PrintButton";
 import ProfitLossDrillDown from "@/components/reports/ProfitLossDrillDown";
-import BalanceSheetFilter from "@/components/reports/BalanceSheetFilter"; // Import the new filter
+import BalanceSheetFilter from "@/components/reports/BalanceSheetFilter";
 
 const fmt = (v: number) =>
   Math.abs(v).toLocaleString("en-IN", {
@@ -37,7 +37,7 @@ export default async function BalanceSheetPage({
   const asOf = sp.date || todayStr;
 
   const asOfDate = new Date(asOf);
-  asOfDate.setHours(23, 59, 59, 999); // Include all transactions of the selected day
+  asOfDate.setHours(23, 59, 59, 999);
 
   // Common Filter for all Ledger Entries
   const voucherFilter = {
@@ -82,7 +82,6 @@ export default async function BalanceSheetPage({
       include: {
         salesItems: { where: { salesVoucher: voucherFilter } },
         purchaseItems: { where: { purchaseVoucher: voucherFilter } },
-        // Note: Stock Journal relation is typically 'stockJournal'
         journalEntries: { where: { stockJournal: voucherFilter } },
       },
     }),
@@ -270,98 +269,145 @@ export default async function BalanceSheetPage({
   const isBalanced = Math.abs(diff) < 0.01;
 
   const TotalRow = ({ amount }: { amount: number }) => (
-    <div className="flex justify-between px-3 py-2 bg-slate-100 border-t border-slate-200 border-b-4 border-double border-b-slate-400 font-black text-xs text-slate-900 mt-auto">
-      <span>Total</span>
-      <span className="font-mono">{fmt(amount)}</span>
+    <div className="flex justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 mt-auto">
+      <span className="font-black text-xs uppercase tracking-widest text-slate-900">
+        Total
+      </span>
+      <span className="font-mono font-bold text-sm text-slate-900">
+        ₹{fmt(amount)}
+      </span>
     </div>
   );
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-4 animate-in fade-in duration-500 h-[calc(100vh-64px)] flex flex-col font-sans">
-      <div className="flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
-            <PieChart size={18} />
-          </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20 print:hidden">
           <div>
-            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Dashboard
+              </Link>
+              <ChevronRight size={10} />
+              <Link
+                href={`/companies/${companyId}/reports`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Reports
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">Balance Sheet</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <PieChart className="text-indigo-600" size={32} />
               Balance Sheet
             </h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-              As on{" "}
+            <p className="text-slate-500 font-medium mt-2 max-w-xl">
+              Financial position statement as of{" "}
               {asOfDate.toLocaleDateString("en-IN", {
                 day: "numeric",
                 month: "long",
                 year: "numeric",
               })}
+              .
             </p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          {/* NEW DATE FILTER */}
-          <BalanceSheetFilter />
 
-          <PrintButton />
-          <Link
-            href={`/companies/${companyId}/reports`}
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 hover:text-slate-900 transition-all border border-slate-200 px-4 py-2 rounded-lg bg-white shadow-sm"
-          >
-            <ArrowLeft size={14} /> Back
-          </Link>
-        </div>
-      </div>
+          <div className="flex items-center gap-3">
+            <BalanceSheetFilter />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1">
-        <div className="flex border-b border-slate-200 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shrink-0">
-          <div className="w-1/2 flex justify-between px-4 py-2 border-r border-slate-700">
-            <span>Liabilities</span>
-            <span>Amount (₹)</span>
-          </div>
-          <div className="w-1/2 flex justify-between px-4 py-2">
-            <span>Assets</span>
-            <span>Amount (₹)</span>
+            <div className="h-8 w-px bg-slate-200 mx-1" />
+
+            <PrintButton />
+
+            <Link
+              href={`/companies/${companyId}/reports`}
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
+              title="Back to Reports"
+            >
+              <ArrowLeft size={20} />
+            </Link>
           </div>
         </div>
 
-        <div className="flex flex-1 min-h-0">
-          <div className="w-1/2 border-r border-slate-200 flex flex-col overflow-y-auto custom-scrollbar">
-            <div className="flex-1 p-1">
-              {liabilities.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-[10px] uppercase font-bold italic">
-                  No Liabilities Recorded
-                </div>
-              ) : (
-                liabilities.map((group: any) => (
-                  <ProfitLossDrillDown key={group.groupName} item={group} />
-                ))
-              )}
+        {/* REPORT CARD */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[600px] print:shadow-none print:border-none">
+          {/* Table Header */}
+          <div className="flex border-b border-slate-200 bg-slate-50">
+            <div className="w-1/2 px-6 py-3 border-r border-slate-200 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
+              <span>Liabilities</span>
+              <span>Amount (₹)</span>
             </div>
-            {!isBalanced && diff < 0 && (
-              <div className="px-3 py-2 bg-rose-50 text-rose-700 text-[10px] font-bold border-t border-rose-200">
-                Difference in Liabilities: {fmt(Math.abs(diff))}
-              </div>
-            )}
-            <TotalRow amount={grandTotal} />
+            <div className="w-1/2 px-6 py-3 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
+              <span>Assets</span>
+              <span>Amount (₹)</span>
+            </div>
           </div>
 
-          <div className="w-1/2 flex flex-col overflow-y-auto custom-scrollbar">
-            <div className="flex-1 p-1">
-              {assets.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-[10px] uppercase font-bold italic">
-                  No Assets Recorded
-                </div>
-              ) : (
-                assets.map((group: any) => (
-                  <ProfitLossDrillDown key={group.groupName} item={group} />
-                ))
-              )}
-            </div>
-            {!isBalanced && diff > 0 && (
-              <div className="px-3 py-2 bg-rose-50 text-rose-700 text-[10px] font-bold border-t border-rose-200">
-                Difference in Assets: {fmt(Math.abs(diff))}
+          {/* Table Body */}
+          <div className="flex flex-1 min-h-0">
+            {/* Liabilities Column */}
+            <div className="w-1/2 border-r border-slate-200 flex flex-col bg-slate-50/10">
+              <div className="flex-1 p-2 space-y-1 overflow-y-auto custom-scrollbar">
+                {liabilities.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      No Liabilities
+                    </span>
+                  </div>
+                ) : (
+                  liabilities.map((group: any) => (
+                    <ProfitLossDrillDown key={group.groupName} item={group} />
+                  ))
+                )}
               </div>
-            )}
-            <TotalRow amount={grandTotal} />
+
+              {!isBalanced && diff < 0 && (
+                <div className="px-6 py-3 bg-rose-50 border-t border-rose-100 text-rose-700 text-xs font-bold flex justify-between">
+                  <span>Difference in Liabilities</span>
+                  <span className="font-mono">{fmt(Math.abs(diff))}</span>
+                </div>
+              )}
+              <TotalRow amount={grandTotal} />
+            </div>
+
+            {/* Assets Column */}
+            <div className="w-1/2 flex flex-col">
+              <div className="flex-1 p-2 space-y-1 overflow-y-auto custom-scrollbar">
+                {assets.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      No Assets
+                    </span>
+                  </div>
+                ) : (
+                  assets.map((group: any) => (
+                    <ProfitLossDrillDown key={group.groupName} item={group} />
+                  ))
+                )}
+              </div>
+
+              {!isBalanced && diff > 0 && (
+                <div className="px-6 py-3 bg-rose-50 border-t border-rose-100 text-rose-700 text-xs font-bold flex justify-between">
+                  <span>Difference in Assets</span>
+                  <span className="font-mono">{fmt(Math.abs(diff))}</span>
+                </div>
+              )}
+              <TotalRow amount={grandTotal} />
+            </div>
           </div>
         </div>
       </div>

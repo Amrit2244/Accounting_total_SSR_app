@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, Edit, Save, X, Loader2, UserCog } from "lucide-react";
+import {
+  Trash2,
+  Edit,
+  Save,
+  X,
+  Loader2,
+  UserCog,
+  User,
+  ShieldCheck,
+} from "lucide-react";
 import { updateUser, deleteUser } from "@/app/actions/admin";
 
 export default function UserManagement({ users }: { users: any[] }) {
@@ -32,107 +41,151 @@ export default function UserManagement({ users }: { users: any[] }) {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      <table className="w-full text-sm text-left">
-        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-          <tr>
-            <th className="px-6 py-3">ID</th>
-            <th className="px-6 py-3">Username</th>
-            <th className="px-6 py-3">Created At</th>
-            <th className="px-6 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {users.map((user) => (
-            <tr
-              key={user.id}
-              className="hover:bg-slate-50/50 transition-colors"
-            >
-              <td className="px-6 py-4 font-mono text-slate-400">#{user.id}</td>
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[400px]">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left border-collapse">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              <th className="px-6 py-4 w-20">ID</th>
+              <th className="px-6 py-4">Username</th>
+              <th className="px-6 py-4">Role</th>
+              <th className="px-6 py-4 w-40">Created On</th>
+              <th className="px-6 py-4 text-right w-32">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {users.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-20 text-center">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <User className="text-slate-300" size={32} />
+                  </div>
+                  <p className="text-slate-500 font-bold text-sm">
+                    No users found.
+                  </p>
+                </td>
+              </tr>
+            ) : (
+              users.map((user) => (
+                <tr
+                  key={user.id}
+                  className={`group transition-colors ${
+                    editingId === user.id
+                      ? "bg-indigo-50/30"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <td className="px-6 py-4 font-mono text-xs font-bold text-slate-400">
+                    #{user.id.toString().padStart(3, "0")}
+                  </td>
 
-              {/* EDIT MODE vs VIEW MODE */}
-              <td className="px-6 py-4">
-                {editingId === user.id ? (
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="border border-blue-400 rounded px-2 py-1 outline-none text-slate-900 font-bold w-full max-w-[200px]"
-                    autoFocus
-                  />
-                ) : (
-                  <div className="flex items-center gap-2 font-bold text-slate-700">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                      <UserCog size={16} />
-                    </div>
-                    {user.username}
-                    {user.username === "admin" && (
-                      <span className="bg-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded border border-blue-200 uppercase">
-                        Super Admin
+                  {/* EDIT MODE vs VIEW MODE */}
+                  <td className="px-6 py-4">
+                    {editingId === user.id ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-sm">
+                          <UserCog size={16} />
+                        </div>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-9 px-3 rounded-lg border border-indigo-300 bg-white text-slate-900 font-bold text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none w-full max-w-[200px] shadow-sm transition-all"
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm ${
+                            user.username === "admin"
+                              ? "bg-rose-500"
+                              : "bg-slate-400"
+                          }`}
+                        >
+                          {user.username.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-slate-700 text-sm">
+                          {user.username}
+                        </span>
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    {user.username === "admin" ? (
+                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 text-[10px] font-black uppercase px-2 py-1 rounded border border-rose-100 tracking-wider">
+                        <ShieldCheck size={12} /> Super Admin
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase px-2 py-1 rounded border border-slate-200 tracking-wider">
+                        <User size={12} /> Standard User
                       </span>
                     )}
-                  </div>
-                )}
-              </td>
+                  </td>
 
-              <td className="px-6 py-4 text-slate-500 text-xs">
-                {new Date(user.createdAt).toLocaleDateString()}
-              </td>
+                  <td className="px-6 py-4 text-slate-500 text-xs font-mono font-medium">
+                    {new Date(user.createdAt).toLocaleDateString("en-IN", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </td>
 
-              <td className="px-6 py-4 text-right">
-                <div className="flex justify-end gap-2">
-                  {editingId === user.id ? (
-                    <>
-                      <button
-                        onClick={() => handleSave(user.id)}
-                        disabled={isPending}
-                        className="p-1.5 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 transition-colors"
-                      >
-                        {isPending ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Save size={16} />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="p-1.5 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 transition-colors"
-                      >
-                        <X size={16} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleEditClick(user)}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                        title="Edit User"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      {user.username !== "admin" && (
-                        <button
-                          onClick={() => handleDelete(user.id, user.username)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition-colors"
-                          title="Delete User"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {editingId === user.id ? (
+                        <>
+                          <button
+                            onClick={() => handleSave(user.id)}
+                            disabled={isPending}
+                            className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-70"
+                            title="Save Changes"
+                          >
+                            {isPending ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Save size={14} />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="p-2 bg-white border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 rounded-lg transition-colors shadow-sm"
+                            title="Cancel"
+                          >
+                            <X size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleEditClick(user)}
+                            className="p-2 bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 rounded-lg transition-colors shadow-sm"
+                            title="Edit User"
+                          >
+                            <Edit size={14} />
+                          </button>
+                          {user.username !== "admin" && (
+                            <button
+                              onClick={() =>
+                                handleDelete(user.id, user.username)
+                              }
+                              className="p-2 bg-white border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 rounded-lg transition-colors shadow-sm"
+                              title="Delete User"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {users.length === 0 && (
-        <div className="p-10 text-center text-slate-400 italic">
-          No users found.
-        </div>
-      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

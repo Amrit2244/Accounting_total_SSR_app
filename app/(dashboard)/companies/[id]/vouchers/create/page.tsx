@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   ChevronRight,
   Factory,
+  FilePlus,
 } from "lucide-react";
 
 export default async function CreateVoucherPage({
@@ -33,50 +34,50 @@ export default async function CreateVoucherPage({
       id: "CONTRA",
       label: "Contra",
       icon: ArrowLeftRight,
-      color: "text-slate-600",
-      active: "border-slate-600 text-slate-800",
+      activeColor: "bg-slate-700",
+      iconColor: "text-slate-400",
     },
     {
       id: "PAYMENT",
       label: "Payment",
       icon: CreditCard,
-      color: "text-orange-600",
-      active: "border-orange-500 text-orange-800",
+      activeColor: "bg-orange-600",
+      iconColor: "text-orange-500",
     },
     {
       id: "RECEIPT",
       label: "Receipt",
       icon: Wallet,
-      color: "text-green-600",
-      active: "border-green-500 text-green-800",
+      activeColor: "bg-emerald-600",
+      iconColor: "text-emerald-500",
     },
     {
       id: "JOURNAL",
       label: "Journal",
       icon: FileText,
-      color: "text-blue-600",
-      active: "border-blue-500 text-blue-800",
+      activeColor: "bg-blue-600",
+      iconColor: "text-blue-500",
     },
     {
       id: "SALES",
       label: "Sales",
       icon: ShoppingCart,
-      color: "text-teal-600",
-      active: "border-teal-500 text-teal-800",
+      activeColor: "bg-teal-600",
+      iconColor: "text-teal-500",
     },
     {
       id: "PURCHASE",
       label: "Purchase",
       icon: Truck,
-      color: "text-purple-600",
-      active: "border-purple-500 text-purple-800",
+      activeColor: "bg-purple-600",
+      iconColor: "text-purple-500",
     },
     {
       id: "STOCK_JOURNAL",
       label: "Manufacturing",
       icon: Factory,
-      color: "text-rose-600",
-      active: "border-rose-500 text-rose-800",
+      activeColor: "bg-rose-600",
+      iconColor: "text-rose-500",
     },
   ];
 
@@ -105,68 +106,109 @@ export default async function CreateVoucherPage({
   const isStockJournal = voucherType === "STOCK_JOURNAL";
 
   return (
-    <div className="max-w-[1400px] mx-auto p-4 space-y-4">
-      <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 mb-0.5">
-            <Link
-              href={`/companies/${companyId}/vouchers`}
-              className="hover:text-blue-600"
-            >
-              Daybook
-            </Link>
-            <ChevronRight size={10} />
-            <span className="text-slate-900">New Entry</span>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-8 space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
+          <div>
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Workspace
+              </Link>
+              <ChevronRight size={10} />
+              <Link
+                href={`/companies/${companyId}/vouchers`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Daybook
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">New Entry</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <FilePlus className="text-indigo-600" size={32} />
+              Create Voucher
+            </h1>
+            <p className="text-slate-500 font-medium mt-2">
+              Record a new {currentVoucher.label.toLowerCase()} transaction.
+            </p>
           </div>
-          <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-            Create {currentVoucher.label} Voucher
-          </h1>
+
+          <Link
+            href={`/companies/${companyId}/vouchers`}
+            className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
+            title="Back to Daybook"
+          >
+            <ArrowLeft size={20} />
+          </Link>
         </div>
-        <Link
-          href={`/companies/${companyId}/vouchers`}
-          className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 rounded-lg transition-all"
-        >
-          <ArrowLeft size={16} />
-        </Link>
-      </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-7 gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-        {voucherTypes.map((v: any) => {
-          const isActive = voucherType === v.id;
-          return (
-            <Link
-              key={v.id}
-              href={`?type=${v.id}`}
-              className={clsx(
-                "flex flex-col items-center justify-center py-2 rounded-lg transition-all border-b-2 text-[10px] font-black uppercase tracking-wide",
-                isActive
-                  ? `bg-white shadow-sm ${v.active}`
-                  : `hover:bg-white/60 border-transparent ${v.color}`
-              )}
-            >
-              <v.icon size={16} className="mb-1" /> {v.label}
-            </Link>
-          );
-        })}
-      </div>
+        {/* VOUCHER TYPE SELECTOR */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          {voucherTypes.map((v: any) => {
+            const isActive = voucherType === v.id;
+            return (
+              <Link
+                key={v.id}
+                href={`?type=${v.id}`}
+                className={clsx(
+                  "flex flex-col items-center justify-center py-3 px-2 rounded-xl transition-all duration-300 border",
+                  isActive
+                    ? `${v.activeColor} border-transparent text-white shadow-lg shadow-slate-300 scale-105 z-10`
+                    : "bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5"
+                )}
+              >
+                <v.icon
+                  size={18}
+                  className={clsx(
+                    "mb-1.5",
+                    isActive ? "text-white" : v.iconColor
+                  )}
+                />
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {v.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
 
-      <div className="bg-white p-6 border border-slate-200 shadow-sm rounded-xl min-h-[500px]">
-        {isStockJournal ? (
-          <StockJournalForm companyId={companyId} stockItems={items} />
-        ) : isInventory ? (
-          <SalesPurchaseForm
-            companyId={companyId}
-            type={voucherType}
-            ledgers={ledgers}
-            items={items}
-          />
-        ) : (
-          <VoucherForm
-            companyId={companyId}
-            ledgers={ledgers}
-            defaultType={voucherType}
-          />
-        )}
+        {/* FORM CONTAINER */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-visible relative min-h-[500px]">
+          {/* Decorative top strip */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-t-2xl" />
+
+          <div className="p-1">
+            {isStockJournal ? (
+              <StockJournalForm companyId={companyId} stockItems={items} />
+            ) : isInventory ? (
+              <SalesPurchaseForm
+                companyId={companyId}
+                type={voucherType}
+                ledgers={ledgers}
+                items={items}
+              />
+            ) : (
+              <VoucherForm
+                companyId={companyId}
+                ledgers={ledgers}
+                defaultType={voucherType}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

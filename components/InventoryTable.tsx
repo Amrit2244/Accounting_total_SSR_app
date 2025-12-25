@@ -1,7 +1,14 @@
 "use client";
 
 import { deleteBulkStockItems, deleteStockItem } from "@/app/actions/masters";
-import { Edit, Trash2, CheckSquare, Square } from "lucide-react";
+import {
+  Edit,
+  Trash2,
+  CheckSquare,
+  Square,
+  Package,
+  Archive,
+} from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -30,7 +37,12 @@ export default function InventoryTable({
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedIds.length} items?`)) return;
+    if (
+      !confirm(
+        `Are you sure you want to delete ${selectedIds.length} items? This cannot be undone.`
+      )
+    )
+      return;
     startTransition(async () => {
       await deleteBulkStockItems(selectedIds);
       setSelectedIds([]);
@@ -39,7 +51,7 @@ export default function InventoryTable({
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm("Delete this item?")) {
+    if (confirm("Are you sure you want to permanently delete this item?")) {
       startTransition(async () => {
         await deleteStockItem(id);
       });
@@ -47,50 +59,69 @@ export default function InventoryTable({
   };
 
   return (
-    <div className="mt-2">
+    <div className="mt-4 relative">
+      {/* BULK ACTION BAR */}
       {selectedIds.length > 0 && (
-        <div className="bg-blue-50 px-4 py-2 mb-2 rounded-lg border border-blue-100 flex justify-between items-center text-xs font-bold text-blue-800 animate-in fade-in">
-          <span>{selectedIds.length} selected</span>
+        <div className="absolute -top-12 left-0 right-0 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex justify-between items-center z-20 animate-in fade-in slide-in-from-bottom-2 shadow-sm">
+          <div className="flex items-center gap-2 text-indigo-800 font-bold text-xs">
+            <span className="bg-indigo-200 px-2 py-0.5 rounded text-[10px]">
+              {selectedIds.length}
+            </span>
+            <span>Items Selected</span>
+          </div>
           <button
             onClick={handleBulkDelete}
             disabled={isPending}
-            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 flex items-center gap-1"
+            className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide transition-colors shadow-sm"
           >
-            <Trash2 size={12} /> Delete
+            <Trash2 size={12} /> Delete Selected
           </button>
         </div>
       )}
 
-      <div className="overflow-x-auto border rounded-lg">
-        <table className="w-full text-left border-collapse text-[11px]">
-          <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b">
+      <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-sm bg-white">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="py-2 px-4 w-10 text-center">
+              <th className="py-3 px-4 w-12 text-center">
                 <button
                   onClick={toggleSelectAll}
-                  className="text-slate-400 hover:text-blue-600"
+                  className="text-slate-400 hover:text-indigo-600 transition-colors"
                 >
                   {items.length > 0 && selectedIds.length === items.length ? (
-                    <CheckSquare size={14} />
+                    <CheckSquare size={16} className="text-indigo-600" />
                   ) : (
-                    <Square size={14} />
+                    <Square size={16} />
                   )}
                 </button>
               </th>
-              <th className="py-2 px-4">Item Name</th>
-              <th className="py-2 px-4">Group</th>
-              <th className="py-2 px-4 text-right">Opening Qty</th>
-              <th className="py-2 px-4 text-right w-20">Action</th>
+              <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Item Name
+              </th>
+              <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Category Group
+              </th>
+              <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">
+                Current Stock
+              </th>
+              <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right w-24">
+                Actions
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+          <tbody className="divide-y divide-slate-100">
             {items.length === 0 ? (
               <tr>
-                <td
-                  colSpan={5}
-                  className="text-center py-8 text-slate-400 font-bold uppercase italic"
-                >
-                  No stock items found
+                <td colSpan={5} className="py-12 text-center">
+                  <div className="flex flex-col items-center justify-center opacity-50">
+                    <Package size={48} className="text-slate-300 mb-3" />
+                    <p className="text-sm font-bold text-slate-500">
+                      No inventory items found
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Get started by creating a new stock item.
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -103,56 +134,71 @@ export default function InventoryTable({
                       router.push(
                         `/companies/${companyId}/inventory/${item.id}`
                       )
-                    } // ✅ Row Click Navigation
-                    className={`hover:bg-slate-50 transition-colors cursor-pointer group ${
-                      isSelected ? "bg-blue-50/40" : ""
+                    }
+                    className={`group transition-colors cursor-pointer ${
+                      isSelected ? "bg-indigo-50/60" : "hover:bg-slate-50"
                     }`}
                   >
-                    <td className="py-2 px-4 text-center">
+                    <td
+                      className="py-3 px-4 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // ✅ Prevent row click
-                          toggleSelect(item.id);
-                        }}
-                        className="text-slate-400 hover:text-blue-600"
+                        onClick={() => toggleSelect(item.id)}
+                        className="text-slate-300 hover:text-indigo-600 transition-colors"
                       >
                         {isSelected ? (
-                          <CheckSquare size={14} className="text-blue-600" />
+                          <CheckSquare size={16} className="text-indigo-600" />
                         ) : (
-                          <Square size={14} />
+                          <Square size={16} />
                         )}
                       </button>
                     </td>
-                    <td className="py-2 px-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                      {item.name}
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-sm text-slate-800 group-hover:text-indigo-700 transition-colors">
+                        {item.name}
+                      </div>
+                      {item.partNumber && (
+                        <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                          SKU: {item.partNumber}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-2 px-4 text-[10px] uppercase font-bold text-slate-500">
-                      {item.group?.name || "-"}
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                        <Archive size={10} />
+                        {item.group?.name || "Uncategorized"}
+                      </span>
                     </td>
-                    <td className="py-2 px-4 text-right font-mono text-slate-900">
-                      {Number(item.quantity || 0)}{" "}
-                      <span className="text-[9px] text-slate-400 ml-1">
+                    <td className="py-3 px-4 text-right">
+                      <span className="font-mono font-bold text-sm text-slate-700">
+                        {Number(item.quantity || 0).toLocaleString()}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400 ml-1 uppercase">
                         {item.unit?.symbol}
                       </span>
                     </td>
-                    <td className="py-2 px-4 flex justify-end gap-2">
-                      <Link
-                        href={`/companies/${companyId}/inventory/${item.id}/edit`}
-                        onClick={(e) => e.stopPropagation()} // ✅ Prevent row click
-                        className="text-blue-500 hover:text-blue-700 p-1"
-                      >
-                        <Edit size={14} />
-                      </Link>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // ✅ Prevent row click
-                          handleDelete(item.id);
-                        }}
-                        disabled={isPending}
-                        className="text-slate-300 hover:text-red-600 p-1"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    <td
+                      className="py-3 px-4 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={`/companies/${companyId}/inventory/${item.id}/edit`}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Edit Item"
+                        >
+                          <Edit size={16} />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          disabled={isPending}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all disabled:opacity-50"
+                          title="Delete Item"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

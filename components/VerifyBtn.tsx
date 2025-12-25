@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Ban,
   ShieldCheck,
+  Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import confetti from "canvas-confetti";
@@ -16,12 +17,12 @@ export default function VerifyBtn({
   voucherId,
   type,
   isCreator,
-  companyId, // ✅ Added Prop
+  companyId,
 }: {
   voucherId: number;
   type: string;
   isCreator: boolean;
-  companyId: number; // ✅ Added Type
+  companyId: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +30,12 @@ export default function VerifyBtn({
   const router = useRouter();
 
   const handleVerify = async () => {
-    if (!confirm("Are you sure you want to authorize this voucher?")) return;
+    if (
+      !confirm(
+        "Are you sure you want to authorize this voucher? This action is logged."
+      )
+    )
+      return;
 
     setLoading(true);
     setError("");
@@ -77,24 +83,25 @@ export default function VerifyBtn({
       setShowSuccess(true);
 
       setTimeout(() => {
-        // ✅ Redirect to Voucher List
         router.push(`/companies/${companyId}/vouchers`);
-        router.refresh(); // Refresh data on the list page
-      }, 2500);
+        router.refresh();
+      }, 2000);
     }
   };
 
+  // --- MAKER-CHECKER BLOCKED STATE ---
   if (isCreator) {
     return (
-      <div className="flex flex-col items-end">
-        <button
-          disabled
-          className="bg-slate-100 text-slate-400 text-[10px] font-bold px-4 py-2 rounded flex items-center gap-2 border border-slate-200 cursor-not-allowed"
-          title="Maker-Checker Rule: You cannot verify a voucher you created."
-        >
-          <Ban size={14} />
-          Self-Verification Blocked
-        </button>
+      <div className="flex flex-col items-end gap-1.5 opacity-80 hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 text-slate-500 px-4 py-2.5 rounded-xl cursor-not-allowed select-none">
+          <Lock size={14} className="text-slate-400" />
+          <span className="text-[10px] font-black uppercase tracking-widest">
+            Self-Verification Locked
+          </span>
+        </div>
+        <p className="text-[9px] text-slate-400 font-bold pr-1 flex items-center gap-1">
+          <ShieldCheck size={10} /> Maker-Checker Rule Applied
+        </p>
       </div>
     );
   }
@@ -103,47 +110,53 @@ export default function VerifyBtn({
     <>
       {/* SUCCESS MODAL */}
       {showSuccess && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-xs mx-4 animate-in zoom-in-95 duration-300 transform scale-110">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4 border-4 border-emerald-50 shadow-emerald-200 shadow-lg">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-sm mx-4 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500" />
+
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-5 border border-emerald-100 shadow-emerald-100 shadow-lg">
               <ShieldCheck size={32} />
             </div>
-            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight mb-1">
-              Authorized!
+
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">
+              Voucher Authorized
             </h3>
-            <p className="text-xs text-slate-500 font-medium mb-6 leading-relaxed">
-              Redirecting to Daybook...
+
+            <p className="text-xs text-slate-500 font-medium mb-6 leading-relaxed px-4">
+              The transaction has been successfully verified and posted to the
+              ledger. Redirecting...
             </p>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-full">
-              <Loader2 size={12} className="animate-spin" /> Updating Records...
+
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              <Loader2 size={12} className="animate-spin text-indigo-500" />
+              <span>Updating Records</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* BUTTON */}
-      <div className="flex flex-col items-end gap-2">
+      {/* ACTION BUTTON */}
+      <div className="flex flex-col items-end gap-3">
         {error && (
-          <span className="text-[10px] text-red-600 font-bold bg-red-50 px-2 py-1 rounded border border-red-100 flex items-center gap-1 animate-in slide-in-from-right-2">
-            <AlertCircle size={10} /> {error}
-          </span>
+          <div className="text-[10px] text-rose-600 font-bold bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg flex items-center gap-2 animate-in slide-in-from-right-2 shadow-sm">
+            <AlertCircle size={12} /> {error}
+          </div>
         )}
+
         <button
           onClick={handleVerify}
           disabled={loading || showSuccess}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-6 py-2.5 rounded shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="group relative bg-emerald-600 hover:bg-emerald-500 text-white pl-5 pr-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-900/20 hover:shadow-emerald-600/30 transition-all active:scale-95 flex items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
         >
           {loading ? (
-            <>
-              <Loader2 size={14} className="animate-spin" />
-              Processing...
-            </>
+            <Loader2 size={16} className="animate-spin text-emerald-200" />
           ) : (
-            <>
-              <CheckCircle size={14} />
-              AUTHORIZE VOUCHER
-            </>
+            <CheckCircle
+              size={16}
+              className="text-emerald-200 group-hover:text-white transition-colors"
+            />
           )}
+          <span>{loading ? "Processing..." : "Authorize Voucher"}</span>
         </button>
       </div>
     </>

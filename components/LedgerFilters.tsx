@@ -9,6 +9,7 @@ import {
   Check,
   ChevronsUpDown,
   XCircle,
+  ArrowRight,
 } from "lucide-react";
 
 interface Ledger {
@@ -109,26 +110,31 @@ export default function LedgerFilters({
   };
 
   return (
-    <div className="flex flex-col md:flex-row items-center gap-3 p-1">
+    <div className="flex flex-col lg:flex-row items-end gap-4 p-1">
       {/* --- SMART SEARCH COMBOBOX --- */}
-      <div className="relative w-full md:w-80 group" ref={wrapperRef}>
+      <div className="relative w-full lg:w-96 group" ref={wrapperRef}>
+        <label className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 hidden lg:block tracking-widest ml-1">
+          Filter Account
+        </label>
         <div
-          className={`flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 ${
-            isOpen ? "ring-2 ring-blue-500/20 border-blue-500" : ""
+          className={`flex items-center bg-white border border-slate-200 rounded-xl px-3 h-11 shadow-sm transition-all group-focus-within:ring-2 group-focus-within:ring-indigo-500/20 group-focus-within:border-indigo-500 group-focus-within:shadow-md cursor-text ${
+            isOpen ? "ring-2 ring-indigo-500/20 border-indigo-500" : ""
           }`}
           onClick={() => setIsOpen(true)}
         >
           <Search
             size={16}
-            className={`text-slate-400 mr-2 ${isPending ? "hidden" : "block"}`}
+            className={`text-slate-400 mr-3 group-focus-within:text-indigo-500 transition-colors ${
+              isPending ? "hidden" : "block"
+            }`}
           />
           {isPending && (
-            <Loader2 size={16} className="text-blue-500 mr-2 animate-spin" />
+            <Loader2 size={16} className="text-indigo-500 mr-3 animate-spin" />
           )}
 
           <input
             type="text"
-            className="bg-transparent text-sm font-bold text-slate-700 outline-none w-full placeholder:text-slate-400 uppercase placeholder:normal-case"
+            className="bg-transparent text-sm font-bold text-slate-900 outline-none w-full placeholder:text-slate-400 placeholder:font-medium transition-all"
             placeholder="Search Ledger Account..."
             value={searchQuery}
             onChange={(e) => {
@@ -141,21 +147,24 @@ export default function LedgerFilters({
           {selectedId ? (
             <button
               onClick={clearSelection}
-              className="ml-2 text-slate-400 hover:text-rose-500"
+              className="ml-2 text-slate-300 hover:text-rose-500 transition-colors p-1 rounded-full hover:bg-rose-50"
             >
               <XCircle size={16} />
             </button>
           ) : (
-            <ChevronsUpDown size={16} className="ml-2 text-slate-400" />
+            <ChevronsUpDown size={16} className="ml-2 text-slate-300" />
           )}
         </div>
 
         {/* Dropdown Menu */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-72 overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-left">
+            <div className="sticky top-0 bg-slate-50 border-b border-slate-100 px-3 py-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              Select Account
+            </div>
             {filteredLedgers.length === 0 ? (
-              <div className="p-4 text-center text-xs font-bold text-slate-400">
-                No ledger found.
+              <div className="p-6 text-center text-xs font-medium text-slate-400">
+                No ledger found matching "{searchQuery}"
               </div>
             ) : (
               <ul className="py-1">
@@ -163,14 +172,16 @@ export default function LedgerFilters({
                   <li
                     key={ledger.id}
                     onClick={() => handleSelect(ledger)}
-                    className={`px-4 py-2.5 text-xs font-bold uppercase cursor-pointer flex items-center justify-between transition-colors ${
+                    className={`px-4 py-2.5 text-xs font-bold cursor-pointer flex items-center justify-between transition-colors group ${
                       selectedId === ledger.id
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-slate-600 hover:bg-slate-50"
+                        ? "bg-indigo-50 text-indigo-700"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }`}
                   >
-                    {ledger.name}
-                    {selectedId === ledger.id && <Check size={14} />}
+                    <span>{ledger.name}</span>
+                    {selectedId === ledger.id && (
+                      <Check size={14} className="text-indigo-600" />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -179,36 +190,41 @@ export default function LedgerFilters({
         )}
       </div>
 
-      <div className="h-8 w-px bg-slate-200 hidden md:block mx-1"></div>
-
       {/* --- DATE RANGE PICKER --- */}
-      <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
-        <div className="relative flex items-center">
-          <div className="absolute left-2.5 text-slate-400 pointer-events-none">
-            <Calendar size={14} />
+      <div className="flex-1 w-full lg:w-auto">
+        <label className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 hidden lg:block tracking-widest ml-1">
+          Date Range
+        </label>
+        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group-focus-within:border-indigo-200 group-focus-within:ring-2 group-focus-within:ring-indigo-100 h-11">
+          <div className="relative flex-1">
+            <Calendar
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              onBlur={() => applyFilters()}
+              className="w-full h-9 pl-9 pr-2 bg-transparent rounded-lg text-xs font-bold text-slate-700 outline-none focus:bg-slate-50 transition-colors uppercase cursor-pointer"
+            />
           </div>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            onBlur={() => applyFilters()}
-            className="bg-white border border-slate-200 text-xs font-bold text-slate-600 pl-9 pr-2 py-2 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 w-36 uppercase transition-all shadow-sm"
-          />
-        </div>
-        <span className="text-slate-300 font-black text-[10px] uppercase">
-          To
-        </span>
-        <div className="relative flex items-center">
-          <div className="absolute left-2.5 text-slate-400 pointer-events-none">
-            <Calendar size={14} />
+
+          <ArrowRight size={14} className="text-slate-300" />
+
+          <div className="relative flex-1">
+            <Calendar
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              onBlur={() => applyFilters()}
+              className="w-full h-9 pl-9 pr-2 bg-transparent rounded-lg text-xs font-bold text-slate-700 outline-none focus:bg-slate-50 transition-colors uppercase cursor-pointer"
+            />
           </div>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            onBlur={() => applyFilters()}
-            className="bg-white border border-slate-200 text-xs font-bold text-slate-600 pl-9 pr-2 py-2 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 w-36 uppercase transition-all shadow-sm"
-          />
         </div>
       </div>
     </div>

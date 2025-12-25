@@ -8,6 +8,9 @@ import {
   History,
   LayoutDashboard,
   Printer,
+  ChevronRight,
+  CreditCard,
+  Building2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -23,7 +26,6 @@ export default async function LedgerReportPage({
   const sp = await searchParams;
   const ledgerId = sp.ledgerId ? parseInt(sp.ledgerId) : null;
 
-  // --- Date Logic ---
   const today = new Date();
   const currentYear =
     today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
@@ -34,7 +36,6 @@ export default async function LedgerReportPage({
   const toDateEnd = new Date(to);
   toDateEnd.setHours(23, 59, 59, 999);
 
-  // --- Fetch Master List ---
   const ledgers = await prisma.ledger.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
@@ -56,9 +57,7 @@ export default async function LedgerReportPage({
   let periodQty = 0;
 
   if (ledgerId && selectedLedger) {
-    // 1. Calculate Previous Balance
     const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
-
     const getPrevSum = async (model: any, field: string) => {
       const res = await model.aggregate({
         where: { ledgerId, [field]: prevFilter },
@@ -76,16 +75,14 @@ export default async function LedgerReportPage({
       getPrevSum(prisma.journalLedgerEntry, "journalVoucher"),
     ]);
 
-    const totalPrevMovement = pSales + pPur + pPay + pRcpt + pCntr + pJrnl;
-    openingBalance = selectedLedger.openingBalance + totalPrevMovement;
+    openingBalance =
+      selectedLedger.openingBalance +
+      (pSales + pPur + pPay + pRcpt + pCntr + pJrnl);
 
-    // 2. Fetch Current Transactions
     const currentFilter = {
       date: { gte: fromDate, lte: toDateEnd },
       status: "APPROVED",
     };
-
-    // Helper for basic includes
     const commonInclude = (vKey: string) => ({
       [vKey]: {
         include: {
@@ -93,8 +90,6 @@ export default async function LedgerReportPage({
         },
       },
     });
-
-    // FIXED: Changed 'item' to 'stockItem' based on your error log
     const inventoryInclude = (vKey: string) => ({
       [vKey]: {
         include: {
@@ -134,52 +129,27 @@ export default async function LedgerReportPage({
         }),
       ]);
 
-    // Format Logic
     const formatTx = (entry: any, type: string, vKey: string) => {
       const voucher = entry[vKey];
       const otherEntry = voucher.ledgerEntries.find(
         (e: any) => e.ledgerId !== ledgerId
       );
-
-      const particularName =
-        otherEntry?.ledger?.name ||
-        (type === "SALES"
-          ? "Sales A/c"
-          : type === "PURCHASE"
-          ? "Purchase A/c"
-          : "As per details");
-
-      // --- Inventory Extraction Logic (Fixed: using stockItem) ---
-      let itemNames = "-";
-      let totalQty = 0;
-
-      if (voucher.inventoryEntries && voucher.inventoryEntries.length > 0) {
-        const items = voucher.inventoryEntries;
-        // Updated to use stockItem.name
-        itemNames = items
-          .map((i: any) => i.stockItem?.name || "Item")
-          .join(", ");
-        totalQty = items.reduce(
+      let totalQty =
+        voucher.inventoryEntries?.reduce(
           (sum: number, i: any) => sum + (Number(i.quantity) || 0),
           0
-        );
-      }
+        ) || 0;
 
       return {
         id: entry.id,
         date: voucher.date,
         voucherNo: voucher.voucherNo,
-        type: type,
+        type,
         txid: voucher.transactionCode,
-        particulars: particularName,
-        narration: voucher.narration,
-        // Inventory Fields
-        itemNames:
-          itemNames.length > 30
-            ? itemNames.substring(0, 30) + "..."
-            : itemNames,
+        particulars:
+          otherEntry?.ledger?.name ||
+          (type === "SALES" ? "Sales A/c" : "Purchase A/c"),
         quantity: totalQty,
-        // Money Fields
         debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
         credit: entry.amount > 0 ? entry.amount : 0,
         amount: entry.amount,
@@ -196,7 +166,6 @@ export default async function LedgerReportPage({
       ...journal.map((e) => formatTx(e, "JOURNAL", "journalVoucher")),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // 3. Calculate Running Balance
     let running = openingBalance;
     transactions = rawTxs.map((t) => {
       running += t.amount;
@@ -209,24 +178,43 @@ export default async function LedgerReportPage({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 font-sans">
-      <div className="max-w-[1600px] mx-auto space-y-8">
-        {/* --- HEADER --- */}
-        <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-black uppercase px-2 py-0.5 rounded border border-blue-200">
-                Financial Reports
-              </span>
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col overflow-x-hidden">
+      {/* FIX: Proper padding and overflow control. 
+         Responsive padding (p-4 to p-8) ensures the button is not cut off on smaller laptop screens.
+      */}
+      <div className="w-full max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6">
+        {/* HEADER SECTION - Adjusted for better visibility */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sticky top-0 z-30 print:hidden mt-2">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-indigo-600"
+              >
+                Dashboard
+              </Link>
+              <ChevronRight size={10} />
+              <Link
+                href={`/companies/${companyId}/reports`}
+                className="hover:text-indigo-600"
+              >
+                Reports
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">Ledger Statement</span>
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              <LayoutDashboard className="text-slate-400" size={28} />
-              Ledger Statement
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <Building2
+                className="text-indigo-600 hidden sm:block"
+                size={28}
+              />
+              Account Statement
             </h1>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+          {/* ACTIONS CONTAINER: Ensures Filters and Print button stay visible and wrap correctly */}
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <div className="flex-1 lg:flex-none min-w-[280px]">
               <LedgerFilters
                 ledgers={ledgers}
                 selectedId={ledgerId}
@@ -239,10 +227,10 @@ export default async function LedgerReportPage({
               <Link
                 href={`/companies/${companyId}/reports/ledger/print?ledgerId=${ledgerId}&from=${from}&to=${to}`}
                 target="_blank"
-                className="bg-slate-900 hover:bg-slate-800 text-white p-2 px-6 rounded-2xl shadow-lg shadow-slate-900/20 flex items-center justify-center gap-2 font-bold text-sm transition-all"
+                className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-slate-900/10 hover:bg-indigo-600 transition-all h-11 whitespace-nowrap min-w-[100px]"
               >
-                <Printer size={18} />
-                <span>Print</span>
+                <Printer size={16} />
+                <span>Print Report</span>
               </Link>
             )}
           </div>
@@ -250,73 +238,84 @@ export default async function LedgerReportPage({
 
         {selectedLedger ? (
           <>
-            {/* --- STATS CARDS --- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* STATS GRID */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StatCard
                 label="Opening Balance"
                 amount={openingBalance}
-                icon={<History className="text-slate-400" />}
+                icon={<History size={18} />}
                 type="neutral"
                 sub="Brought Forward"
               />
               <StatCard
-                label="Period Debit"
+                label="Total Debit"
                 amount={periodDebit}
-                icon={<ArrowUpRight className="text-emerald-500" />}
+                icon={<ArrowUpRight size={18} />}
                 type="debit"
                 sub="Total Outflow"
               />
               <StatCard
-                label="Period Credit"
+                label="Total Credit"
                 amount={periodCredit}
-                icon={<ArrowDownLeft className="text-rose-500" />}
+                icon={<ArrowDownLeft size={18} />}
                 type="credit"
                 sub="Total Inflow"
               />
               <StatCard
                 label="Closing Balance"
                 amount={closingBalance}
-                icon={<Wallet className="text-blue-500" />}
+                icon={<Wallet size={18} />}
                 type="balance"
                 isMain
                 sub="Carried Forward"
               />
             </div>
 
-            {/* --- TABLE HEADER INFO --- */}
-            <div className="px-1 flex items-center gap-3">
-              <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center border border-slate-200 text-slate-500 font-bold text-lg shadow-sm">
-                {selectedLedger.name.charAt(0)}
+            {/* TABLE SECTION */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
+                <div className="h-12 w-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm">
+                  <CreditCard size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 leading-none">
+                    {selectedLedger.name}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-[10px] font-bold text-white bg-indigo-500 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      {selectedLedger.group?.name || "General"}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-l pl-2 border-slate-300">
+                      Statement for {new Date(from).toLocaleDateString()} —{" "}
+                      {new Date(to).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 leading-none">
-                  {selectedLedger.name}
-                </h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">
-                  {selectedLedger.group?.name || "General Ledger"}
-                </p>
-              </div>
-            </div>
 
-            {/* --- THE NEW INTERACTIVE TABLE --- */}
-            <LedgerReportTable
-              transactions={transactions}
-              companyId={companyId}
-              periodDebit={periodDebit}
-              periodCredit={periodCredit}
-              periodQty={periodQty}
-              closingBalance={closingBalance}
-              openingBalance={openingBalance}
-              fromDate={fromDate}
-            />
+              <LedgerReportTable
+                transactions={transactions}
+                companyId={companyId}
+                periodDebit={periodDebit}
+                periodCredit={periodCredit}
+                periodQty={periodQty}
+                closingBalance={closingBalance}
+                openingBalance={openingBalance}
+                fromDate={fromDate}
+              />
+            </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-dashed border-slate-300 shadow-sm">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">
+          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border-2 border-dashed border-slate-200">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+              <LayoutDashboard className="text-slate-300" size={40} />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">
               No Ledger Selected
             </h2>
-            <p className="text-slate-500 font-medium max-w-md text-center">
-              Please select an account from the search bar above.
+            <p className="text-slate-500 text-sm max-w-sm text-center">
+              Select an account from the filters to view the transaction
+              history.
             </p>
           </div>
         )}
@@ -325,64 +324,78 @@ export default async function LedgerReportPage({
   );
 }
 
-// Keep the StatCard component here as it was
 function StatCard({ label, amount, icon, type, sub, isMain }: any) {
   const isNegative = amount < 0;
   const absAmount = Math.abs(amount);
-  const styles: any = {
-    neutral: "bg-white border-slate-200 text-slate-900",
-    debit: "bg-white border-slate-200 text-emerald-700",
-    credit: "bg-white border-slate-200 text-rose-700",
-    balance: isMain
-      ? "bg-blue-600 border-blue-600 text-white shadow-blue-200"
-      : "bg-white",
+  const themes: any = {
+    neutral: {
+      bg: "bg-white",
+      text: "text-slate-900",
+      icon: "text-slate-400 bg-slate-50",
+      border: "border-slate-200",
+    },
+    debit: {
+      bg: "bg-white",
+      text: "text-emerald-700",
+      icon: "text-emerald-600 bg-emerald-50",
+      border: "border-emerald-100",
+    },
+    credit: {
+      bg: "bg-white",
+      text: "text-rose-700",
+      icon: "text-rose-600 bg-rose-50",
+      border: "border-rose-100",
+    },
+    balance: {
+      bg: "bg-slate-900",
+      text: "text-white",
+      icon: "text-indigo-300 bg-white/10",
+      border: "border-slate-900",
+    },
   };
-  const currentStyle = styles[type];
+
+  const t = themes[type];
 
   return (
     <div
-      className={`p-6 rounded-2xl border shadow-sm flex flex-col justify-between h-36 relative overflow-hidden group hover:shadow-md transition-all ${currentStyle} ${
-        isMain ? "shadow-xl shadow-blue-900/20" : ""
-      }`}
+      className={`p-5 rounded-2xl border shadow-sm flex flex-col justify-between h-32 relative overflow-hidden transition-all hover:shadow-md ${t.bg} ${t.border}`}
     >
       {isMain && (
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+        <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
       )}
       <div className="flex justify-between items-start z-10">
-        <div>
-          <p
-            className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-              isMain ? "text-blue-100" : "text-slate-400"
-            }`}
-          >
-            {label}
-          </p>
-          <h3 className="text-2xl font-black tracking-tight flex items-baseline gap-1">
-            <span className="text-sm opacity-70">₹</span>
-            {absAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-            <span
-              className={`text-xs font-bold ml-1 ${
-                isMain ? "text-blue-200" : "text-slate-400"
-              }`}
-            >
-              {isNegative ? "Dr" : "Cr"}
-            </span>
-          </h3>
-        </div>
-        <div
-          className={`p-2.5 rounded-xl ${
-            isMain ? "bg-white/20 text-white" : "bg-slate-50 text-slate-500"
+        <div className={`p-2 rounded-xl ${t.icon}`}>{icon}</div>
+        <span
+          className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg ${
+            isMain
+              ? "bg-white/10 text-indigo-200"
+              : "bg-slate-50 text-slate-400"
           }`}
         >
-          {icon}
-        </div>
+          {sub}
+        </span>
       </div>
-      <div
-        className={`text-[10px] font-bold uppercase tracking-wide mt-auto flex items-center gap-1 ${
-          isMain ? "text-blue-100" : "text-slate-400"
-        }`}
-      >
-        {sub}
+      <div className="z-10 mt-2">
+        <p
+          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+            isMain ? "text-indigo-200" : "text-slate-400"
+          }`}
+        >
+          {label}
+        </p>
+        <h3
+          className={`text-2xl font-black tracking-tight flex items-baseline gap-1 ${t.text}`}
+        >
+          <span className="text-sm opacity-70">₹</span>
+          {absAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+          <span
+            className={`text-xs font-bold ml-1 ${
+              isMain ? "text-indigo-300" : "text-slate-400"
+            }`}
+          >
+            {isNegative ? "Dr" : "Cr"}
+          </span>
+        </h3>
       </div>
     </div>
   );

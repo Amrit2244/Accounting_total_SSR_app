@@ -7,10 +7,12 @@ import {
   TrendingUp,
   FolderOpen,
   FileText,
-  BookOpen, // ✅ Imported BookOpen icon
+  BookOpen,
+  ChevronRight,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
+// Custom Scale Icon for Trial Balance
 function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -40,7 +42,7 @@ type Report = {
   desc: string;
   href: string;
   icon: React.ElementType;
-  color: string;
+  colorClass: string; // Changed to colorClass for Tailwind classes
 };
 
 export default async function ReportsPage({
@@ -59,101 +61,127 @@ export default async function ReportsPage({
       desc: "Detailed transaction history & running balance.",
       href: `/companies/${companyId}/reports/ledger`,
       icon: Book,
-      color: "bg-blue-600",
+      colorClass: "bg-blue-600 shadow-blue-200",
     },
     {
-      name: "Sales Register", // ✅ Added Sales Register
+      name: "Sales Register",
       desc: "Monthly sales summary & detailed breakdown.",
       href: `/companies/${companyId}/reports/sales-register`,
       icon: BookOpen,
-      color: "bg-indigo-600",
+      colorClass: "bg-indigo-600 shadow-indigo-200",
     },
     {
       name: "Trial Balance",
       desc: "Consolidated debit/credit balances.",
       href: `/companies/${companyId}/reports/trial-balance`,
       icon: ScaleIcon,
-      color: "bg-purple-600",
+      colorClass: "bg-purple-600 shadow-purple-200",
     },
     {
       name: "Profit & Loss A/c",
       desc: "Income vs Expenses & Net Profit analysis.",
       href: `/companies/${companyId}/reports/profit-loss`,
       icon: TrendingUp,
-      color: "bg-teal-600",
+      colorClass: "bg-teal-600 shadow-teal-200",
     },
     {
       name: "Balance Sheet",
       desc: "Financial position: Assets vs Liabilities.",
       href: `/companies/${companyId}/reports/balance-sheet`,
       icon: PieChart,
-      color: "bg-emerald-600",
+      colorClass: "bg-emerald-600 shadow-emerald-200",
     },
     {
       name: "Stock Summary",
       desc: "Inventory valuation & closing stock.",
       href: `/companies/${companyId}/reports/stock-summary`,
       icon: Package,
-      color: "bg-orange-600",
+      colorClass: "bg-orange-600 shadow-orange-200",
     },
     {
       name: "Daybook Register",
       desc: "Chronological daily transaction log.",
-      href: `/companies/${companyId}/vouchers`,
+      href: `/companies/${companyId}/reports/daybook`, // Adjusted href to point to reports daybook if distinct
       icon: FolderOpen,
-      color: "bg-pink-600",
+      colorClass: "bg-rose-600 shadow-rose-200",
     },
   ];
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in duration-500">
-      {/* COMPACT HEADER */}
-      <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
-        <div className="p-2 bg-slate-900 rounded-lg text-white shadow-md">
-          <FileText size={20} />
-        </div>
-        <div>
-          <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-            Financial Reports
-          </h1>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-            Audit & Performance Analytics
-          </p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
 
-      {/* COMPACT GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {reports.map((report) => (
-          <Link
-            key={report.name}
-            href={report.href}
-            className="group bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all flex items-start gap-3 relative overflow-hidden"
-          >
-            {/* Hover Effect Background */}
-            <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-8 -mt-8 transition-colors group-hover:bg-blue-50" />
-
-            <div
-              className={`${report.color} text-white p-2.5 rounded-lg shadow-sm shrink-0 z-10 group-hover:scale-110 transition-transform`}
+      <div className="relative z-10 max-w-5xl mx-auto p-6 md:p-8 space-y-8">
+        {/* HEADER */}
+        <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
+          <div className="flex items-center gap-4">
+            <Link
+              href={`/companies/${companyId}`}
+              className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
+              title="Back to Dashboard"
             >
-              <report.icon size={18} />
-            </div>
+              <ArrowRight size={18} className="rotate-180" />
+            </Link>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
+                <FileText size={22} className="text-indigo-600" />
+                Financial Reports
+              </h1>
 
-            <div className="flex-1 z-10">
-              <h3 className="text-sm font-black text-slate-900 group-hover:text-blue-700 transition-colors uppercase tracking-tight">
-                {report.name}
-              </h3>
-              <p className="text-[10px] text-slate-500 font-medium mt-1 leading-tight">
-                {report.desc}
-              </p>
+              {/* Breadcrumbs */}
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <Link
+                  href={`/companies/${companyId}`}
+                  className="hover:text-indigo-600 transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <ChevronRight size={10} />
+                <span className="text-slate-900">Reports Hub</span>
+              </div>
             </div>
+          </div>
+        </div>
 
-            <ArrowRight
-              size={14}
-              className="text-slate-300 absolute bottom-4 right-4 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"
-            />
-          </Link>
-        ))}
+        {/* REPORTS GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {reports.map((report) => (
+            <Link
+              key={report.name}
+              href={report.href}
+              className="group relative bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all duration-300 flex items-start gap-4 overflow-hidden"
+            >
+              {/* Decorative Corner */}
+              <div className="absolute top-0 right-0 w-20 h-20 bg-slate-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-colors group-hover:bg-indigo-50/50" />
+
+              <div
+                className={`p-3 rounded-xl text-white shadow-lg shrink-0 z-10 group-hover:scale-110 transition-transform duration-300 ${report.colorClass}`}
+              >
+                <report.icon size={20} />
+              </div>
+
+              <div className="flex-1 z-10">
+                <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors mb-1">
+                  {report.name}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  {report.desc}
+                </p>
+
+                <div className="mt-4 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-indigo-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                  View Report <ArrowRight size={10} />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

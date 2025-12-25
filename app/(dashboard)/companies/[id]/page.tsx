@@ -15,6 +15,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TriangleAlert,
+  Calendar, // Using the Lucide icon directly
+  ChevronRight,
+  BarChart3,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 
@@ -28,15 +31,15 @@ export default async function CompanyDashboard({
   const { id } = await params;
   const companyId = parseInt(id);
 
-  // 1. Get the Financial Year context from cookies
+  // 1. Get the Financial Year context
   const context = await getAccountingContext();
 
-  // 2. Safety Check: If no context or ID mismatch, redirect to selection
+  // 2. Safety Check
   if (!context || context.companyId !== companyId) {
     redirect("/");
   }
 
-  // 3. Fetch Metrics filtered by the selected FY dates
+  // 3. Fetch Metrics
   const { cards, chart, recents } = await getDashboardMetrics(
     companyId,
     new Date(context.startDate),
@@ -47,251 +50,280 @@ export default async function CompanyDashboard({
     where: { companyId, quantity: { lte: prisma.stockItem.fields.minStock } },
   });
 
-  // Color Mapping to fix Tailwind dynamic class compilation issues
+  // Color Mapping for Metrics
   const metricCards = [
     {
       label: "Cash in Hand",
       val: cards.totalCash,
       icon: Wallet,
-      bg: "bg-emerald-50",
-      text: "text-emerald-600",
-      hover: "group-hover:bg-emerald-600",
+      colorClass: "text-emerald-600 bg-emerald-50 border-emerald-100",
     },
     {
       label: "Bank Balance",
       val: cards.totalBank,
       icon: Building2,
-      bg: "bg-blue-50",
-      text: "text-blue-600",
-      hover: "group-hover:bg-blue-600",
+      colorClass: "text-blue-600 bg-blue-50 border-blue-100",
     },
     {
       label: "Receivables",
       val: cards.totalDebtors,
       icon: TrendingUp,
-      bg: "bg-orange-50",
-      text: "text-orange-600",
-      hover: "group-hover:bg-orange-600",
+      colorClass: "text-amber-600 bg-amber-50 border-amber-100",
     },
     {
       label: "Payables",
       val: cards.totalCreditors,
       icon: TrendingDown,
-      bg: "bg-rose-50",
-      text: "text-rose-600",
-      hover: "group-hover:bg-rose-600",
+      colorClass: "text-rose-600 bg-rose-50 border-rose-100",
     },
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 1. FINANCIAL YEAR BADGE */}
-      <div className="flex items-center gap-2">
-        <div className="px-3 py-1 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-2">
-          <Calendar size={12} />
-          FY: {new Date(context.startDate).getFullYear()} -{" "}
-          {new Date(context.endDate).getFullYear()}
-        </div>
-      </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 pb-20">
+      {/* --- BACKGROUND PATTERN --- */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
 
-      {/* 2. COMPACT REORDER ALERT */}
-      {lowStockItems.length > 0 && (
-        <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl flex items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-rose-500 text-white rounded-lg shadow-sm">
-              <TriangleAlert size={18} />
-            </div>
-            <p className="text-rose-900 text-xs font-bold uppercase tracking-tight">
-              Low Stock Alert:{" "}
-              <span className="underline decoration-rose-300 font-black">
-                {/* ✅ FIXED: Added explicit : any type for 'i' */}
-                {lowStockItems.map((i: any) => i.name).join(", ")}
+      <div className="relative z-10 space-y-8 max-w-7xl mx-auto p-6 md:p-8">
+        {/* 1. HEADER & ACTIONS */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                <Calendar size={10} />
+                FY: {new Date(context.startDate).getFullYear()}-
+                {new Date(context.endDate).getFullYear()}
               </span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
+              Executive Overview
+            </h1>
+            <p className="text-slate-500 font-medium mt-1">
+              Financial performance snapshot for{" "}
+              {new Date(context.startDate).toLocaleDateString()} —{" "}
+              {new Date(context.endDate).toLocaleDateString()}
             </p>
           </div>
+
           <Link
-            href={`/companies/${companyId}/inventory`}
-            className="px-3 py-1.5 bg-rose-900 text-white text-[10px] font-black uppercase rounded-lg hover:bg-black transition-colors"
+            href={`/companies/${companyId}/vouchers/create`}
+            className="group inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl shadow-slate-900/10 hover:shadow-indigo-600/20 hover:-translate-y-0.5"
           >
-            Manage Stock
+            <Plus size={16} /> New Entry
           </Link>
         </div>
-      )}
 
-      {/* 3. COMPACT HEADER */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-black tracking-tight text-slate-900 uppercase">
-            Executive Overview
-          </h1>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-            Period: {new Date(context.startDate).toLocaleDateString()} —{" "}
-            {new Date(context.endDate).toLocaleDateString()}
-          </p>
-        </div>
-        <Link
-          href={`/companies/${companyId}/vouchers/create`}
-          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-200"
-        >
-          <Plus size={14} /> New Entry
-        </Link>
-      </div>
-
-      {/* 4. METRIC GRID */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {metricCards.map((c) => (
-          <div
-            key={c.label}
-            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-500 transition-all group"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div
-                className={`p-2 ${c.bg} ${c.text} rounded-lg ${c.hover} group-hover:text-white transition-colors`}
-              >
-                <c.icon size={16} />
+        {/* 2. ALERTS (If Any) */}
+        {lowStockItems.length > 0 && (
+          <div className="animate-in slide-in-from-top-2 duration-500 bg-rose-50 border border-rose-100 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="p-2.5 bg-white border border-rose-100 text-rose-600 rounded-lg shadow-sm">
+                <TriangleAlert size={20} />
               </div>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              <div>
+                <h4 className="text-sm font-bold text-rose-900">
+                  Inventory Alert
+                </h4>
+                <p className="text-xs text-rose-700 mt-0.5">
+                  Low stock detected for:{" "}
+                  <span className="font-bold">
+                    {lowStockItems.length} items
+                  </span>
+                  <span className="opacity-75 hidden sm:inline">
+                    {" "}
+                    (
+                    {lowStockItems
+                      .slice(0, 3)
+                      .map((i: any) => i.name)
+                      .join(", ")}
+                    ...)
+                  </span>
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/companies/${companyId}/inventory`}
+              className="px-4 py-2 bg-white border border-rose-200 text-rose-700 text-xs font-bold uppercase rounded-lg hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all shadow-sm"
+            >
+              Resolve
+            </Link>
+          </div>
+        )}
+
+        {/* 3. METRIC CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          {metricCards.map((c) => (
+            <div
+              key={c.label}
+              className="group relative bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all duration-300"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-2.5 rounded-xl border ${c.colorClass}`}>
+                  <c.icon size={18} />
+                </div>
+                {/* Decorative Pill */}
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-200 group-hover:bg-indigo-500 transition-colors" />
+              </div>
+
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
                 {c.label}
               </p>
+              <h3 className="text-2xl font-black font-mono tracking-tight text-slate-900">
+                ₹{c.val.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </h3>
             </div>
-            <h3
-              className={`text-lg font-black font-mono tracking-tighter text-slate-900`}
-            >
-              ₹{c.val.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-            </h3>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {/* 5. ANALYTICS & QUICK ACTIONS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-black text-slate-900 uppercase tracking-widest text-[10px]">
-              Revenue Analytics
-            </h3>
-            <div className="text-[9px] font-black uppercase bg-slate-100 px-2 py-1 rounded text-slate-500">
-              Selected FY
+        {/* 4. MAIN DASHBOARD AREA */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+          {/* CHART SECTION */}
+          <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="flex justify-between items-center mb-8">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
+                  <BarChart3 size={20} />
+                </div>
+                <h3 className="font-bold text-slate-900 uppercase tracking-wide text-xs">
+                  Revenue Analytics
+                </h3>
+              </div>
+              <div className="text-[10px] font-bold uppercase bg-slate-50 border border-slate-100 px-3 py-1 rounded-full text-slate-500">
+                Current FY
+              </div>
+            </div>
+
+            <div className="h-[300px] w-full">
+              <DashboardCharts data={chart} />
             </div>
           </div>
-          <div className="h-[240px]">
-            <DashboardCharts data={chart} />
+
+          {/* SIDEBAR: Quick Actions */}
+          <div className="space-y-6">
+            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200/60">
+              <h3 className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-4 ml-1">
+                Quick Access
+              </h3>
+              <div className="grid gap-3">
+                {[
+                  {
+                    label: "Ledger Master",
+                    icon: Book,
+                    href: "ledgers",
+                    color: "text-amber-600",
+                  },
+                  {
+                    label: "Inventory",
+                    icon: Package,
+                    href: "inventory",
+                    color: "text-cyan-600",
+                  },
+                  {
+                    label: "Bank Reconciliation",
+                    icon: Landmark,
+                    href: "banking/brs",
+                    color: "text-violet-600",
+                  },
+                ].map((item) => (
+                  <Link
+                    key={item.label}
+                    href={`/companies/${companyId}/${item.href}`}
+                    className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon
+                        size={18}
+                        className={`${item.color} group-hover:scale-110 transition-transform`}
+                      />
+                      <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">
+                        {item.label}
+                      </span>
+                    </div>
+                    <ChevronRight
+                      size={14}
+                      className="text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all"
+                    />
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h3 className="font-black text-slate-400 uppercase tracking-widest text-[9px] ml-2">
-            Quick Access
-          </h3>
-          <div className="grid gap-2">
-            {[
-              {
-                label: "Ledger Master",
-                icon: Book,
-                bg: "bg-amber-50",
-                text: "text-amber-600",
-                hover: "hover:bg-amber-600",
-                href: "ledgers",
-              },
-              {
-                label: "Inventory Manager",
-                icon: Package,
-                bg: "bg-cyan-50",
-                text: "text-cyan-600",
-                hover: "hover:bg-cyan-600",
-                href: "inventory",
-              },
-              {
-                label: "Bank Reco",
-                icon: Landmark,
-                bg: "bg-violet-50",
-                text: "text-violet-600",
-                hover: "hover:bg-violet-600",
-                href: "banking/brs",
-              },
-            ].map((item) => (
-              <Link
-                key={item.label}
-                href={`/companies/${companyId}/${item.href}`}
-                className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-blue-400 transition-all group"
+        {/* 5. RECENT POSTINGS TABLE */}
+        <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+            <h3 className="font-black text-slate-900 uppercase tracking-widest text-[10px]">
+              Recent Postings
+            </h3>
+            <Link
+              href={`/companies/${companyId}/vouchers`}
+              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+            >
+              View Daybook
+            </Link>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {recents.map((v: any) => (
+              <div
+                key={v.id}
+                className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors group"
               >
-                <div
-                  className={`p-2 ${item.bg} ${item.text} rounded-lg group-hover:${item.hover} group-hover:text-white transition-all`}
-                >
-                  <item.icon size={16} />
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`h-10 w-10 rounded-xl flex items-center justify-center border ${
+                      v.type === "SALES"
+                        ? "bg-emerald-50 border-emerald-100 text-emerald-600"
+                        : "bg-slate-50 border-slate-200 text-slate-400"
+                    }`}
+                  >
+                    {v.type === "SALES" ? (
+                      <ArrowUpRight size={18} strokeWidth={2.5} />
+                    ) : (
+                      <ArrowDownRight size={18} strokeWidth={2.5} />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900 leading-tight group-hover:text-indigo-700 transition-colors">
+                      {v.entries[0]?.ledger?.name || "Draft Entry"}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        #{v.voucherNo}
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-slate-300" />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {v.type}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-slate-700">
-                  {item.label}
-                </span>
-              </Link>
+
+                <div className="text-right">
+                  <p className="text-sm font-black font-mono text-slate-900">
+                    ₹{Math.abs(v.entries[0]?.amount || 0).toFixed(2)}
+                  </p>
+                  <span
+                    className={`inline-block mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                      v.status === "APPROVED"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {v.status === "APPROVED" ? "Posted" : "Draft"}
+                  </span>
+                </div>
+              </div>
             ))}
           </div>
         </div>
       </div>
-
-      {/* 6. RECENT ACTIVITIES TABLE */}
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center font-black uppercase tracking-widest text-[10px]">
-          <span>Recent Postings (FY Only)</span>
-          <Link
-            href={`/companies/${companyId}/vouchers`}
-            className="text-blue-600 hover:underline"
-          >
-            View Daybook
-          </Link>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {/* ✅ FIXED: Added explicit : any type for 'v' */}
-          {recents.map((v: any) => (
-            <div
-              key={v.id}
-              className="px-6 py-3 flex items-center justify-between hover:bg-blue-50/20 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                    v.type === "SALES"
-                      ? "bg-emerald-50 text-emerald-600"
-                      : "bg-slate-50 text-slate-400"
-                  }`}
-                >
-                  {v.type === "SALES" ? (
-                    <ArrowUpRight size={14} />
-                  ) : (
-                    <ArrowDownRight size={14} />
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-900 leading-none">
-                    {v.entries[0]?.ledger?.name || "Draft Entry"}
-                  </p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-tighter">
-                    #{v.voucherNo} • {v.type}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-black font-mono">
-                  ₹{Math.abs(v.entries[0]?.amount || 0).toFixed(2)}
-                </p>
-                <span
-                  className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
-                    v.status === "APPROVED"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  {v.status === "APPROVED" ? "Posted" : "Draft"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
-}
-
-function Calendar({ size }: { size: number }) {
-  return <Book size={size} />;
 }

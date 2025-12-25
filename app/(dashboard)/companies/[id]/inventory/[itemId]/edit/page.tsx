@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, PackageCheck, ChevronRight } from "lucide-react";
+import { ArrowLeft, PackageCheck, ChevronRight, PenLine } from "lucide-react";
 import EditInventoryForm from "@/components/forms/EditInventoryForm";
 import { notFound } from "next/navigation";
 
@@ -23,50 +23,63 @@ export default async function EditItemPage({
   if (!item) return notFound();
 
   return (
-    // ✅ Added overflow-visible to ensure dropdowns aren't clipped
-    <div className="max-w-2xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-visible">
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-10 border-b border-slate-200 pb-8">
-        <div>
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-2xl mx-auto p-6 md:p-8 space-y-6">
+        {/* HEADER */}
+        <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
+          <div className="flex items-center gap-4">
             <Link
               href={`/companies/${companyId}/inventory`}
-              className="hover:text-blue-600 transition-colors"
+              className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
+              title="Back to Inventory"
             >
-              Inventory
+              <ArrowLeft size={18} />
             </Link>
-            <ChevronRight size={12} />
-            <span className="text-slate-900">Edit Item</span>
-          </div>
-          <h1 className="text-4xl font-black text-slate-900 flex items-center gap-3 tracking-tighter">
-            <div className="p-2 bg-blue-600 rounded-xl shadow-lg shadow-blue-200">
-              <PackageCheck className="text-white" size={24} />
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
+                <PenLine size={22} className="text-indigo-600" />
+                Update Stock Item
+              </h1>
+
+              {/* Breadcrumbs */}
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <Link
+                  href={`/companies/${companyId}/inventory`}
+                  className="hover:text-indigo-600 transition-colors"
+                >
+                  Inventory
+                </Link>
+                <ChevronRight size={10} />
+                <span className="text-slate-900">Edit {item.name}</span>
+              </div>
             </div>
-            Update Item
-          </h1>
-          <p className="text-slate-500 mt-3 font-medium">
-            Modify details for{" "}
-            <span className="text-slate-900 font-bold">{item.name}</span>
-          </p>
+          </div>
         </div>
 
-        <Link
-          href={`/companies/${companyId}/inventory`}
-          className="px-5 h-11 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
-        >
-          <ArrowLeft size={18} /> Back
-        </Link>
-      </div>
+        {/* FORM CONTAINER */}
+        {/* overflow-visible is crucial for dropdowns to pop out correctly */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-visible relative">
+          {/* Decorative top strip */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-t-2xl" />
 
-      {/* FORM CARD */}
-      {/* ✅ Added overflow-visible here as well */}
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 md:p-12 overflow-visible relative z-10">
-        <EditInventoryForm
-          item={item}
-          companyId={companyId}
-          groups={groups}
-          units={units}
-        />
+          <div className="p-1">
+            <EditInventoryForm
+              item={item}
+              companyId={companyId}
+              groups={groups}
+              units={units}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
+import {
+  Landmark,
+  ArrowRight,
+  CalendarDays,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 
 export default async function BRSPage({
   params,
@@ -23,8 +30,12 @@ export default async function BRSPage({
   });
 
   let transactions: any[] = [];
+  let selectedLedgerName = "";
 
   if (ledgerId) {
+    const selectedLedger = bankLedgers.find((l) => l.id === ledgerId);
+    selectedLedgerName = selectedLedger?.name || "";
+
     // 2. Fetch from all 6 separate tables
     const [sales, purchase, payment, receipt, contra, journal] =
       await Promise.all([
@@ -65,7 +76,7 @@ export default async function BRSPage({
       bankDate: entry.bankDate || null,
     });
 
-    // 4. Combine and Sort (Added explicit types for Ubuntu Build)
+    // 4. Combine and Sort
     transactions = [
       ...sales.map((e: any) => formatEntry(e, "SALES", "salesVoucher")),
       ...purchase.map((e: any) =>
@@ -79,103 +90,209 @@ export default async function BRSPage({
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Bank Reconciliation (BRS)
-        </h1>
-      </div>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 pb-20">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
 
-      {/* Ledger Selector */}
-      <form className="flex gap-4 items-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold text-slate-500 uppercase">
-            Select Bank Account
-          </label>
-          <select
-            name="ledgerId"
-            defaultValue={ledgerId || ""}
-            className="border rounded-lg p-2 text-sm w-64 outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">-- Choose Ledger --</option>
-            {bankLedgers.map((l: any) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
+      <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 space-y-6">
+        {/* HEADER SECTION */}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
+              <div className="p-2 bg-slate-900 rounded-lg text-white shadow-lg shadow-slate-900/20">
+                <Landmark size={24} />
+              </div>
+              Bank Reconciliation
+            </h1>
+            <p className="text-slate-500 font-medium mt-2 max-w-2xl">
+              Reconcile your bank statements with system entries. Enter the
+              'Bank Date' for cleared transactions to update the reconciliation
+              status.
+            </p>
+          </div>
+
+          {/* Ledger Selector Card */}
+          <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
+            <form className="flex items-center gap-2">
+              <select
+                name="ledgerId"
+                defaultValue={ledgerId || ""}
+                className="h-10 border-none bg-slate-50 rounded-lg pl-3 pr-8 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 w-64 cursor-pointer hover:bg-slate-100 transition-colors appearance-none"
+              >
+                <option value="" disabled>
+                  Select Bank Account...
+                </option>
+                {bankLedgers.map((l: any) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              <button className="h-10 px-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-indigo-600/20 flex items-center gap-2">
+                Load Data <ArrowRight size={14} />
+              </button>
+            </form>
+          </div>
         </div>
-        <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 transition-all">
-          View Transactions
-        </button>
-      </form>
 
-      {/* Transactions Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b">
-            <tr>
-              <th className="p-4">Date</th>
-              <th className="p-4">Vch Type</th>
-              <th className="p-4">Vch No</th>
-              <th className="p-4">Narration</th>
-              <th className="p-4 text-right">Debit</th>
-              <th className="p-4 text-right">Credit</th>
-              <th className="p-4 text-center">Bank Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {transactions.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="p-10 text-center text-slate-400 italic"
-                >
-                  {ledgerId
-                    ? "No transactions found"
-                    : "Select a bank ledger to begin reconciliation"}
-                </td>
-              </tr>
-            ) : (
-              transactions.map((tx: any) => (
-                <tr
-                  key={`${tx.type}-${tx.id}`}
-                  className="hover:bg-slate-50 transition-colors"
-                >
-                  <td className="p-4">
-                    {format(new Date(tx.date), "dd MMM yyyy")}
-                  </td>
-                  <td className="p-4">
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded border bg-slate-100">
-                      {tx.type}
-                    </span>
-                  </td>
-                  <td className="p-4 font-mono">{tx.voucherNo}</td>
-                  <td className="p-4 text-slate-500 truncate max-w-[200px]">
-                    {tx.narration || "-"}
-                  </td>
-                  <td className="p-4 text-right font-mono text-red-600">
-                    {tx.amount < 0 ? Math.abs(tx.amount).toFixed(2) : ""}
-                  </td>
-                  <td className="p-4 text-right font-mono text-emerald-600">
-                    {tx.amount > 0 ? Math.abs(tx.amount).toFixed(2) : ""}
-                  </td>
-                  <td className="p-4 text-center">
-                    <input
-                      type="date"
-                      className="border rounded px-2 py-1 text-xs"
-                      defaultValue={
-                        tx.bankDate
-                          ? format(new Date(tx.bankDate), "yyyy-MM-dd")
-                          : ""
-                      }
-                    />
-                  </td>
+        {/* MAIN CONTENT CARD */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+          {/* Toolbar / Info Bar */}
+          {ledgerId && (
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Active Ledger:
+                </span>
+                <span className="text-sm font-black text-slate-900 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
+                  {selectedLedgerName}
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  {transactions.filter((t: any) => t.bankDate).length} Cleared
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  {transactions.filter((t: any) => !t.bankDate).length} Pending
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Table Area */}
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-white border-b border-slate-200 sticky top-0 z-10">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 w-32">
+                    Date
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 w-32">
+                    Type / No
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Particulars
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-32">
+                    Debit
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right w-32">
+                    Credit
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center w-48 bg-slate-50/50 border-l border-slate-100">
+                    <div className="flex items-center justify-center gap-1">
+                      <CalendarDays size={12} /> Bank Date
+                    </div>
+                  </th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-32 text-center">
+                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
+                        <AlertCircle className="text-slate-300" size={32} />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900">
+                        No Transactions Found
+                      </h3>
+                      <p className="text-slate-500 text-sm mt-1">
+                        {ledgerId
+                          ? "There are no approved transactions for this bank ledger yet."
+                          : "Please select a bank account from the dropdown above to start."}
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.map((tx: any) => {
+                    const isCleared = !!tx.bankDate;
+                    return (
+                      <tr
+                        key={`${tx.type}-${tx.id}`}
+                        className="group hover:bg-slate-50/80 transition-colors"
+                      >
+                        <td className="px-6 py-4 text-xs font-bold text-slate-700">
+                          {format(new Date(tx.date), "dd MMM yyyy")}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              {tx.type}
+                            </span>
+                            <span className="text-xs font-mono font-bold text-slate-900">
+                              #{tx.voucherNo}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p
+                            className="text-xs font-medium text-slate-600 truncate max-w-xs"
+                            title={tx.narration}
+                          >
+                            {tx.narration || (
+                              <span className="text-slate-300 italic">
+                                No narration
+                              </span>
+                            )}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-xs font-bold text-slate-900">
+                          {tx.amount < 0 && (
+                            <span className="text-rose-600">
+                              {Math.abs(tx.amount).toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-xs font-bold text-slate-900">
+                          {tx.amount > 0 && (
+                            <span className="text-emerald-600">
+                              {Math.abs(tx.amount).toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className={`px-6 py-4 border-l border-slate-100 text-center transition-colors ${
+                            isCleared ? "bg-emerald-50/30" : "bg-slate-50/30"
+                          }`}
+                        >
+                          <div className="relative inline-block w-full max-w-[140px]">
+                            <input
+                              type="date"
+                              className={`w-full text-xs font-bold px-3 py-1.5 rounded-lg border outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all text-center
+                                                        ${
+                                                          isCleared
+                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                                                        }`}
+                              defaultValue={
+                                tx.bankDate
+                                  ? format(new Date(tx.bankDate), "yyyy-MM-dd")
+                                  : ""
+                              }
+                            />
+                            {isCleared && (
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600">
+                                <CheckCircle2 size={12} />
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

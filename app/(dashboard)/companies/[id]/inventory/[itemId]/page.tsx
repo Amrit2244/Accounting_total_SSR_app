@@ -9,11 +9,11 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   History,
-  Filter,
-  FileText,
   Layers,
+  ChevronRight,
+  Hash,
 } from "lucide-react";
-import DateRangeFilter from "@/components/DateRangeFilter"; // Ensure you have this component
+import DateRangeFilter from "@/components/DateRangeFilter";
 
 // --- HELPER: Calculate Opening Balance Dynamic ---
 async function getOpeningBalance(
@@ -56,12 +56,9 @@ async function getOpeningBalance(
     }),
   ]);
 
-  // Formula: Opening + Purchase(In) - Sales(Out) + Journal(Net)
-  // Assuming DB stores Sales Qty as Positive absolute. If negative, adjust sign.
-  // Standard logic:
   const inQty = prePurch._sum.quantity || 0;
-  const outQty = preSales._sum.quantity || 0; // Sales usually reduce stock
-  const jrnQty = preJrn._sum.quantity || 0; // Journals can be +/-
+  const outQty = preSales._sum.quantity || 0;
+  const jrnQty = preJrn._sum.quantity || 0;
 
   return (item.openingQty || 0) + inQty - outQty + jrnQty;
 }
@@ -78,10 +75,9 @@ export default async function StockItemDetailPage({
   const companyId = parseInt(id);
   const sItemId = parseInt(itemId);
 
-  // --- 1. Date Logic (Default = All Time) ---
+  // --- 1. Date Logic ---
   const startDate = p.from ? new Date(p.from) : undefined;
   const endDate = p.to ? new Date(p.to) : undefined;
-
   if (endDate) endDate.setHours(23, 59, 59, 999);
 
   // --- 2. Fetch Master Data ---
@@ -95,7 +91,7 @@ export default async function StockItemDetailPage({
   // --- 3. Calculate Opening Balance ---
   const openingBalance = await getOpeningBalance(sItemId, companyId, startDate);
 
-  // --- 4. Fetch Transactions (With Optional Date Filter) ---
+  // --- 4. Fetch Transactions ---
   const dateFilter: any = {};
   if (startDate && endDate) {
     dateFilter.date = { gte: startDate, lte: endDate };
@@ -176,44 +172,82 @@ export default async function StockItemDetailPage({
   });
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 space-y-8">
         {/* --- HEADER --- */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
-            <Link
-              href={`/companies/${id}/inventory`}
-              className="group p-3 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-white hover:border-blue-300 hover:text-blue-600 hover:shadow-md transition-all duration-200"
-            >
-              <ArrowLeft
-                size={20}
-                className="group-hover:-translate-x-1 transition-transform"
-              />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-1 bg-slate-200/50 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200">
-                  Stock Item
-                </span>
-                {item.group && (
-                  <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-indigo-100">
-                    {item.group.name}
-                  </span>
-                )}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+          <div className="space-y-4">
+            {/* Navigation */}
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              <Link
+                href={`/companies/${companyId}`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Dashboard
+              </Link>
+              <ChevronRight size={10} />
+              <Link
+                href={`/companies/${companyId}/inventory`}
+                className="hover:text-indigo-600 transition-colors"
+              >
+                Inventory
+              </Link>
+              <ChevronRight size={10} />
+              <span className="text-slate-900">Item Detail</span>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <Link
+                href={`/companies/${companyId}/inventory`}
+                className="mt-1 p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
+              >
+                <ArrowLeft size={20} />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                  {item.name}
+                  {item.group && (
+                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-indigo-100">
+                      {item.group.name}
+                    </span>
+                  )}
+                </h1>
+                <div className="flex items-center gap-4 mt-2">
+                  {item.partNumber && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                      <Hash size={12} className="text-slate-400" />
+                      Part:{" "}
+                      <span className="font-mono font-bold text-slate-700">
+                        {item.partNumber}
+                      </span>
+                    </div>
+                  )}
+                  {item.unit && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                      <Package size={12} className="text-slate-400" />
+                      Base Unit:{" "}
+                      <span className="font-bold text-slate-700">
+                        {item.unit.symbol}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-                {item.name}
-              </h1>
-              {item.partNumber && (
-                <p className="text-slate-400 font-bold text-xs mt-1">
-                  Part No: {item.partNumber}
-                </p>
-              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="p-3 bg-slate-50 text-slate-400 rounded-xl border border-slate-100">
+          {/* Date Filter */}
+          <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex items-center">
+            <div className="px-3 text-slate-400 border-r border-slate-100">
               <Calendar size={18} />
             </div>
             <DateRangeFilter />
@@ -221,12 +255,12 @@ export default async function StockItemDetailPage({
         </div>
 
         {/* --- SUMMARY CARDS --- */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard
             title="Opening Balance"
             value={openingBalance}
             unit={item.unit?.symbol}
-            icon={<History />}
+            icon={<History size={18} />}
             theme="gray"
             subtext={
               startDate
@@ -238,100 +272,100 @@ export default async function StockItemDetailPage({
             title="Total Inwards"
             value={periodIn}
             unit={item.unit?.symbol}
-            icon={<ArrowDownLeft />}
-            theme="green"
-            subtext="Selected Period"
+            icon={<ArrowDownLeft size={18} />}
+            theme="emerald"
+            subtext="Period Addition"
           />
           <SummaryCard
             title="Total Outwards"
             value={periodOut}
             unit={item.unit?.symbol}
-            icon={<ArrowUpRight />}
-            theme="red"
-            subtext="Selected Period"
+            icon={<ArrowUpRight size={18} />}
+            theme="rose"
+            subtext="Period Reduction"
           />
           <SummaryCard
             title="Current Balance"
             value={currentBalance}
             unit={item.unit?.symbol}
-            icon={<Package />}
-            theme="blue"
+            icon={<Layers size={18} />}
+            theme="indigo"
+            subtext="Available Stock"
             isMain
           />
         </div>
 
         {/* --- LEDGER TABLE --- */}
-        <div className="bg-white border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/40 overflow-hidden flex flex-col">
-          {/* Table Header */}
-          <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white/50 backdrop-blur-sm">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-              <Layers size={16} className="text-blue-500" />
-              Item Ledger
-            </h3>
-            <span className="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold uppercase rounded-full">
-              {history.length} Transactions
-            </span>
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+          {/* Table Header Info */}
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest">
+                Item Ledger
+              </h3>
+              <span className="w-1 h-1 rounded-full bg-slate-300" />
+              <span className="text-xs text-slate-500 font-medium">
+                {history.length} Transactions
+              </span>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="flex-1 overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 text-[10px] uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                  <th className="px-6 py-4 font-black">Date</th>
-                  <th className="px-6 py-4 font-black">Details</th>
-                  <th className="px-6 py-4 font-black text-right text-emerald-600 bg-emerald-50/30 border-l border-emerald-100/50">
+                <tr className="bg-white text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-200">
+                  <th className="px-6 py-4 font-bold w-32">Date</th>
+                  <th className="px-6 py-4 font-bold">Particulars</th>
+                  <th className="px-6 py-4 font-bold text-right w-32 bg-emerald-50/30 border-l border-emerald-100/50 text-emerald-600">
                     Inwards
                   </th>
-                  <th className="px-6 py-4 font-black text-right text-rose-600 bg-rose-50/30 border-l border-rose-100/50">
+                  <th className="px-6 py-4 font-bold text-right w-32 bg-rose-50/30 border-l border-rose-100/50 text-rose-600">
                     Outwards
                   </th>
-                  <th className="px-6 py-4 font-black text-right">Rate</th>
-                  <th className="px-6 py-4 font-black text-right text-slate-800 bg-slate-100/50 border-l border-slate-200/50">
+                  <th className="px-6 py-4 font-bold text-right w-32">Rate</th>
+                  <th className="px-6 py-4 font-bold text-right w-32 bg-slate-50 border-l border-slate-200">
                     Balance
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {/* OPENING ROW */}
-                <tr className="bg-yellow-50/20">
-                  <td className="px-6 py-4 font-bold text-slate-400 text-xs">
+                <tr className="bg-amber-50/30">
+                  <td className="px-6 py-4 font-bold text-slate-500 text-xs">
                     {startDate ? format(startDate, "dd MMM yyyy") : "—"}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="inline-block px-2 py-1 rounded bg-yellow-100 text-yellow-700 text-[10px] font-black uppercase tracking-wide">
+                    <span className="inline-flex items-center px-2 py-1 rounded bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wide">
                       Opening Balance
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right bg-emerald-50/5 border-l border-emerald-100/20"></td>
                   <td className="px-6 py-4 text-right bg-rose-50/5 border-l border-rose-100/20"></td>
                   <td className="px-6 py-4 text-right"></td>
-                  <td className="px-6 py-4 text-right font-black font-mono text-slate-800 text-xs bg-slate-50/30 border-l border-slate-100">
-                    {openingBalance.toFixed(2)}{" "}
-                    <span className="text-[9px] text-slate-400">
-                      {item.unit?.symbol}
-                    </span>
+                  <td className="px-6 py-4 text-right font-black font-mono text-slate-800 text-xs bg-slate-50/50 border-l border-slate-200">
+                    {openingBalance.toFixed(2)}
                   </td>
                 </tr>
 
                 {/* TRANSACTIONS */}
                 {history.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center">
-                      <div className="flex flex-col items-center gap-3 opacity-60">
-                        <Package size={40} className="text-slate-300" />
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">
-                          No transactions found in this period
-                        </p>
+                    <td colSpan={6} className="py-20 text-center">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-slate-50 mb-3">
+                        <Package size={20} className="text-slate-300" />
                       </div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                        No transactions found
+                      </p>
                     </td>
                   </tr>
                 ) : (
                   history.map((row) => (
                     <tr
                       key={row.id}
-                      className="group hover:bg-slate-50/80 transition-colors"
+                      className="group hover:bg-slate-50 transition-colors"
                     >
-                      <td className="px-6 py-3.5 text-xs font-bold text-slate-500 whitespace-nowrap">
+                      <td className="px-6 py-3.5 text-xs font-bold text-slate-600 whitespace-nowrap">
                         {format(new Date(row.date), "dd MMM yyyy")}
                       </td>
                       <td className="px-6 py-3.5">
@@ -340,19 +374,19 @@ export default async function StockItemDetailPage({
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
                                 row.type === "SALES"
-                                  ? "bg-rose-400"
+                                  ? "bg-rose-500"
                                   : row.type === "PURCHASE"
-                                  ? "bg-emerald-400"
-                                  : "bg-blue-400"
+                                  ? "bg-emerald-500"
+                                  : "bg-blue-500"
                               }`}
-                            ></span>
-                            <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
+                            />
+                            <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
                               {row.type.replace("_", " ")}
                             </span>
                           </div>
                           <Link
                             href={`/companies/${companyId}/vouchers/${row.type}/${row.voucherId}/edit`}
-                            className="font-mono text-[11px] font-bold text-blue-500 hover:text-blue-700 hover:underline mt-0.5 pl-3.5"
+                            className="font-mono text-xs font-bold text-slate-900 hover:text-indigo-600 hover:underline mt-0.5 pl-3.5"
                           >
                             #{row.voucherNo}
                           </Link>
@@ -360,24 +394,20 @@ export default async function StockItemDetailPage({
                       </td>
 
                       {/* Inwards */}
-                      <td className="px-6 py-3.5 text-right bg-emerald-50/5 group-hover:bg-emerald-50/10 border-l border-emerald-100/30 transition-colors">
-                        {row.qtyIn > 0 ? (
-                          <div className="font-mono text-xs font-bold text-emerald-700">
+                      <td className="px-6 py-3.5 text-right bg-emerald-50/10 group-hover:bg-emerald-50/20 border-l border-emerald-100/30">
+                        {row.qtyIn > 0 && (
+                          <span className="font-mono text-xs font-bold text-emerald-600">
                             +{row.qtyIn.toLocaleString("en-IN")}
-                          </div>
-                        ) : (
-                          <span className="text-slate-200 text-xs">—</span>
+                          </span>
                         )}
                       </td>
 
                       {/* Outwards */}
-                      <td className="px-6 py-3.5 text-right bg-rose-50/5 group-hover:bg-rose-50/10 border-l border-rose-100/30 transition-colors">
-                        {row.qtyOut > 0 ? (
-                          <div className="font-mono text-xs font-bold text-rose-700">
+                      <td className="px-6 py-3.5 text-right bg-rose-50/10 group-hover:bg-rose-50/20 border-l border-rose-100/30">
+                        {row.qtyOut > 0 && (
+                          <span className="font-mono text-xs font-bold text-rose-600">
                             -{row.qtyOut.toLocaleString("en-IN")}
-                          </div>
-                        ) : (
-                          <span className="text-slate-200 text-xs">—</span>
+                          </span>
                         )}
                       </td>
 
@@ -387,14 +417,14 @@ export default async function StockItemDetailPage({
                           ? `₹${row.rate.toLocaleString("en-IN", {
                               minimumFractionDigits: 2,
                             })}`
-                          : "-"}
+                          : "—"}
                       </td>
 
                       {/* Balance */}
-                      <td className="px-6 py-3.5 text-right bg-slate-50/30 group-hover:bg-slate-100/50 border-l border-slate-200/50 transition-colors">
-                        <div className="font-mono text-xs font-black text-slate-800">
+                      <td className="px-6 py-3.5 text-right bg-slate-50/50 group-hover:bg-slate-100 border-l border-slate-200">
+                        <span className="font-mono text-xs font-black text-slate-800">
                           {row.balance.toFixed(2)}
-                        </div>
+                        </span>
                       </td>
                     </tr>
                   ))
@@ -418,36 +448,50 @@ function SummaryCard({
   isMain,
   subtext,
 }: any) {
-  const styles: any = {
-    gray: "bg-white border-slate-200 text-slate-600",
-    blue: "bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-blue-600 shadow-blue-200",
-    green: "bg-white border-slate-200 text-emerald-700",
-    red: "bg-white border-slate-200 text-rose-700",
+  const themes: any = {
+    gray: {
+      bg: "bg-white",
+      text: "text-slate-600",
+      icon: "bg-slate-50 text-slate-500",
+      border: "border-slate-200",
+    },
+    indigo: {
+      bg: "bg-slate-900",
+      text: "text-white",
+      icon: "bg-white/10 text-indigo-300",
+      border: "border-slate-900",
+    },
+    emerald: {
+      bg: "bg-white",
+      text: "text-emerald-700",
+      icon: "bg-emerald-50 text-emerald-600",
+      border: "border-emerald-100",
+    },
+    rose: {
+      bg: "bg-white",
+      text: "text-rose-700",
+      icon: "bg-rose-50 text-rose-600",
+      border: "border-rose-100",
+    },
   };
 
-  const iconStyles: any = {
-    gray: "bg-slate-100 text-slate-500",
-    blue: "bg-white/20 text-white",
-    green: "bg-emerald-50 text-emerald-600",
-    red: "bg-rose-50 text-rose-600",
-  };
+  const t = themes[theme] || themes.gray;
 
   return (
     <div
-      className={`p-6 rounded-3xl border shadow-sm flex flex-col justify-between h-36 relative overflow-hidden group hover:shadow-md transition-shadow ${styles[theme]}`}
+      className={`p-5 rounded-2xl border shadow-sm flex flex-col justify-between h-32 relative overflow-hidden transition-all hover:shadow-md ${t.bg} ${t.border}`}
     >
-      {/* Background Decor */}
       {isMain && (
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+        <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
       )}
 
       <div className="flex justify-between items-start z-10">
-        <div className={`p-3 rounded-2xl ${iconStyles[theme]}`}>{icon}</div>
+        <div className={`p-2 rounded-xl ${t.icon}`}>{icon}</div>
         {subtext && (
           <span
-            className={`text-[9px] font-bold uppercase tracking-widest py-1 px-2 rounded-lg ${
+            className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg ${
               isMain
-                ? "bg-white/10 text-blue-100"
+                ? "bg-white/10 text-indigo-200"
                 : "bg-slate-50 text-slate-400"
             }`}
           >
@@ -456,21 +500,21 @@ function SummaryCard({
         )}
       </div>
 
-      <div className="z-10">
+      <div className="z-10 mt-2">
         <p
-          className={`text-[10px] font-black uppercase tracking-widest mb-1 opacity-80 ${
-            isMain ? "text-blue-100" : "text-slate-400"
+          className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${
+            isMain ? "text-indigo-200" : "text-slate-400"
           }`}
         >
           {title}
         </p>
         <div className="flex items-baseline gap-1">
-          <h2 className="text-3xl font-black tracking-tight">
+          <h2 className={`text-2xl font-black tracking-tight ${t.text}`}>
             {value.toLocaleString("en-IN")}
           </h2>
           <span
             className={`text-xs font-bold ${
-              isMain ? "text-blue-200" : "text-slate-400"
+              isMain ? "text-indigo-300" : "text-slate-400"
             }`}
           >
             {unit}

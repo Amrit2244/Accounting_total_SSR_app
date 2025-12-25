@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Command } from "cmdk";
-
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Calculator,
@@ -15,12 +14,16 @@ import {
   Box,
   Search,
   BookOpen,
+  ArrowRight,
+  MoveUp,
+  MoveDown,
+  CornerDownLeft,
 } from "lucide-react";
 
 export default function CommandPalette() {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
-  const params = useParams(); // ✅ Get params to fix the Settings link
+  const params = useParams();
 
   // Toggle the menu when ⌘K or Ctrl+K is pressed
   React.useEffect(() => {
@@ -34,7 +37,6 @@ export default function CommandPalette() {
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  // Helper to handle navigation and close
   const runCommand = React.useCallback((command: () => void) => {
     setOpen(false);
     command();
@@ -43,55 +45,53 @@ export default function CommandPalette() {
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
-        {/* 1. The Backdrop Overlay */}
-        <Dialog.Overlay className="fixed inset-0 z-[999] bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" />
+        {/* Backdrop */}
+        <Dialog.Overlay className="fixed inset-0 z-[999] bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-200" />
 
-        {/* 2. The Modal Content */}
-        <Dialog.Content className="fixed left-1/2 top-[15vh] z-[999] w-full max-w-2xl -translate-x-1/2 p-4 outline-none animate-in zoom-in-95 slide-in-from-top-4 duration-200">
-          {/* ✅ ACCESSIBILITY FIX: Hidden Title */}
-          <Dialog.Title className="sr-only">Global Command Menu</Dialog.Title>
+        {/* Modal Content */}
+        <Dialog.Content className="fixed left-1/2 top-[15vh] z-[999] w-full max-w-xl -translate-x-1/2 p-4 outline-none animate-in zoom-in-95 slide-in-from-top-4 duration-200">
+          <Dialog.Title className="sr-only">Command Menu</Dialog.Title>
 
-          {/* 3. The Command Interface */}
-          <Command className="bg-white rounded-xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col w-full">
+          <Command className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col w-full ring-1 ring-slate-900/5 font-sans">
             {/* INPUT AREA */}
-            <div className="flex items-center border-b border-slate-100 px-3">
-              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+            <div className="flex items-center border-b border-slate-100 px-4">
+              <Search className="mr-3 h-5 w-5 shrink-0 text-indigo-500" />
               <Command.Input
                 placeholder="Type a command or search..."
-                className="flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-50 font-medium"
+                className="flex h-14 w-full rounded-md bg-transparent py-3 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
               />
               <div className="flex items-center gap-1">
-                <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-slate-50 px-1.5 font-mono text-[10px] font-medium text-slate-500 opacity-100">
-                  <span className="text-xs">ESC</span>
+                <kbd className="pointer-events-none inline-flex h-6 select-none items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 font-mono text-[10px] font-bold text-slate-500 shadow-sm">
+                  ESC
                 </kbd>
               </div>
             </div>
 
             {/* RESULTS LIST */}
-            <Command.List className="max-h-[300px] overflow-y-auto overflow-x-hidden p-2 custom-scrollbar">
-              <Command.Empty className="py-6 text-center text-sm text-slate-500">
-                No results found.
+            <Command.List className="max-h-[350px] overflow-y-auto overflow-x-hidden p-2 scroll-smooth">
+              <Command.Empty className="py-12 text-center text-sm text-slate-500 font-medium">
+                No matching commands found.
               </Command.Empty>
 
               {/* GROUP: NAVIGATION */}
               <Command.Group
-                heading="Go to..."
-                className="text-[10px] font-black uppercase text-slate-400 px-2 py-1.5 mb-1 tracking-widest"
+                heading="Navigation"
+                className="text-[10px] font-black uppercase text-slate-400 px-2 py-2 tracking-widest"
               >
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-indigo-50 aria-selected:text-indigo-700 cursor-pointer transition-all group"
                   onSelect={() => runCommand(() => router.push("/"))}
                 >
                   <LayoutDashboard
-                    size={14}
-                    className="text-slate-400 group-aria-selected:text-blue-600"
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-indigo-600 transition-colors"
                   />
-                  <span>Select Company</span>
+                  <span>Select Workspace</span>
                   <Shortcut>D</Shortcut>
                 </Command.Item>
 
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-indigo-50 aria-selected:text-indigo-700 cursor-pointer transition-all group"
                   onSelect={() => {
                     if (params.id) {
                       runCommand(() =>
@@ -101,15 +101,15 @@ export default function CommandPalette() {
                   }}
                 >
                   <Box
-                    size={14}
-                    className="text-slate-400 group-aria-selected:text-blue-600"
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-indigo-600 transition-colors"
                   />
                   <span>Inventory Master</span>
                   <Shortcut>I</Shortcut>
                 </Command.Item>
 
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-indigo-50 aria-selected:text-indigo-700 cursor-pointer transition-all group"
                   onSelect={() => {
                     if (params.id) {
                       runCommand(() =>
@@ -121,14 +121,14 @@ export default function CommandPalette() {
                   }}
                 >
                   <BookOpen
-                    size={14}
-                    className="text-slate-400 group-aria-selected:text-blue-600"
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-indigo-600 transition-colors"
                   />
                   <span>Sales Register</span>
                 </Command.Item>
 
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-blue-50 aria-selected:text-blue-700 group"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-indigo-50 aria-selected:text-indigo-700 cursor-pointer transition-all group"
                   onSelect={() => {
                     if (params.id) {
                       runCommand(() =>
@@ -138,22 +138,22 @@ export default function CommandPalette() {
                   }}
                 >
                   <CreditCard
-                    size={14}
-                    className="text-slate-400 group-aria-selected:text-blue-600"
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-indigo-600 transition-colors"
                   />
-                  <span>Verification Pending</span>
+                  <span>Pending Verifications</span>
                 </Command.Item>
               </Command.Group>
 
-              <Command.Separator className="my-1 h-px bg-slate-100" />
+              <Command.Separator className="my-2 h-px bg-slate-100" />
 
               {/* GROUP: ACTIONS */}
               <Command.Group
                 heading="Quick Actions"
-                className="text-[10px] font-black uppercase text-slate-400 px-2 py-1.5 mb-1 mt-2 tracking-widest"
+                className="text-[10px] font-black uppercase text-slate-400 px-2 py-2 tracking-widest"
               >
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-emerald-50 aria-selected:text-emerald-700 group"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-emerald-50 aria-selected:text-emerald-700 cursor-pointer transition-all group"
                   onSelect={() => {
                     if (params.id) {
                       runCommand(() =>
@@ -165,15 +165,15 @@ export default function CommandPalette() {
                   }}
                 >
                   <FileText
-                    size={14}
-                    className="text-slate-400 group-aria-selected:text-emerald-600"
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-emerald-600 transition-colors"
                   />
                   <span>Create Sales Invoice</span>
                   <Shortcut>S</Shortcut>
                 </Command.Item>
 
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-emerald-50 aria-selected:text-emerald-700 group"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-emerald-50 aria-selected:text-emerald-700 cursor-pointer transition-all group"
                   onSelect={() => {
                     if (params.id) {
                       runCommand(() =>
@@ -185,24 +185,23 @@ export default function CommandPalette() {
                   }}
                 >
                   <Calculator
-                    size={14}
-                    className="text-slate-400 group-aria-selected:text-emerald-600"
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-emerald-600 transition-colors"
                   />
                   <span>Record Payment</span>
                   <Shortcut>P</Shortcut>
                 </Command.Item>
               </Command.Group>
 
-              <Command.Separator className="my-1 h-px bg-slate-100" />
+              <Command.Separator className="my-2 h-px bg-slate-100" />
 
               {/* GROUP: SYSTEM */}
               <Command.Group
                 heading="System"
-                className="text-[10px] font-black uppercase text-slate-400 px-2 py-1.5 mb-1 mt-2 tracking-widest"
+                className="text-[10px] font-black uppercase text-slate-400 px-2 py-2 tracking-widest"
               >
-                {/* ✅ CORRECTED SETTINGS LINK */}
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-slate-100"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-slate-100 aria-selected:text-slate-900 cursor-pointer transition-all group"
                   onSelect={() => {
                     if (params.id) {
                       runCommand(() =>
@@ -211,30 +210,43 @@ export default function CommandPalette() {
                     }
                   }}
                 >
-                  <Settings size={14} className="text-slate-400" />
-                  <span>Settings</span>
+                  <Settings
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-slate-600 transition-colors"
+                  />
+                  <span>Company Settings</span>
                 </Command.Item>
 
                 <Command.Item
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors aria-selected:bg-slate-100"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-600 aria-selected:bg-slate-100 aria-selected:text-slate-900 cursor-pointer transition-all group"
                   onSelect={() => runCommand(() => router.push("/profile"))}
                 >
-                  <User size={14} className="text-slate-400" />
-                  <span>Profile</span>
+                  <User
+                    size={18}
+                    className="text-slate-400 group-aria-selected:text-slate-600 transition-colors"
+                  />
+                  <span>User Profile</span>
                 </Command.Item>
               </Command.Group>
             </Command.List>
 
-            <div className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400 flex justify-between items-center bg-slate-50/50">
-              <span>
-                Use <kbd className="font-sans font-bold text-slate-500">↑↓</kbd>{" "}
-                to navigate
-              </span>
-              <span>
-                Press{" "}
-                <kbd className="font-sans font-bold text-slate-500">↵</kbd> to
-                select
-              </span>
+            {/* FOOTER */}
+            <div className="border-t border-slate-100 px-4 py-2.5 bg-slate-50 flex justify-end items-center gap-4 text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+              <div className="flex items-center gap-1">
+                <span className="bg-white border border-slate-200 rounded px-1 py-0.5">
+                  <MoveUp size={10} />
+                </span>
+                <span className="bg-white border border-slate-200 rounded px-1 py-0.5">
+                  <MoveDown size={10} />
+                </span>
+                <span>Navigate</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="bg-white border border-slate-200 rounded px-1 py-0.5">
+                  <CornerDownLeft size={10} />
+                </span>
+                <span>Select</span>
+              </div>
             </div>
           </Command>
         </Dialog.Content>
@@ -245,7 +257,7 @@ export default function CommandPalette() {
 
 function Shortcut({ children }: { children: React.ReactNode }) {
   return (
-    <span className="ml-auto text-[10px] tracking-widest text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 bg-white font-bold">
+    <span className="ml-auto text-[10px] font-bold text-slate-400 border border-slate-200 bg-white rounded-md px-1.5 py-0.5 shadow-sm min-w-[20px] text-center font-mono">
       {children}
     </span>
   );

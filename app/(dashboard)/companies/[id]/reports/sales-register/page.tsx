@@ -7,6 +7,9 @@ import {
   FileText,
   Filter,
   TrendingUp,
+  CalendarDays,
+  CreditCard,
+  Receipt,
 } from "lucide-react";
 
 // --- Formatters ---
@@ -44,20 +47,20 @@ export default async function SalesRegisterPage({
 // VIEW 1: MONTHLY SUMMARY (Dynamically generated from Data)
 // --------------------------------------------------------------------------
 async function MonthlySummaryView({ companyId }: { companyId: number }) {
-  // 1. Fetch ALL Sales Vouchers (optimized select)
+  // 1. Fetch ALL Sales Vouchers
   const allSales = await prisma.salesVoucher.findMany({
     where: { companyId, status: "APPROVED" },
     select: {
       date: true,
-      totalAmount: true, // Use the total amount stored in the header
+      totalAmount: true,
     },
     orderBy: { date: "desc" },
   });
 
-  // 2. Group by Month-Year dynamically
+  // 2. Group by Month-Year
   const groupedData = allSales.reduce((acc: any, v) => {
     const d = new Date(v.date);
-    const key = `${d.getFullYear()}-${d.getMonth()}`; // e.g. "2023-3"
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
 
     if (!acc[key]) {
       acc[key] = {
@@ -74,7 +77,7 @@ async function MonthlySummaryView({ companyId }: { companyId: number }) {
     return acc;
   }, {});
 
-  // 3. Sort Chronologically (Newest First)
+  // 3. Sort Chronologically
   const monthlyData = Object.values(groupedData).sort((a: any, b: any) => {
     if (a.year !== b.year) return b.year - a.year;
     return b.monthIndex - a.monthIndex;
@@ -83,71 +86,117 @@ async function MonthlySummaryView({ companyId }: { companyId: number }) {
   const totalSales = allSales.reduce((sum, v) => sum + (v.totalAmount || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 font-sans">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <TrendingUp className="text-blue-600" size={24} /> Sales Register
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Monthly summary of all recorded sales transactions.
-            </p>
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-4xl mx-auto p-6 md:p-8 space-y-6">
+        {/* HEADER */}
+        <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
+          <div className="flex items-center gap-4">
+            <Link
+              href={`/companies/${companyId}/reports`}
+              className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
+              title="Back to Reports"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
+                <TrendingUp size={22} className="text-indigo-600" />
+                Sales Register
+              </h1>
+
+              {/* Breadcrumbs */}
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <Link
+                  href={`/companies/${companyId}`}
+                  className="hover:text-indigo-600 transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <ChevronRight size={10} />
+                <Link
+                  href={`/companies/${companyId}/reports`}
+                  className="hover:text-indigo-600 transition-colors"
+                >
+                  Reports
+                </Link>
+                <ChevronRight size={10} />
+                <span className="text-slate-900">Sales Summary</span>
+              </div>
+            </div>
           </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm text-right">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+
+          <div className="bg-slate-900 text-white px-5 py-2 rounded-xl shadow-lg shadow-slate-900/10">
+            <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">
               Grand Total Sales
             </p>
-            <p className="text-lg font-black text-emerald-600">
-              {fmt(totalSales)}
-            </p>
+            <p className="text-lg font-bold font-mono">{fmt(totalSales)}</p>
           </div>
         </div>
 
-        {/* List */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        {/* CONTENT CARD */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-h-[400px]">
           {monthlyData.length === 0 ? (
-            <div className="p-12 text-center text-slate-400">
-              <Filter className="mx-auto mb-3 opacity-50" size={48} />
-              <p>No Sales Vouchers found in the database.</p>
+            <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                <Filter className="text-slate-300" size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">
+                No Sales Found
+              </h3>
+              <p className="text-slate-500 text-sm mt-1">
+                There are no approved sales vouchers in the database.
+              </p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-50">
+            <div className="divide-y divide-slate-100">
               {monthlyData.map((row: any) => (
                 <Link
                   key={`${row.name}-${row.year}`}
                   href={`?month=${row.monthIndex}&year=${row.year}`}
-                  className="flex items-center p-4 hover:bg-blue-50/50 transition-all group cursor-pointer"
+                  className="flex items-center p-5 hover:bg-slate-50 transition-all group cursor-pointer"
                 >
-                  <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mr-4 group-hover:scale-110 transition-transform">
-                    <Calendar size={18} />
+                  <div className="h-12 w-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mr-5 border border-indigo-100 group-hover:scale-105 transition-transform">
+                    <CalendarDays size={24} />
                   </div>
+
                   <div className="flex-1">
-                    <h3 className="font-bold text-slate-700 text-sm group-hover:text-blue-700">
+                    <h3 className="font-bold text-slate-900 text-base group-hover:text-indigo-600 transition-colors">
                       {row.name}
                     </h3>
-                    <p className="text-xs text-slate-400 font-medium">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
                       {row.year}
                     </p>
                   </div>
-                  <div className="text-right mr-6">
-                    <p className="text-xs font-bold text-slate-400 uppercase">
-                      Vouchers
-                    </p>
-                    <p className="font-mono font-bold text-slate-700">
-                      {row.count}
-                    </p>
+
+                  <div className="flex items-center gap-8 mr-4">
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Vouchers
+                      </p>
+                      <p className="font-mono font-bold text-slate-700 text-sm">
+                        {row.count}
+                      </p>
+                    </div>
+                    <div className="text-right w-36">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Amount
+                      </p>
+                      <p className="font-mono font-bold text-slate-900 text-base group-hover:text-indigo-600 transition-colors">
+                        {fmt(row.amount)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right w-32">
-                    <p className="text-xs font-bold text-slate-400 uppercase">
-                      Amount
-                    </p>
-                    <p className="font-mono font-black text-slate-900 group-hover:text-blue-700">
-                      {fmt(row.amount)}
-                    </p>
-                  </div>
-                  <div className="ml-4 text-slate-300 group-hover:text-blue-500">
+
+                  <div className="pl-4 text-slate-300 group-hover:text-indigo-500 transition-colors">
                     <ChevronRight size={20} />
                   </div>
                 </Link>
@@ -183,7 +232,6 @@ async function VoucherRegisterView({
       status: "APPROVED",
     },
     include: {
-      // Deep include to detect Tax vs Sales ledgers
       ledgerEntries: {
         include: {
           ledger: {
@@ -208,18 +256,17 @@ async function VoucherRegisterView({
     const partyName =
       partyEntry?.ledger?.name || v.partyName || "Cash / Unknown";
 
-    // 2. Calculate Split (Taxable vs Tax) from Credit Side (Positive in DB)
+    // 2. Calculate Split (Taxable vs Tax) from Credit Side
     let taxable = 0;
     let taxAmt = 0;
 
     v.ledgerEntries
-      .filter((e: any) => e.amount > 0) // Look at Credits
+      .filter((e: any) => e.amount > 0)
       .forEach((e: any) => {
         const amt = e.amount;
         const grpName = e.ledger?.group?.name?.toLowerCase() || "";
         const ledName = e.ledger?.name?.toLowerCase() || "";
 
-        // Heuristic: If group is 'duties & taxes' OR name contains 'gst'/'tax'
         if (
           grpName.includes("duties") ||
           grpName.includes("tax") ||
@@ -229,12 +276,10 @@ async function VoucherRegisterView({
         ) {
           taxAmt += amt;
         } else {
-          // Otherwise, it's likely a Sales Account (Taxable Value)
           taxable += amt;
         }
       });
 
-    // If Credit side is empty (e.g. inventory only mode), fallback to totalAmount as taxable
     if (taxable === 0 && taxAmt === 0) {
       taxable = v.totalAmount;
     }
@@ -257,138 +302,188 @@ async function VoucherRegisterView({
     };
   });
 
-  return (
-    <div className="flex flex-col h-screen bg-slate-50/50 font-sans">
-      {/* Top Bar */}
-      <div className="px-6 py-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <Link
-            href="?"
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              {new Date(year, month).toLocaleString("default", {
-                month: "long",
-                year: "numeric",
-              })}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              {registerData.length} Vouchers Found
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-6 text-right">
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase">
-              Total Taxable
-            </p>
-            <p className="font-mono font-bold text-slate-700">
-              {fmt(totalTaxable)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase">
-              Total Tax
-            </p>
-            <p className="font-mono font-bold text-slate-700">
-              {fmt(totalTax)}
-            </p>
-          </div>
-          <div className="bg-slate-900 text-white px-3 py-1 rounded">
-            <p className="text-[10px] font-bold opacity-70 uppercase">
-              Grand Total
-            </p>
-            <p className="font-mono font-bold">{fmt(totalGrand)}</p>
-          </div>
-        </div>
-      </div>
+  const monthName = new Date(year, month).toLocaleString("default", {
+    month: "long",
+    year: "numeric",
+  });
 
-      {/* Table Area */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-w-[1000px]">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500">
-              <tr>
-                <th className="px-4 py-3 border-b border-slate-200 w-28">
-                  Date
-                </th>
-                <th className="px-4 py-3 border-b border-slate-200 w-24">
-                  Vch No
-                </th>
-                <th className="px-4 py-3 border-b border-slate-200 w-64">
-                  Party Name
-                </th>
-                <th className="px-4 py-3 border-b border-slate-200">
-                  Item Details
-                </th>
-                <th className="px-4 py-3 border-b border-slate-200 text-right w-32">
-                  Taxable
-                </th>
-                <th className="px-4 py-3 border-b border-slate-200 text-right w-24">
-                  Tax
-                </th>
-                <th className="px-4 py-3 border-b border-slate-200 text-right w-32 bg-slate-50">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {registerData.map((row: any) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-blue-50/30 transition-colors group"
+  return (
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
+      {/* Background Pattern */}
+      <div
+        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+
+      <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6 flex-1">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
+          <div className="flex items-center gap-4">
+            <Link
+              href="?"
+              className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
+              title="Back to Summary"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
+                <FileText size={22} className="text-indigo-600" />
+                {monthName}
+              </h1>
+
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <Link
+                  href={`/companies/${companyId}/reports/sales-register`}
+                  className="hover:text-indigo-600 transition-colors"
                 >
-                  <td className="px-4 py-3 font-medium text-slate-600 align-top">
-                    {new Date(row.date).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                    })}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500 align-top">
-                    #{row.voucherNo}
-                  </td>
-                  <td className="px-4 py-3 font-bold text-slate-800 align-top truncate max-w-[200px]">
-                    {row.partyName}
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    {row.items.length > 0 ? (
-                      <div className="space-y-1">
-                        {row.items.map((item: any) => (
-                          <div
-                            key={item.id}
-                            className="flex justify-between text-xs"
-                          >
-                            <span className="text-slate-600 truncate max-w-[150px]">
-                              {item.stockItem?.name}
-                            </span>
-                            <span className="font-mono text-slate-400">
-                              {Math.abs(item.quantity)} x {item.rate}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-300 italic">
-                        - Account Only -
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-600 align-top">
-                    {fmt(row.taxable)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-500 text-xs align-top">
-                    {row.tax > 0 ? fmt(row.tax) : "-"}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 bg-slate-50/50 align-top">
-                    {fmt(row.total)}
-                  </td>
+                  Sales Register
+                </Link>
+                <ChevronRight size={10} />
+                <span className="text-slate-900">
+                  {registerData.length} Vouchers
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
+            <div className="px-3 border-r border-slate-200">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                Taxable
+              </p>
+              <p className="text-sm font-bold font-mono text-slate-700">
+                {fmt(totalTaxable)}
+              </p>
+            </div>
+            <div className="px-3 border-r border-slate-200">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                Tax
+              </p>
+              <p className="text-sm font-bold font-mono text-slate-700">
+                {fmt(totalTax)}
+              </p>
+            </div>
+            <div className="px-3">
+              <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">
+                Total Sales
+              </p>
+              <p className="text-base font-black font-mono text-indigo-700">
+                {fmt(totalGrand)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* REGISTER TABLE */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-sm">
+                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <th className="py-3 px-6 w-[120px]">Date</th>
+                  <th className="py-3 px-6 w-[100px]">Vch No</th>
+                  <th className="py-3 px-6">Party Name</th>
+                  <th className="py-3 px-6">Items</th>
+                  <th className="py-3 px-6 text-right w-[140px]">Taxable</th>
+                  <th className="py-3 px-6 text-right w-[120px]">Tax</th>
+                  <th className="py-3 px-6 text-right w-[160px] bg-slate-100 text-slate-800">
+                    Total
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {registerData.map((row: any) => (
+                  <tr
+                    key={row.id}
+                    className="group hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="py-3 px-6 text-xs font-bold text-slate-600 whitespace-nowrap">
+                      {new Date(row.date).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                      })}
+                    </td>
+                    <td className="py-3 px-6 text-xs font-mono font-bold text-slate-500">
+                      #{row.voucherNo}
+                    </td>
+                    <td className="py-3 px-6">
+                      <div className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <CreditCard size={14} className="text-slate-400" />
+                        {row.partyName}
+                      </div>
+                    </td>
+                    <td className="py-3 px-6">
+                      {row.items.length > 0 ? (
+                        <div className="space-y-1">
+                          {row.items.map((item: any) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between text-[11px]"
+                            >
+                              <span className="text-slate-600 font-medium truncate max-w-[200px]">
+                                {item.stockItem?.name}
+                              </span>
+                              <span className="font-mono text-slate-400 text-[10px]">
+                                {Math.abs(item.quantity)} x {item.rate}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic bg-slate-50 px-2 py-0.5 rounded">
+                          Account Invoice
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-6 text-right font-mono text-xs font-medium text-slate-600">
+                      {fmt(row.taxable)}
+                    </td>
+                    <td className="py-3 px-6 text-right font-mono text-xs font-medium text-slate-500">
+                      {row.tax > 0 ? (
+                        fmt(row.tax)
+                      ) : (
+                        <span className="opacity-30">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-6 text-right font-mono text-xs font-bold text-slate-900 bg-slate-50/50 group-hover:bg-indigo-50/20 border-l border-slate-100">
+                      {fmt(row.total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer Summary */}
+          <div className="bg-slate-900 border-t border-slate-800 px-6 py-3 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
+            <div className="flex gap-6">
+              <span>
+                Vouchers:{" "}
+                <span className="text-white">{registerData.length}</span>
+              </span>
+            </div>
+            <div className="flex gap-8 items-center">
+              <div>
+                Taxable:{" "}
+                <span className="text-white font-mono ml-2">
+                  {fmt(totalTaxable)}
+                </span>
+              </div>
+              <div>
+                Tax:{" "}
+                <span className="text-white font-mono ml-2">
+                  {fmt(totalTax)}
+                </span>
+              </div>
+              <div className="bg-indigo-600 text-white px-3 py-1 rounded ml-2">
+                Total: <span className="font-mono ml-1">{fmt(totalGrand)}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

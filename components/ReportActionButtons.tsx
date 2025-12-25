@@ -7,9 +7,10 @@ import {
   FileCode,
   FileType,
   FileJson,
+  ChevronDown,
 } from "lucide-react";
 import { useSearchParams, useParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 interface Props {
@@ -26,7 +27,22 @@ export default function ReportActionButtons({
   const searchParams = useSearchParams();
   const params = useParams();
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const companyId = params.id;
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const prepareExportData = () => {
     let runningBal = openingBalance;
@@ -114,60 +130,89 @@ export default function ReportActionButtons({
   };
 
   return (
-    <div className="flex gap-2 no-print relative">
-      <div className="relative">
+    <div className="flex gap-3 no-print relative print:hidden">
+      {/* Export Dropdown */}
+      <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsExportOpen(!isExportOpen)}
-          className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+          className={`flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm hover:border-indigo-300 hover:text-indigo-600 ${
+            isExportOpen ? "ring-2 ring-indigo-100 border-indigo-300" : ""
+          }`}
         >
-          <FileDown size={14} /> EXPORT
+          <FileDown size={14} />
+          <span>Export</span>
+          <ChevronDown
+            size={12}
+            className={`transition-transform duration-200 ${
+              isExportOpen ? "rotate-180" : ""
+            }`}
+          />
         </button>
+
         {isExportOpen && (
-          <div className="absolute top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-50 min-w-[160px] overflow-hidden animate-in fade-in zoom-in-95 duration-200 p-1">
+          <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 min-w-[180px] overflow-hidden animate-in fade-in zoom-in-95 duration-200 p-1.5 ring-1 ring-slate-900/5 origin-top-right">
+            <div className="px-3 py-2 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-50 mb-1">
+              Select Format
+            </div>
             <button
               onClick={() => {
                 exports.excel();
                 setIsExportOpen(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg uppercase"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-colors group"
             >
-              <FileSpreadsheet size={14} /> Excel (.xlsx)
+              <div className="p-1.5 bg-slate-100 group-hover:bg-emerald-100 rounded-lg text-slate-500 group-hover:text-emerald-600 transition-colors">
+                <FileSpreadsheet size={14} />
+              </div>
+              Excel (.xlsx)
             </button>
             <button
               onClick={() => {
                 exports.csv();
                 setIsExportOpen(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg uppercase"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition-colors group"
             >
-              <FileType size={14} /> CSV
+              <div className="p-1.5 bg-slate-100 group-hover:bg-blue-100 rounded-lg text-slate-500 group-hover:text-blue-600 transition-colors">
+                <FileType size={14} />
+              </div>
+              CSV
             </button>
             <button
               onClick={() => {
                 exports.xml();
                 setIsExportOpen(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-orange-50 hover:text-orange-700 rounded-lg uppercase"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-orange-50 hover:text-orange-700 rounded-xl transition-colors group"
             >
-              <FileCode size={14} /> XML
+              <div className="p-1.5 bg-slate-100 group-hover:bg-orange-100 rounded-lg text-slate-500 group-hover:text-orange-600 transition-colors">
+                <FileCode size={14} />
+              </div>
+              XML
             </button>
             <button
               onClick={() => {
                 exports.json();
                 setIsExportOpen(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 rounded-lg uppercase"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-colors group"
             >
-              <FileJson size={14} /> JSON
+              <div className="p-1.5 bg-slate-100 group-hover:bg-white group-hover:shadow-sm rounded-lg text-slate-500 group-hover:text-slate-900 transition-all">
+                <FileJson size={14} />
+              </div>
+              JSON
             </button>
           </div>
         )}
       </div>
+
+      {/* Print Button */}
       <button
         onClick={handlePrint}
-        className="bg-slate-900 hover:bg-black text-white px-4 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-md"
+        className="bg-slate-900 hover:bg-indigo-600 text-white px-5 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-slate-900/20 hover:shadow-indigo-600/20"
       >
-        <Printer size={14} /> PRINT
+        <Printer size={14} />
+        <span>Print Report</span>
       </button>
     </div>
   );
