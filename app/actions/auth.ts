@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignJWT } from "jose";
+import { jwtVerify } from "jose";
 
 // --- CONFIGURATION ---
 const secretKey =
@@ -135,6 +136,21 @@ export async function login(prevState: any, formData: FormData) {
   redirect("/");
 }
 
+//------------------------get the current user for tally import---------------
+export async function getCurrentUserId(): Promise<number | null> {
+  try {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session")?.value;
+    if (!session) return null;
+
+    const { payload } = await jwtVerify(session, encodedKey);
+    return typeof payload.userId === "string"
+      ? parseInt(payload.userId)
+      : (payload.userId as number);
+  } catch (error) {
+    return null;
+  }
+}
 // ==========================================
 // 3. LOGOUT ACTION
 // ==========================================

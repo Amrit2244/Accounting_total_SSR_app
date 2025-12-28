@@ -27,18 +27,15 @@ export default function VoucherListClient({
   baseUrl: string;
 }) {
   const router = useRouter();
-  // We store { id, type } so the server knows WHERE to delete from
   const [selectedItems, setSelectedItems] = useState<
     { id: number; type: string }[]
   >([]);
   const [isPending, startTransition] = useTransition();
 
-  // --- SELECTION LOGIC ---
   const toggleSelectAll = () => {
     if (selectedItems.length === vouchers.length) {
-      setSelectedItems([]); // Deselect All
+      setSelectedItems([]);
     } else {
-      // Select All: Map every voucher to { id, type }
       setSelectedItems(vouchers.map((v) => ({ id: v.id, type: v.type })));
     }
   };
@@ -54,7 +51,6 @@ export default function VoucherListClient({
 
   const isSelected = (id: number) => selectedItems.some((i) => i.id === id);
 
-  // --- DELETE LOGIC ---
   const handleBulkDelete = () => {
     if (
       !confirm(
@@ -62,12 +58,11 @@ export default function VoucherListClient({
       )
     )
       return;
-
     startTransition(async () => {
       const result = await deleteBulkVouchers(selectedItems, companyId);
       if (result.success) {
-        setSelectedItems([]); // Clear selection
-        router.refresh(); // Refresh list
+        setSelectedItems([]);
+        router.refresh();
       } else {
         alert(result.message || "Failed to delete.");
       }
@@ -76,9 +71,8 @@ export default function VoucherListClient({
 
   return (
     <div className="flex-1 min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col relative mt-2">
-      {/* BULK ACTION BAR (Floating) */}
       {selectedItems.length > 0 && (
-        <div className="absolute top-2 left-4 right-4 z-30 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex items-center justify-between animate-in fade-in slide-in-from-top-2 shadow-lg shadow-indigo-100/50">
+        <div className="absolute top-2 left-4 right-4 z-30 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex items-center justify-between shadow-lg">
           <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs">
             <span className="bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded text-[10px]">
               {selectedItems.length}
@@ -89,18 +83,18 @@ export default function VoucherListClient({
             <button
               onClick={handleBulkDelete}
               disabled={isPending}
-              className="bg-rose-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              className="bg-rose-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 disabled:opacity-50"
             >
               {isPending ? (
                 <Loader2 size={12} className="animate-spin" />
               ) : (
                 <Trash2 size={12} />
               )}
-              <span>Delete</span>
+              <span className="ml-1.5">Delete</span>
             </button>
             <button
               onClick={() => setSelectedItems([])}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600"
             >
               <X size={14} />
             </button>
@@ -108,16 +102,14 @@ export default function VoucherListClient({
         </div>
       )}
 
-      {/* TABLE */}
       <div className="overflow-auto flex-1 custom-scrollbar">
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
             <tr>
-              {/* CHECKBOX HEADER */}
               <th className="px-4 py-3 w-12 text-center border-b border-slate-200">
                 <button
                   onClick={toggleSelectAll}
-                  className="text-slate-400 hover:text-indigo-600 transition-colors"
+                  className="text-slate-400 hover:text-indigo-600"
                 >
                   {vouchers.length > 0 &&
                   selectedItems.length === vouchers.length ? (
@@ -154,62 +146,27 @@ export default function VoucherListClient({
           <tbody className="divide-y divide-slate-100">
             {vouchers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-20 text-center">
-                  <div className="flex flex-col items-center opacity-50 mb-4 text-slate-400">
-                    <FileText size={48} className="mb-3 text-slate-300" />
-                    <p className="text-sm font-bold text-slate-500">
-                      No vouchers found
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Try adjusting your filters or date range.
-                    </p>
-                  </div>
+                <td
+                  colSpan={8}
+                  className="px-6 py-20 text-center text-slate-400 font-bold"
+                >
+                  No vouchers found
                 </td>
               </tr>
             ) : (
               vouchers.map((v) => {
                 const selected = isSelected(v.id);
 
-                // Helper: Determine displayed ledgers
-                let debitLedger = "—";
-                let creditLedger = "—";
-
-                if (v.entries && v.entries.length > 0) {
-                  const dr = v.entries.find((e: any) => e.amount > 0);
-                  const cr = v.entries.find((e: any) => e.amount < 0);
-                  if (dr?.ledger) debitLedger = dr.ledger.name;
-                  if (cr?.ledger) creditLedger = cr.ledger.name;
-                } else if (v.partyName) {
-                  if (v.type === "SALES") {
-                    debitLedger = v.partyName;
-                    creditLedger = "Sales Account";
-                  } else if (v.type === "PURCHASE") {
-                    debitLedger = "Purchase Account";
-                    creditLedger = v.partyName;
-                  }
-                }
-
                 return (
                   <tr
                     key={`${v.type}-${v.id}`}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest("a, button"))
-                        return;
-                      toggleSelectOne(v.id, v.type);
-                    }}
+                    onClick={() => toggleSelectOne(v.id, v.type)}
                     className={`group cursor-pointer transition-colors ${
                       selected ? "bg-indigo-50/60" : "hover:bg-slate-50"
                     }`}
                   >
-                    {/* CHECKBOX CELL */}
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSelectOne(v.id, v.type);
-                        }}
-                        className="text-slate-300 hover:text-indigo-600 transition-colors"
-                      >
+                      <button className="text-slate-300">
                         {selected ? (
                           <CheckSquare size={16} className="text-indigo-600" />
                         ) : (
@@ -218,7 +175,6 @@ export default function VoucherListClient({
                       </button>
                     </td>
 
-                    {/* DATA CELLS */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs font-bold text-slate-700">
                         {format(new Date(v.date), "dd MMM yyyy")}
@@ -230,22 +186,15 @@ export default function VoucherListClient({
 
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border ${
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase border ${
                           v.type === "SALES"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-100"
                             : v.type === "PURCHASE"
                             ? "bg-blue-50 text-blue-700 border-blue-100"
-                            : v.type === "PAYMENT"
-                            ? "bg-rose-50 text-rose-700 border-rose-100"
-                            : v.type === "RECEIPT"
-                            ? "bg-indigo-50 text-indigo-700 border-indigo-100"
-                            : "bg-slate-50 text-slate-600 border-slate-200"
+                            : "bg-slate-50 text-slate-600"
                         }`}
                       >
-                        {v.type === "SALES" && <ArrowUpRight size={10} />}
-                        {v.type === "PURCHASE" && <ArrowDownLeft size={10} />}
-                        {v.type === "CONTRA" && <ArrowRightLeft size={10} />}
-                        {v.type.replace("_", " ")}
+                        {v.type}
                       </span>
                     </td>
 
@@ -265,15 +214,17 @@ export default function VoucherListClient({
                             Dr
                           </span>
                           <span className="font-bold text-slate-700 truncate max-w-[180px]">
-                            {debitLedger}
+                            {/* FIX: Use the backend label directly */}
+                            {v.drLabel || "—"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-300 w-3">
                             Cr
                           </span>
-                          <span className="font-medium text-slate-500 truncate max-w-[180px]">
-                            {creditLedger}
+                          <span className="font-bold text-slate-500 truncate max-w-[180px]">
+                            {/* FIX: Use the backend label directly */}
+                            {v.crLabel || "—"}
                           </span>
                         </div>
                       </div>
@@ -287,15 +238,7 @@ export default function VoucherListClient({
                     </td>
 
                     <td className="px-6 py-3 text-center">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${
-                          v.status === "APPROVED"
-                            ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                            : v.status === "REJECTED"
-                            ? "bg-rose-50 text-rose-600 border-rose-100"
-                            : "bg-amber-50 text-amber-600 border-amber-100"
-                        }`}
-                      >
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-amber-50 text-amber-600 border border-amber-100">
                         {v.status}
                       </span>
                     </td>
@@ -303,7 +246,7 @@ export default function VoucherListClient({
                     <td className="px-6 py-3 text-right">
                       <Link
                         href={`${baseUrl}/${v.type.toLowerCase()}/${v.id}`}
-                        className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                        className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
                       >
                         View
                       </Link>
@@ -316,7 +259,6 @@ export default function VoucherListClient({
         </table>
       </div>
 
-      {/* FOOTER */}
       <div className="shrink-0 bg-slate-50 border-t border-slate-200 px-6 py-2.5 flex justify-between items-center text-[9px] font-black uppercase text-slate-400 tracking-widest">
         <span>Records Found: {vouchers.length}</span>
         <span>Accounting Year 2025-2026</span>

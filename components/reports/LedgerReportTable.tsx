@@ -107,7 +107,6 @@ export default function LedgerReportTable({
               <th className="px-4 py-4 w-24">Type</th>
               <th className="px-4 py-4 min-w-[250px]">Particulars</th>
 
-              {/* Conditional Inventory Headers */}
               {showInventory && (
                 <>
                   <th className="px-4 py-4 w-48 text-slate-600 bg-slate-100/50 border-l border-slate-200">
@@ -119,11 +118,11 @@ export default function LedgerReportTable({
                 </>
               )}
 
-              <th className="px-4 py-4 text-right w-32 text-emerald-700 bg-emerald-50/30 border-l border-emerald-100/50">
-                Debit
-              </th>
               <th className="px-4 py-4 text-right w-32 text-rose-700 bg-rose-50/30 border-l border-rose-100/50">
-                Credit
+                Debit (Dr)
+              </th>
+              <th className="px-4 py-4 text-right w-32 text-emerald-700 bg-emerald-50/30 border-l border-emerald-100/50">
+                Credit (Cr)
               </th>
               {showRunningBalance && (
                 <th className="px-4 py-4 text-right w-36 text-slate-700 bg-slate-100/50 border-l border-slate-200 pr-6">
@@ -151,12 +150,23 @@ export default function LedgerReportTable({
                   <td className="px-4 py-3 bg-slate-50/30"></td>
                 </>
               )}
-              <td className="px-4 py-3 bg-emerald-50/20 border-l border-emerald-50"></td>
-              <td className="px-4 py-3 bg-rose-50/20 border-l border-rose-50"></td>
+
+              {/* Opening Balance Alignment with correct colors */}
+              <td className="px-4 py-3 text-right font-mono text-xs font-bold text-rose-600 bg-rose-50/10">
+                {openingBalance < 0 ? formatMoney(openingBalance) : ""}
+              </td>
+              <td className="px-4 py-3 text-right font-mono text-xs font-bold text-emerald-600 bg-emerald-50/10">
+                {openingBalance > 0 ? formatMoney(openingBalance) : ""}
+              </td>
+
               {showRunningBalance && (
                 <td className="px-4 py-3 text-right font-black font-mono text-xs text-slate-800 bg-slate-50/50 border-l border-slate-200 pr-6">
                   {formatMoney(openingBalance)}{" "}
-                  <span className="text-[9px] text-slate-400 font-bold ml-1">
+                  <span
+                    className={`text-[9px] font-bold ml-1 ${
+                      openingBalance < 0 ? "text-rose-500" : "text-emerald-500"
+                    }`}
+                  >
                     {openingBalance < 0 ? "Dr" : "Cr"}
                   </span>
                 </td>
@@ -194,12 +204,9 @@ export default function LedgerReportTable({
                   </td>
                   {showVoucherNo && (
                     <td className="px-4 py-3.5 align-top">
-                      <Link
-                        href={`/companies/${companyId}/vouchers/${tx.type}/${tx.voucherId}/edit`}
-                        className="font-mono text-[11px] font-bold text-slate-600 hover:text-indigo-600 hover:underline flex items-center gap-1 transition-colors"
-                      >
+                      <div className="font-mono text-[11px] font-bold text-slate-600">
                         #{tx.voucherNo}
-                      </Link>
+                      </div>
                     </td>
                   )}
                   <td className="px-4 py-3.5 align-top">
@@ -211,7 +218,7 @@ export default function LedgerReportTable({
                             : tx.type === "PURCHASE"
                             ? "bg-blue-50 text-blue-700 border-blue-100"
                             : tx.type === "RECEIPT"
-                            ? "bg-amber-50 text-amber-700 border-amber-100"
+                            ? "bg-indigo-50 text-indigo-700 border-indigo-100"
                             : tx.type === "PAYMENT"
                             ? "bg-rose-50 text-rose-700 border-rose-100"
                             : "bg-slate-100 text-slate-600 border-slate-200"
@@ -224,18 +231,18 @@ export default function LedgerReportTable({
                     <div className="text-sm font-semibold text-slate-800 leading-snug">
                       {tx.particulars}
                     </div>
+                    {/* CLEANER NARRATION STYLING */}
                     {showNarration && tx.narration && (
-                      <div className="text-[11px] text-slate-500 mt-1.5 font-medium leading-relaxed pl-2 border-l-2 border-slate-200">
+                      <div className="text-[10px] text-slate-400 mt-1.5 italic font-medium leading-relaxed pl-2 border-l-2 border-slate-100 max-w-md">
                         {tx.narration}
                       </div>
                     )}
                   </td>
 
-                  {/* Conditional Inventory Cells */}
                   {showInventory && (
                     <>
                       <td className="px-4 py-3.5 text-xs text-slate-600 bg-slate-50/20 group-hover:bg-slate-50/50 border-l border-slate-100 align-top">
-                        {tx.itemNames !== "-" ? (
+                        {tx.itemNames && tx.itemNames !== "-" ? (
                           <div className="flex items-start gap-2">
                             <Package
                               size={14}
@@ -255,12 +262,15 @@ export default function LedgerReportTable({
                     </>
                   )}
 
-                  <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-emerald-700 bg-emerald-50/5 group-hover:bg-emerald-50/20 border-l border-emerald-100/30 transition-colors align-top">
+                  {/* DEBIT COLUMN - RED (ROSE) */}
+                  <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-rose-700 bg-rose-50/5 group-hover:bg-rose-50/20 border-l border-rose-100/30 transition-colors align-top">
                     {tx.debit > 0 ? formatMoney(tx.debit) : ""}
                   </td>
-                  <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-rose-700 bg-rose-50/5 group-hover:bg-rose-50/20 border-l border-rose-100/30 transition-colors align-top">
-                    {tx.credit < 0 ? formatMoney(tx.credit) : ""}
+                  {/* CREDIT COLUMN - GREEN (EMERALD) */}
+                  <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-emerald-700 bg-emerald-50/5 group-hover:bg-emerald-50/20 border-l border-emerald-100/30 transition-colors align-top">
+                    {tx.credit > 0 ? formatMoney(tx.credit) : ""}
                   </td>
+
                   {showRunningBalance && (
                     <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-slate-800 bg-slate-50/30 group-hover:bg-slate-100/50 border-l border-slate-200 transition-colors align-top pr-6">
                       {formatMoney(tx.balance)}{" "}
@@ -295,15 +305,23 @@ export default function LedgerReportTable({
                   </td>
                 </>
               )}
-              <td className="px-4 py-4 text-right font-mono text-emerald-700 border-l border-slate-200 bg-emerald-50/20">
+              {/* FOOTER TOTAL COLORS */}
+              <td className="px-4 py-4 text-right font-mono text-rose-700 border-l border-slate-200 bg-rose-50/20">
                 {formatMoney(periodDebit)}
               </td>
-              <td className="px-4 py-4 text-right font-mono text-rose-700 bg-rose-50/20">
+              <td className="px-4 py-4 text-right font-mono text-emerald-700 bg-emerald-50/20 border-l border-slate-200">
                 {formatMoney(periodCredit)}
               </td>
               {showRunningBalance && (
                 <td className="px-4 py-4 text-right font-mono text-indigo-700 bg-indigo-50/30 border-l border-slate-200 pr-6">
                   {formatMoney(closingBalance)}
+                  <span
+                    className={`text-[9px] font-black uppercase ml-1 ${
+                      closingBalance < 0 ? "text-rose-500" : "text-emerald-500"
+                    }`}
+                  >
+                    {closingBalance < 0 ? "Dr" : "Cr"}
+                  </span>
                 </td>
               )}
             </tr>

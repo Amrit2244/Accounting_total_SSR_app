@@ -31,7 +31,7 @@ export default async function LedgerPrintPage({
   const toDateEnd = new Date(to || today.toISOString().split("T")[0]);
   toDateEnd.setHours(23, 59, 59, 999);
 
-  // --- Calculate Balances (Existing logic remains unchanged) ---
+  // --- 1. Calculate Opening Balance ---
   const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
   const prevMovement = await Promise.all([
     prisma.salesLedgerEntry.aggregate({
@@ -66,46 +66,73 @@ export default async function LedgerPrintPage({
   );
   const openingBalanceAtDate = ledger.openingBalance + totalPrevMovement;
 
+  // --- 2. Fetch Transactions with Full Sub-Entries ---
   const currentFilter = {
     date: { gte: fromDate, lte: toDateEnd },
     status: "APPROVED",
   };
+
+  const includeEverything = (vKey: string) => ({
+    [vKey]: {
+      include: {
+        ledgerEntries: {
+          include: { ledger: { select: { name: true } } },
+        },
+      },
+    },
+  });
+
   const [sales, purchase, payment, receipt, contra, journal] =
     await Promise.all([
       prisma.salesLedgerEntry.findMany({
         where: { ledgerId: lid, salesVoucher: currentFilter },
-        include: { salesVoucher: true },
+        include: includeEverything("salesVoucher"),
       }),
       prisma.purchaseLedgerEntry.findMany({
         where: { ledgerId: lid, purchaseVoucher: currentFilter },
-        include: { purchaseVoucher: true },
+        include: includeEverything("purchaseVoucher"),
       }),
       prisma.paymentLedgerEntry.findMany({
         where: { ledgerId: lid, paymentVoucher: currentFilter },
-        include: { paymentVoucher: true },
+        include: includeEverything("paymentVoucher"),
       }),
       prisma.receiptLedgerEntry.findMany({
         where: { ledgerId: lid, receiptVoucher: currentFilter },
-        include: { receiptVoucher: true },
+        include: includeEverything("receiptVoucher"),
       }),
       prisma.contraLedgerEntry.findMany({
         where: { ledgerId: lid, contraVoucher: currentFilter },
-        include: { contraVoucher: true },
+        include: includeEverything("contraVoucher"),
       }),
       prisma.journalLedgerEntry.findMany({
         where: { ledgerId: lid, journalVoucher: currentFilter },
-        include: { journalVoucher: true },
+        include: includeEverything("journalVoucher"),
       }),
     ]);
 
-  const formatTx = (entry: any, type: string, vKey: string) => ({
-    id: entry.id,
-    date: entry[vKey].date,
-    voucherNo: entry[vKey].voucherNo.toString(),
-    type: type,
-    narration: entry[vKey].narration,
-    amount: entry.amount,
-  });
+  // --- 3. Format Transactions with Opposite Ledger Detection ---
+  const formatTx = (entry: any, type: string, vKey: string) => {
+    const voucher = entry[vKey];
+    const allEntries = voucher.ledgerEntries || [];
+
+    // Find the account name that is NOT the account we are currently printing
+    // This is what puts "Cash" or "Bank" in the Particulars column
+    const oppositeEntry = allEntries.find((le: any) => le.ledgerId !== lid);
+    const particularsName =
+      oppositeEntry?.ledger?.name || voucher.partyName || type;
+
+    return {
+      id: entry.id,
+      date: voucher.date,
+      voucherNo: voucher.voucherNo.toString(),
+      type: type,
+      particulars: particularsName, // This is the fix!
+      narration: voucher.narration,
+      amount: entry.amount,
+      debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
+      credit: entry.amount > 0 ? Math.abs(entry.amount) : 0,
+    };
+  };
 
   const transactions = [
     ...sales.map((e) => formatTx(e, "SALES", "salesVoucher")),
@@ -118,7 +145,6 @@ export default async function LedgerPrintPage({
 
   return (
     <div className="relative min-h-screen bg-white">
-      {/* GLOBAL PRINT OVERRIDE */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -133,13 +159,14 @@ export default async function LedgerPrintPage({
             margin: 0 !important;
             padding: 0 !important;
           }
-          nav, aside, footer, .no-print { display: none !important; height: 0 !important; width: 0 !important; }
+          nav, aside, footer, .no-print { display: none !important; }
+          @page { size: portrait; margin: 10mm; }
         }
       `,
         }}
       />
 
-      <div id="print-zone" className="relative z-10">
+      <div id="print-zone" className="p-4">
         <LedgerPrintTemplate
           company={company}
           ledger={ledger}

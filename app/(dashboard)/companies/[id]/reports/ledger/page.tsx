@@ -57,7 +57,12 @@ export default async function LedgerReportPage({
   let periodQty = 0;
 
   if (ledgerId && selectedLedger) {
-    const prevFilter = { date: { lt: fromDate }, status: "APPROVED" };
+    const activeStatuses = ["APPROVED", "Imported"];
+    const prevFilter = {
+      date: { lt: fromDate },
+      status: { in: activeStatuses },
+    };
+
     const getPrevSum = async (model: any, field: string) => {
       const res = await model.aggregate({
         where: { ledgerId, [field]: prevFilter },
@@ -81,8 +86,9 @@ export default async function LedgerReportPage({
 
     const currentFilter = {
       date: { gte: fromDate, lte: toDateEnd },
-      status: "APPROVED",
+      status: { in: activeStatuses },
     };
+
     const commonInclude = (vKey: string) => ({
       [vKey]: {
         include: {
@@ -179,11 +185,7 @@ export default async function LedgerReportPage({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col overflow-x-hidden">
-      {/* FIX: Proper padding and overflow control. 
-         Responsive padding (p-4 to p-8) ensures the button is not cut off on smaller laptop screens.
-      */}
       <div className="w-full max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6">
-        {/* HEADER SECTION - Adjusted for better visibility */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sticky top-0 z-30 print:hidden mt-2">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -212,7 +214,6 @@ export default async function LedgerReportPage({
             </h1>
           </div>
 
-          {/* ACTIONS CONTAINER: Ensures Filters and Print button stay visible and wrap correctly */}
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
             <div className="flex-1 lg:flex-none min-w-[280px]">
               <LedgerFilters
@@ -222,7 +223,6 @@ export default async function LedgerReportPage({
                 toDate={to}
               />
             </div>
-
             {selectedLedger && (
               <Link
                 href={`/companies/${companyId}/reports/ledger/print?ledgerId=${ledgerId}&from=${from}&to=${to}`}
@@ -238,7 +238,6 @@ export default async function LedgerReportPage({
 
         {selectedLedger ? (
           <>
-            {/* STATS GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StatCard
                 label="Opening Balance"
@@ -251,14 +250,14 @@ export default async function LedgerReportPage({
                 label="Total Debit"
                 amount={periodDebit}
                 icon={<ArrowUpRight size={18} />}
-                type="debit"
+                type="debit" // Red Color
                 sub="Total Outflow"
               />
               <StatCard
                 label="Total Credit"
                 amount={periodCredit}
                 icon={<ArrowDownLeft size={18} />}
-                type="credit"
+                type="credit" // Green Color
                 sub="Total Inflow"
               />
               <StatCard
@@ -271,7 +270,6 @@ export default async function LedgerReportPage({
               />
             </div>
 
-            {/* TABLE SECTION */}
             <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
               <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
                 <div className="h-12 w-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm">
@@ -292,7 +290,6 @@ export default async function LedgerReportPage({
                   </div>
                 </div>
               </div>
-
               <LedgerReportTable
                 transactions={transactions}
                 companyId={companyId}
@@ -327,6 +324,8 @@ export default async function LedgerReportPage({
 function StatCard({ label, amount, icon, type, sub, isMain }: any) {
   const isNegative = amount < 0;
   const absAmount = Math.abs(amount);
+
+  // SWAPPED THEMES: Debit is now Red (rose), Credit is now Green (emerald)
   const themes: any = {
     neutral: {
       bg: "bg-white",
@@ -336,15 +335,15 @@ function StatCard({ label, amount, icon, type, sub, isMain }: any) {
     },
     debit: {
       bg: "bg-white",
-      text: "text-emerald-700",
-      icon: "text-emerald-600 bg-emerald-50",
-      border: "border-emerald-100",
+      text: "text-rose-700", // Red text
+      icon: "text-rose-600 bg-rose-50", // Red icon bg
+      border: "border-rose-100",
     },
     credit: {
       bg: "bg-white",
-      text: "text-rose-700",
-      icon: "text-rose-600 bg-rose-50",
-      border: "border-rose-100",
+      text: "text-emerald-700", // Green text
+      icon: "text-emerald-600 bg-emerald-50", // Green icon bg
+      border: "border-emerald-100",
     },
     balance: {
       bg: "bg-slate-900",

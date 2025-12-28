@@ -51,36 +51,18 @@ const SearchableRowLedgerSelect = ({
   const searchRef = useRef<HTMLDivElement>(null);
 
   // ✅ SMART LEDGER FILTERING LOGIC
+  // ✅ REMOVED DROPDOWN RULES: Show all ledgers that match the search term
   const filteredOptions = useMemo(() => {
     return ledgers
       .filter((l: any) => {
         const name = l.name.toLowerCase();
-        const group = l.group.name.toLowerCase();
         const query = (row.ledgerSearchTerm || "").toLowerCase();
 
-        // Identify Bank/Cash groups
-        const isCashBank = group.includes("cash") || group.includes("bank");
-
-        // 1. Basic Search Filter
-        if (!name.includes(query)) return false;
-
-        // 2. Rule-based Logic
-        switch (defaultType) {
-          case "CONTRA":
-            return isCashBank; // Both Dr/Cr must be Cash/Bank
-          case "PAYMENT":
-            return row.type === "Dr" ? !isCashBank : isCashBank; // Dr: Expense/Party, Cr: Cash/Bank
-          case "RECEIPT":
-            return row.type === "Dr" ? isCashBank : !isCashBank; // Dr: Cash/Bank, Cr: Income/Party
-          case "JOURNAL":
-            return !isCashBank; // Both Dr/Cr must be Non-Cash/Bank
-          default:
-            return true;
-        }
+        // Simple name search only - no group restrictions
+        return name.includes(query);
       })
-      .slice(0, 15);
-  }, [ledgers, row.ledgerSearchTerm, row.type, defaultType]);
-
+      .slice(0, 50);
+  }, [ledgers, row.ledgerSearchTerm]);
   useEffect(() => {
     const clickOut = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node))

@@ -3,11 +3,9 @@ import Link from "next/link";
 import {
   Plus,
   Calendar,
-  Search,
   ArrowLeft,
   ListFilter,
   CreditCard,
-  FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 import { getVouchers } from "@/app/actions/voucher";
@@ -15,6 +13,12 @@ import QuickVerify from "@/components/QuickVerify";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import VoucherSearch from "@/components/VoucherSearch";
 import VoucherListClient from "@/components/VoucherListClient";
+
+// --- CRITICAL FIX: CACHING & DYNAMIC RENDERING ---
+// This ensures that the page always fetches fresh data and applies
+// your updated Dr/Cr logic every time you refresh.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function VoucherListPage({
   params,
@@ -40,7 +44,7 @@ export default async function VoucherListPage({
     startDate = new Date(p.from);
     endDate = new Date(p.to);
   } else {
-    // Auto-detect the last day with activity
+    // Auto-detect the last day with activity across all voucher types
     const [s, pu, pa, r, c, j] = await Promise.all([
       prisma.salesVoucher.findFirst({
         where: { companyId },
@@ -91,8 +95,10 @@ export default async function VoucherListPage({
     }
   }
 
+  // Set the end date to the very end of the day for accurate filtering
   endDate.setHours(23, 59, 59, 999);
 
+  // Fetch vouchers with the updated Dr/Cr logic from your action file
   const vouchers = await getVouchers(companyId, startDate, endDate, p.q);
   const baseUrl = `/companies/${id}/vouchers`;
   const isFiltered = !!(p.from && p.to);
@@ -126,7 +132,6 @@ export default async function VoucherListPage({
               </h1>
 
               <div className="flex items-center gap-3 mt-1.5">
-                {/* Date Pill */}
                 <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-slate-50 border border-slate-200 rounded-md">
                   <Calendar size={12} className="text-slate-500" />
                   <span className="text-xs font-bold text-slate-700">
@@ -136,14 +141,12 @@ export default async function VoucherListPage({
                   </span>
                 </div>
 
-                {/* Status Text */}
                 {!isFiltered && (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     {isLatestData ? "Latest Activity" : "Today"}
                   </span>
                 )}
 
-                {/* Counter Separator */}
                 <span className="text-slate-300">|</span>
                 <span className="text-xs font-bold text-slate-500">
                   {vouchers.length} Entries
@@ -154,14 +157,12 @@ export default async function VoucherListPage({
 
           {/* Right: Controls Toolbar */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Filter Group */}
             <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl shadow-sm">
               <DateRangeFilter />
               <div className="w-px h-5 bg-slate-200 mx-1" />
               <VoucherSearch />
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-3 pl-2">
               <QuickVerify companyId={companyId} />
 
