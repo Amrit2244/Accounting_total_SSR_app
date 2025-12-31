@@ -12,16 +12,18 @@ import {
   FileText,
   Plus,
 } from "lucide-react";
-import { updateVoucher, State } from "@/app/actions/voucher";
+// Import from masters where updateVoucher lives
+import { updateVoucher } from "@/app/actions/masters";
+import { State } from "@/app/actions/voucher";
 import confetti from "canvas-confetti";
 import { useRouter } from "next/navigation";
 
-// Wrapper to match useActionState signature if needed
+// Wrapper to match useActionState signature
 async function updateVoucherWrapper(
   prevState: State,
   formData: FormData
 ): Promise<State> {
-  return await updateVoucher(prevState, formData);
+  return await (updateVoucher as any)(prevState, formData);
 }
 
 export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
@@ -42,7 +44,8 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
   const [entries, setEntries] = useState(
     (voucher.ledgerEntries || []).map((e: any) => ({
       ledgerId: e.ledgerId,
-      type: e.amount > 0 ? "Dr" : "Cr",
+      // Tally Standard: Negative is Dr, Positive is Cr
+      type: e.amount < 0 ? "Dr" : "Cr",
       amount: Math.abs(e.amount),
       tempId: Math.random(),
     }))
@@ -93,8 +96,18 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
       <input type="hidden" name="voucherId" value={voucher.id} />
       <input type="hidden" name="type" value={voucher.type} />
 
-      {/* Map entries back to 'rows' format expected by updateVoucher action */}
-      <input type="hidden" name="rows" value={JSON.stringify(entries)} />
+      {/* ✅ FIXED: Added explicit types to the map function to resolve build error */}
+      <input
+        type="hidden"
+        name="structuredEntries"
+        value={JSON.stringify(
+          entries.map((e: any) => ({
+            ledgerId: e.ledgerId,
+            // Convert back to signs: Dr is negative in our DB standard
+            amount: e.type === "Dr" ? -Math.abs(e.amount) : Math.abs(e.amount),
+          }))
+        )}
+      />
 
       {/* Success Banner */}
       {state.success && (
@@ -105,25 +118,22 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
               Update Successful
             </h2>
             <p className="text-emerald-100 text-sm font-medium">
-              Approvals reset. Redirecting...
+              Voucher updated. Redirecting...
             </p>
           </div>
         </div>
       )}
 
-      {/* Info Banner */}
+      {/* Info Warning */}
       <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl flex items-start gap-3 shadow-sm">
         <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
         <div>
           <h3 className="text-amber-800 font-bold text-xs uppercase tracking-wide mb-1">
-            Modification Warning
+            Modification Notice
           </h3>
           <p className="text-amber-700 text-xs leading-relaxed">
-            Editing this voucher will{" "}
-            <strong className="font-bold">generate a new Transaction ID</strong>{" "}
-            and reset the status to{" "}
-            <strong className="font-bold">PENDING</strong>. You will become the
-            Maker of this record.
+            Editing will reset the approval status to{" "}
+            <strong className="font-bold">PENDING</strong>.
           </p>
         </div>
       </div>
@@ -134,7 +144,7 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
         </div>
       )}
 
-      {/* Header Section */}
+      {/* Form Fields */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
@@ -150,7 +160,7 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
         </div>
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-            <FileText size={12} /> Voucher Type
+            <FileText size={12} /> Voucher Reference
           </label>
           <div className="h-11 flex items-center px-4 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm">
             <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] uppercase font-black tracking-wide mr-2 border border-slate-200">
@@ -161,11 +171,11 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
         </div>
       </div>
 
-      {/* Simple Ledger Edit Table */}
+      {/* Ledger Table */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg shadow-slate-200/50">
         <div className="bg-slate-900 text-white p-4 text-[10px] font-black uppercase grid grid-cols-12 tracking-widest">
-          <div className="col-span-2">Type</div>
-          <div className="col-span-6 pl-2">Account</div>
+          <div className="col-span-2">Side</div>
+          <div className="col-span-6 pl-2">Ledger Account</div>
           <div className="col-span-3 text-right">Amount</div>
           <div className="col-span-1"></div>
         </div>
@@ -205,7 +215,6 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
                 <Trash2
                   size={16}
                   className="text-slate-300 hover:text-rose-500 cursor-pointer transition-colors opacity-0 group-hover:opacity-100 mx-auto"
-                  // ✅ FIXED: Added explicit type annotation for '_'
                   onClick={() =>
                     setEntries(entries.filter((_: any, i: number) => i !== idx))
                   }
@@ -230,7 +239,7 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
           }
           className="w-full py-3 bg-white text-[10px] font-black uppercase text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 tracking-widest"
         >
-          <Plus size={14} /> Add Line Item
+          <Plus size={14} /> Add New Row
         </button>
       </div>
 
@@ -239,16 +248,14 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
           name="narration"
           value={narration}
           onChange={(e) => setNarration(e.target.value)}
-          placeholder="Reason for edit..."
+          placeholder="Edit narration..."
           className="flex-1 border border-slate-200 rounded-2xl p-4 text-sm font-medium h-32 resize-none focus:ring-2 focus:ring-indigo-600 outline-none bg-slate-50 placeholder:text-slate-400"
         />
 
         <div className="w-56 bg-slate-900 text-white rounded-2xl p-6 flex flex-col justify-center text-right shadow-xl relative overflow-hidden">
-          {/* Decorative Glow */}
           <div className="absolute -top-10 -right-10 w-24 h-24 bg-indigo-500/30 rounded-full blur-2xl" />
-
           <div className="text-[10px] text-indigo-300 font-black uppercase tracking-widest mb-1 relative z-10">
-            Total Amount
+            Total Debit
           </div>
           <div
             className={`text-3xl font-mono font-bold leading-none relative z-10 ${
@@ -260,7 +267,7 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
           </div>
           {!isBalanced && (
             <div className="text-[10px] text-rose-400 font-black uppercase tracking-wider mt-2 bg-rose-950/30 py-1 px-2 rounded border border-rose-900/50 inline-block self-end relative z-10">
-              Unbalanced
+              Difference: {(totalDr - totalCr).toFixed(2)}
             </div>
           )}
         </div>
@@ -277,7 +284,7 @@ export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
           ) : (
             <Save size={18} />
           )}
-          Authorize & Commit Edits
+          Update & Post Voucher
         </button>
       </div>
     </form>

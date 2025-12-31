@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { processTallyXML, getCurrentUserId } from "@/app/actions/tally";
+import { processTallyXML } from "@/app/actions/upload-tally";
+import { getCurrentUserId } from "@/app/actions/tally";
 
 export async function POST(req: Request) {
   try {

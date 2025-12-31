@@ -4,7 +4,7 @@ import {
   getVoucherList,
   syncSingleVoucher,
   getCurrentUserId,
-} from "@/app/actions/upload-tally"; // Adjust path to point to your actions file
+} from "@/app/actions/tally"; // Adjust path to point to your actions file
 
 export const maxDuration = 60; // Set timeout to 60 seconds (Vercel Pro) or higher if self-hosted
 

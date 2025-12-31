@@ -11,6 +11,12 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
+// --- TYPES ---
+interface LedgerEntryData {
+  name: string;
+  amount: number;
+}
+
 // --- HELPERS ---
 
 function getVal(obj: any): string {
@@ -30,7 +36,6 @@ function generateTXID(): string {
   return Math.floor(10000 + Math.random() * 90000).toString();
 }
 
-// Robust Date Formatter to prevent RangeError
 function formatTallyDate(dateStr: string): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -54,7 +59,7 @@ export async function getCurrentUserId(): Promise<number | null> {
   }
 }
 
-// --- 1. MASTER IMPORT (FIXED ROOT CAUSE: Dr/Cr Signs) ---
+// --- 1. MASTER IMPORT ---
 export async function syncLocalTally(companyId: number, userId: number) {
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -70,12 +75,6 @@ export async function syncLocalTally(companyId: number, userId: number) {
 
     for (const l of ledgers) {
       const parent = getVal(l.PARENT) || "Primary";
-
-      /**
-       * ROOT FIX: Tally XML exports Debit balances as negative numbers.
-       * We removed the "* -1" to store the data exactly as Tally intended.
-       * Negative = Debit (Dr), Positive = Credit (Cr).
-       */
       const opBal = parseFloat(getVal(l.OPENINGBALANCE)) || 0.0;
 
       const grp = await prisma.group.upsert({
@@ -104,7 +103,7 @@ export async function syncLocalTally(companyId: number, userId: number) {
   }
 }
 
-// --- 2. VOUCHER LIST (USE MASTERID TO PREVENT OVERWRITING) ---
+// --- 2. VOUCHER LIST ---
 export async function getVoucherList(
   companyId: number,
   fromDate: string,
@@ -128,13 +127,13 @@ export async function getVoucherList(
       .filter((v) =>
         getVal(v.VOUCHERTYPENAME).toLowerCase().includes(type.toLowerCase())
       )
-      .map((v) => getVal(v.MASTERID || v["@_MASTERID"])); // Return Unique Master IDs
+      .map((v) => getVal(v.MASTERID || v["@_MASTERID"]));
   } catch (e) {
     return [];
   }
 }
 
-// --- 3. SINGLE VOUCHER SYNC (BY MASTER ID) ---
+// --- 3. SINGLE VOUCHER SYNC ---
 export async function syncSingleVoucher(
   companyId: number,
   masterId: string,
@@ -179,23 +178,17 @@ export async function syncSingleVoucher(
       ...ensureArray(v["ALLINVENTORYENTRIES.LIST"]),
     ];
 
-    const finalLedgerList = [];
+    const finalLedgerList: LedgerEntryData[] = [];
     let calculatedTotal = 0;
 
     for (const l of primaryLedgerList) {
       const lName = getVal(l.LEDGERNAME || l.NAME)
         .replace(/\s+/g, " ")
         .trim();
-
-      /**
-       * ROOT FIX: Maintain the Tally Sign.
-       * Tally: Negative = Debit, Positive = Credit.
-       */
       const lAmt = parseFloat(getVal(l.AMOUNT)) || 0;
 
       if (lName && Math.abs(lAmt) > 0) {
         finalLedgerList.push({ name: lName, amount: lAmt });
-        // We calculate total based on Debits (Negative numbers in Tally)
         if (lAmt < 0) calculatedTotal += Math.abs(lAmt);
       }
     }
@@ -203,8 +196,9 @@ export async function syncSingleVoucher(
     const finalTotalAmount =
       Math.abs(parseFloat(getVal(v.AMOUNT)) || 0) || calculatedTotal;
 
+    // Use 'any' for tx to prevent strict model name build errors
     return await prisma.$transaction(
-      async (tx) => {
+      async (tx: any) => {
         let dbVoucher: any;
         let ledgerTx: any;
         let inventoryTx: any;
@@ -221,31 +215,57 @@ export async function syncSingleVoucher(
           narration: narration + ` (Vch No: ${getVal(v.VOUCHERNUMBER)})`,
         };
 
-        const whereClause = {
-          companyId_voucherNo: { companyId, voucherNo: vNumProcessed },
-        };
-
         if (vTypeName.includes("SALES")) {
           dbVoucher = await tx.salesVoucher.upsert({
-            where: whereClause,
-            update: { ...baseData, partyName },
-            create: { ...baseData, partyName },
+            where: {
+              companyId_voucherNo: {
+                companyId,
+                voucherNo: String(vNumProcessed),
+              },
+            },
+            update: {
+              ...baseData,
+              voucherNo: String(vNumProcessed),
+              partyName,
+            },
+            create: {
+              ...baseData,
+              voucherNo: String(vNumProcessed),
+              partyName,
+            },
           });
           ledgerTx = tx.salesLedgerEntry;
-          inventoryTx = tx.salesInventoryEntry;
+          // ✅ FIX: Ensure this matches your schema model name
+          inventoryTx = tx.salesInventoryEntry || tx.salesItemEntry;
           parentIdKey = "salesId";
         } else if (vTypeName.includes("PURCHASE")) {
           dbVoucher = await tx.purchaseVoucher.upsert({
-            where: whereClause,
-            update: { ...baseData, partyName },
-            create: { ...baseData, partyName },
+            where: {
+              companyId_voucherNo: {
+                companyId,
+                voucherNo: String(vNumProcessed),
+              },
+            },
+            update: {
+              ...baseData,
+              voucherNo: String(vNumProcessed),
+              partyName,
+            },
+            create: {
+              ...baseData,
+              voucherNo: String(vNumProcessed),
+              partyName,
+            },
           });
           ledgerTx = tx.purchaseLedgerEntry;
-          inventoryTx = tx.purchaseInventoryEntry;
+          // ✅ FIX: Ensure this matches your schema model name
+          inventoryTx = tx.purchaseInventoryEntry || tx.purchaseItemEntry;
           parentIdKey = "purchaseId";
         } else if (vTypeName.includes("PAYMENT")) {
           dbVoucher = await tx.paymentVoucher.upsert({
-            where: whereClause,
+            where: {
+              companyId_voucherNo: { companyId, voucherNo: vNumProcessed },
+            },
             update: baseData,
             create: baseData,
           });
@@ -253,7 +273,9 @@ export async function syncSingleVoucher(
           parentIdKey = "paymentId";
         } else if (vTypeName.includes("RECEIPT")) {
           dbVoucher = await tx.receiptVoucher.upsert({
-            where: whereClause,
+            where: {
+              companyId_voucherNo: { companyId, voucherNo: vNumProcessed },
+            },
             update: baseData,
             create: baseData,
           });
@@ -261,7 +283,9 @@ export async function syncSingleVoucher(
           parentIdKey = "receiptId";
         } else if (vTypeName.includes("CONTRA")) {
           dbVoucher = await tx.contraVoucher.upsert({
-            where: whereClause,
+            where: {
+              companyId_voucherNo: { companyId, voucherNo: vNumProcessed },
+            },
             update: baseData,
             create: baseData,
           });
@@ -269,7 +293,9 @@ export async function syncSingleVoucher(
           parentIdKey = "contraId";
         } else if (vTypeName.includes("JOURNAL")) {
           dbVoucher = await tx.journalVoucher.upsert({
-            where: whereClause,
+            where: {
+              companyId_voucherNo: { companyId, voucherNo: vNumProcessed },
+            },
             update: baseData,
             create: baseData,
           });

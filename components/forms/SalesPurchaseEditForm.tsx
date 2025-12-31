@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useActionState, useMemo, useRef, useEffect } from "react";
-// Import State type so we can match it
-import { updateVoucher, State } from "@/app/actions/voucher";
+// Import the action from masters
+import { updateVoucher } from "@/app/actions/masters";
 import {
   Plus,
   Save,
@@ -21,7 +21,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// Types
+// --- Types ---
 type Ledger = {
   id: number;
   name: string;
@@ -41,6 +41,21 @@ type VoucherRow = {
   gst: number;
   amount: number;
   taxAmount: number;
+};
+
+// This matches the State definition expected by updateVoucher in masters.ts
+export type FormState = {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    voucherId?: string[];
+    companyId?: string[];
+    type?: string[];
+    date?: string[];
+    narration?: string[];
+    structuredEntries?: string[];
+    structuredInventory?: string[];
+  };
 };
 
 type Props = {
@@ -130,7 +145,6 @@ const SearchableLedgerSelect = ({
         </div>
       </div>
 
-      {/* Dropdown */}
       {isOpen && (
         <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-xl shadow-xl mt-1.5 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200">
           {filteredOptions.length > 0 ? (
@@ -173,10 +187,13 @@ export default function SalesPurchaseEditForm({
 }: Props) {
   const router = useRouter();
 
-  // ✅ FIX: Use a properly typed initial state matching the server action
-  const initialState: State = { success: false, error: "", message: "" };
+  // ✅ FIX: Use properly typed initial state matching the server action's return signature
+  const initialState: FormState = { success: false, message: null };
+
+  // cast updateVoucher to any if Prisma types are still clashing,
+  // or use proper function signature matching useActionState expectations
   const [state, action, isPending] = useActionState(
-    updateVoucher,
+    updateVoucher as any,
     initialState
   );
 
@@ -285,32 +302,60 @@ export default function SalesPurchaseEditForm({
       <input type="hidden" name="voucherId" value={voucher.id} />
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="type" value={type} />
+      {/* Ensure entries are passed as JSON strings for the server action */}
       <input
         type="hidden"
-        name="inventoryRows"
-        value={JSON.stringify(rows.filter((r) => r.itemId && r.itemId !== ""))}
+        name="structuredEntries"
+        value={JSON.stringify([
+          {
+            ledgerId: partyId,
+            amount: type === "SALES" ? grandTotal : -grandTotal,
+          },
+          {
+            ledgerId: accountId,
+            amount: type === "SALES" ? -totalBaseAmount : totalBaseAmount,
+          },
+          ...(enableTax
+            ? [
+                {
+                  ledgerId: taxLedgerId,
+                  amount: type === "SALES" ? -totalTaxAmount : totalTaxAmount,
+                },
+              ]
+            : []),
+        ])}
       />
       <input
         type="hidden"
-        name="taxLedgerId"
-        value={enableTax ? taxLedgerId : ""}
+        name="structuredInventory"
+        value={JSON.stringify(
+          rows
+            .map((r) => ({
+              stockItemId: r.itemId,
+              quantity: r.qty,
+              rate: r.rate,
+            }))
+            .filter((r) => r.stockItemId !== "")
+        )}
       />
-      <input type="hidden" name="totalAmount" value={grandTotal} />
-      <input type="hidden" name="totalVal" value={totalBaseAmount} />
-      <input type="hidden" name="taxVal" value={totalTaxAmount} />
 
-      {state?.error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl mb-6 flex items-center gap-3 shadow-sm animate-in fade-in slide-in-from-top-2">
+      {state?.message && (
+        <div
+          className={`p-4 rounded-xl mb-6 flex items-center gap-3 shadow-sm ${
+            state.success
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : "bg-rose-50 text-rose-700 border border-rose-200"
+          }`}
+        >
           <AlertCircle size={20} />
           <span className="font-bold text-xs uppercase tracking-wide">
-            {state.error}
+            {state.message}
           </span>
         </div>
       )}
 
       {/* --- HEADER SECTION --- */}
       <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm mb-8 grid grid-cols-1 md:grid-cols-12 gap-6 relative overflow-hidden">
-        {/* Decorative left border */}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />
 
         <div className="md:col-span-2 space-y-1.5">
@@ -361,7 +406,7 @@ export default function SalesPurchaseEditForm({
         <div className="md:col-span-3">
           <SearchableLedgerSelect
             label="Party A/c Name"
-            name="partyLedgerId"
+            name="partyLedgerId_input"
             options={partyLedgersImpl}
             selectedId={partyId}
             setSelectedId={setPartyId}
@@ -373,7 +418,7 @@ export default function SalesPurchaseEditForm({
         <div className="md:col-span-3">
           <SearchableLedgerSelect
             label={`${type} Ledger`}
-            name="salesPurchaseLedgerId"
+            name="accountLedgerId_input"
             options={accountLedgersImpl}
             selectedId={accountId}
             setSelectedId={setAccountId}
@@ -424,7 +469,6 @@ export default function SalesPurchaseEditForm({
 
       {/* --- ITEM TABLE --- */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg shadow-slate-200/50 mb-8">
-        {/* Table Header */}
         <div className="grid grid-cols-12 bg-slate-900 text-white py-4 px-4 text-[10px] uppercase font-black tracking-widest">
           <div className="col-span-5 pl-2">Item Details</div>
           <div className="col-span-2 text-right">Qty</div>
@@ -433,7 +477,6 @@ export default function SalesPurchaseEditForm({
           <div className="col-span-1"></div>
         </div>
 
-        {/* Table Body */}
         <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto custom-scrollbar bg-slate-50/30">
           {rows.map((row, idx) => (
             <div
@@ -488,7 +531,6 @@ export default function SalesPurchaseEditForm({
                   type="button"
                   onClick={() => removeRow(idx)}
                   className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                  title="Remove Row"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -497,7 +539,6 @@ export default function SalesPurchaseEditForm({
           ))}
         </div>
 
-        {/* Add Row Button */}
         <button
           type="button"
           onClick={() =>
@@ -537,9 +578,7 @@ export default function SalesPurchaseEditForm({
         </div>
 
         <div className="bg-slate-900 text-white p-8 rounded-3xl w-full md:w-[400px] shadow-2xl relative overflow-hidden">
-          {/* Background Glow */}
           <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/30 rounded-full blur-3xl" />
-
           <div className="relative z-10 space-y-4">
             <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
               <span>Subtotal</span>
@@ -547,7 +586,6 @@ export default function SalesPurchaseEditForm({
                 {formatCurrency(totalBaseAmount)}
               </span>
             </div>
-
             {enableTax && (
               <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider pb-4 border-b border-white/10">
                 <span>GST / Tax</span>
@@ -556,7 +594,6 @@ export default function SalesPurchaseEditForm({
                 </span>
               </div>
             )}
-
             <div className="flex justify-between items-end pt-2">
               <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest mb-1">
                 Grand Total
