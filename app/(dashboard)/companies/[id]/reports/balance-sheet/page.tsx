@@ -35,11 +35,9 @@ export default async function BalanceSheetPage({
   // --- 1. DATE LOGIC ---
   const todayStr = new Date().toISOString().split("T")[0];
   const asOf = sp.date || todayStr;
-
   const asOfDate = new Date(asOf);
   asOfDate.setHours(23, 59, 59, 999);
 
-  // Common Filter for all Ledger Entries
   const voucherFilter = {
     status: "APPROVED",
     date: { lte: asOfDate },
@@ -87,17 +85,17 @@ export default async function BalanceSheetPage({
     }),
   ]);
 
-  // --- 3. CALCULATE STOCK & P&L ---
+  // --- 3. CALCULATE PROFIT & LOSS (Trading/PL logic) ---
   let openingStock = 0;
   let closingStock = 0;
   let closingStockDetails: { name: string; amount: number }[] = [];
 
   stockItems.forEach((item: any) => {
-    const opVal = item.openingValue || 0;
+    const opVal = Math.abs(item.openingValue || 0);
     openingStock += opVal;
 
     const allEntries = [
-      ...item.salesItems.map((e: any) => ({ qty: e.quantity, val: 0 })),
+      ...item.salesItems.map((e: any) => ({ qty: e.quantity, val: e.amount })),
       ...item.purchaseItems.map((e: any) => ({
         qty: e.quantity,
         val: e.amount,
@@ -115,8 +113,9 @@ export default async function BalanceSheetPage({
     allEntries.forEach((e: any) => {
       currentQty += e.qty;
       if (e.qty > 0) {
+        // Purchase/Inward
         totalInwardQty += e.qty;
-        totalInwardVal += e.val;
+        totalInwardVal += Math.abs(e.val);
       }
     });
 
@@ -143,33 +142,32 @@ export default async function BalanceSheetPage({
       sum(l.journalEntries);
 
     const net = (l.openingBalance || 0) + txTotal;
+    if (Math.abs(net) < 0.01 || !l.group) return;
 
-    if (Math.abs(net) < 0.01) return;
-    if (!l.group) return;
-
-    const nature = l.group.nature?.toUpperCase();
     const gName = l.group.name.toLowerCase();
-    const amt = Math.abs(net);
+    const nature = l.group.nature?.toUpperCase();
 
-    const isExp =
+    // Check if Ledger belongs to Trading/PL
+    const isTradingPL =
       nature === "EXPENSE" ||
+      nature === "INCOME" ||
       gName.includes("purchase") ||
       gName.includes("direct exp") ||
-      gName.includes("indirect exp");
-    const isInc =
-      nature === "INCOME" ||
+      gName.includes("indirect exp") ||
       gName.includes("sales") ||
       gName.includes("direct inc") ||
       gName.includes("indirect inc");
 
-    if (isExp) totalExpense += amt;
-    else if (isInc) totalIncome += amt;
+    if (isTradingPL) {
+      if (net < 0) totalExpense += Math.abs(net); // Debit is Expense
+      else totalIncome += net; // Credit is Income
+    }
   });
 
   const netResult = totalIncome - totalExpense;
   const isProfit = netResult >= 0;
 
-  // --- 4. CLASSIFY ASSETS & LIABILITIES ---
+  // --- 4. CLASSIFY ASSETS & LIABILITIES (Balance Sheet logic) ---
   const liabMap = new Map<string, GroupData>();
   const assetMap = new Map<string, GroupData>();
 
@@ -197,216 +195,153 @@ export default async function BalanceSheetPage({
       sum(l.journalEntries);
 
     const net = (l.openingBalance || 0) + txTotal;
-
-    if (Math.abs(net) < 0.01) return;
-    if (!l.group) return;
+    if (Math.abs(net) < 0.01 || !l.group) return;
 
     const nature = l.group.nature?.toUpperCase();
     const gName = l.group.name.toLowerCase();
 
-    if (
+    // Skip Trading/PL ledgers as they are already summarized in netResult
+    const isTradingPL =
       nature === "EXPENSE" ||
       nature === "INCOME" ||
       gName.includes("purchase") ||
       gName.includes("sales") ||
       gName.includes("direct") ||
-      gName.includes("indirect")
-    )
-      return;
+      gName.includes("indirect");
+    if (isTradingPL) return;
 
-    if (
-      nature === "LIABILITY" ||
-      nature === "CAPITAL" ||
-      gName.includes("capital") ||
-      gName.includes("creditor")
-    ) {
-      addToMap(liabMap, l.group.name, l.name, Math.abs(net));
-    } else if (
-      nature === "ASSET" ||
-      gName.includes("asset") ||
-      gName.includes("debtor") ||
-      gName.includes("bank") ||
-      gName.includes("cash")
-    ) {
+    /**
+     * ✅ LOGIC FIX:
+     * Negative (< 0) -> Debit (Asset)
+     * Positive (> 0) -> Credit (Liability)
+     */
+    if (net < 0) {
       addToMap(assetMap, l.group.name, l.name, Math.abs(net));
+    } else {
+      addToMap(liabMap, l.group.name, l.name, net);
     }
   });
 
-  if (isProfit && netResult > 0) {
-    liabMap.set("Reserves & Surplus", {
-      groupName: "Reserves & Surplus",
-      amount: netResult,
-      ledgers: [{ name: "Net Profit (Current Year)", amount: netResult }],
-      isSystem: true,
-    });
-  } else if (!isProfit && Math.abs(netResult) > 0) {
-    assetMap.set("Profit & Loss A/c", {
-      groupName: "Profit & Loss A/c",
-      amount: Math.abs(netResult),
-      ledgers: [
-        { name: "Net Loss (Current Year)", amount: Math.abs(netResult) },
-      ],
-      isSystem: true,
-    });
+  // Inject Net Profit/Loss
+  if (isProfit) {
+    addToMap(
+      liabMap,
+      "Reserves & Surplus",
+      "Profit & Loss A/c (Net Profit)",
+      netResult
+    );
+  } else {
+    addToMap(assetMap, "Profit & Loss A/c", "Net Loss", Math.abs(netResult));
   }
 
+  // Inject Closing Stock
   if (closingStock > 0) {
-    assetMap.set("Closing Stock", {
-      groupName: "Closing Stock",
-      amount: closingStock,
-      ledgers: closingStockDetails,
-      isSystem: true,
-    });
+    addToMap(assetMap, "Current Assets", "Closing Stock", closingStock);
   }
 
   const liabilities = Array.from(liabMap.values());
   const assets = Array.from(assetMap.values());
-
-  const totalLiab = liabilities.reduce((s: number, i: any) => s + i.amount, 0);
-  const totalAsset = assets.reduce((s: number, i: any) => s + i.amount, 0);
+  const totalLiab = liabilities.reduce((s, i) => s + i.amount, 0);
+  const totalAsset = assets.reduce((s, i) => s + i.amount, 0);
   const grandTotal = Math.max(totalLiab, totalAsset);
   const diff = totalLiab - totalAsset;
-  const isBalanced = Math.abs(diff) < 0.01;
-
-  const TotalRow = ({ amount }: { amount: number }) => (
-    <div className="flex justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 mt-auto">
-      <span className="font-black text-xs uppercase tracking-widest text-slate-900">
-        Total
-      </span>
-      <span className="font-mono font-bold text-sm text-slate-900">
-        ₹{fmt(amount)}
-      </span>
-    </div>
-  );
+  const isBalanced = Math.abs(diff) < 0.1;
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
-      {/* Background Pattern */}
-      <div
-        className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
-      />
-
-      <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6">
+    <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col px-4 md:px-8 py-6">
+      <div className="max-w-[1920px] mx-auto w-full space-y-6">
         {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20 print:hidden">
-          <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm print:hidden">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
               <Link
                 href={`/companies/${companyId}`}
-                className="hover:text-indigo-600 transition-colors"
+                className="hover:text-indigo-600"
               >
                 Dashboard
               </Link>
               <ChevronRight size={10} />
-              <Link
-                href={`/companies/${companyId}/reports`}
-                className="hover:text-indigo-600 transition-colors"
-              >
-                Reports
-              </Link>
-              <ChevronRight size={10} />
               <span className="text-slate-900">Balance Sheet</span>
             </div>
-            <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+            <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
               <PieChart className="text-indigo-600" size={32} />
               Balance Sheet
             </h1>
-            <p className="text-slate-500 font-medium mt-2 max-w-xl">
-              Financial position statement as of{" "}
-              {asOfDate.toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-              .
+            <p className="text-slate-500 text-sm">
+              Statement of Financial Position as of{" "}
+              {new Date(asOf).toLocaleDateString("en-IN")}
             </p>
           </div>
-
           <div className="flex items-center gap-3">
             <BalanceSheetFilter />
-
-            <div className="h-8 w-px bg-slate-200 mx-1" />
-
             <PrintButton />
-
             <Link
               href={`/companies/${companyId}/reports`}
-              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-              title="Back to Reports"
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 rounded-xl transition-all shadow-sm"
             >
               <ArrowLeft size={20} />
             </Link>
           </div>
         </div>
 
-        {/* REPORT CARD */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[600px] print:shadow-none print:border-none">
-          {/* Table Header */}
-          <div className="flex border-b border-slate-200 bg-slate-50">
-            <div className="w-1/2 px-6 py-3 border-r border-slate-200 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
+        {/* BALANCE SHEET TABLE */}
+        <div className="bg-white border-2 border-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col print:border-none print:shadow-none">
+          <div className="flex border-b-2 border-slate-900 bg-slate-900 text-white font-black text-xs uppercase tracking-widest">
+            <div className="w-1/2 px-6 py-4 border-r border-slate-700 flex justify-between">
               <span>Liabilities</span>
               <span>Amount (₹)</span>
             </div>
-            <div className="w-1/2 px-6 py-3 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
+            <div className="w-1/2 px-6 py-4 flex justify-between">
               <span>Assets</span>
               <span>Amount (₹)</span>
             </div>
           </div>
 
-          {/* Table Body */}
-          <div className="flex flex-1 min-h-0">
-            {/* Liabilities Column */}
-            <div className="w-1/2 border-r border-slate-200 flex flex-col bg-slate-50/10">
-              <div className="flex-1 p-2 space-y-1 overflow-y-auto custom-scrollbar">
-                {liabilities.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-40 text-slate-400">
-                    <span className="text-xs font-bold uppercase tracking-wide">
-                      No Liabilities
-                    </span>
-                  </div>
-                ) : (
-                  liabilities.map((group: any) => (
-                    <ProfitLossDrillDown key={group.groupName} item={group} />
-                  ))
-                )}
+          <div className="flex flex-1 divide-x-2 divide-slate-900">
+            {/* Liabilities Side */}
+            <div className="w-1/2 flex flex-col bg-slate-50/30">
+              <div className="flex-1 p-4 space-y-1">
+                {liabilities.map((group) => (
+                  <ProfitLossDrillDown key={group.groupName} item={group} />
+                ))}
               </div>
-
               {!isBalanced && diff < 0 && (
-                <div className="px-6 py-3 bg-rose-50 border-t border-rose-100 text-rose-700 text-xs font-bold flex justify-between">
-                  <span>Difference in Liabilities</span>
-                  <span className="font-mono">{fmt(Math.abs(diff))}</span>
+                <div className="px-6 py-3 bg-rose-50 text-rose-700 text-xs font-bold border-t border-rose-100 flex justify-between items-center italic">
+                  <span>Difference in Assets/Liabilities</span>
+                  <span>{fmt(Math.abs(diff))}</span>
                 </div>
               )}
-              <TotalRow amount={grandTotal} />
+              <div className="mt-auto px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+                <span className="font-black text-xs uppercase">
+                  Total Liabilities
+                </span>
+                <span className="font-mono font-bold text-lg">
+                  ₹{fmt(grandTotal)}
+                </span>
+              </div>
             </div>
 
-            {/* Assets Column */}
+            {/* Assets Side */}
             <div className="w-1/2 flex flex-col">
-              <div className="flex-1 p-2 space-y-1 overflow-y-auto custom-scrollbar">
-                {assets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-40 text-slate-400">
-                    <span className="text-xs font-bold uppercase tracking-wide">
-                      No Assets
-                    </span>
-                  </div>
-                ) : (
-                  assets.map((group: any) => (
-                    <ProfitLossDrillDown key={group.groupName} item={group} />
-                  ))
-                )}
+              <div className="flex-1 p-4 space-y-1">
+                {assets.map((group) => (
+                  <ProfitLossDrillDown key={group.groupName} item={group} />
+                ))}
               </div>
-
               {!isBalanced && diff > 0 && (
-                <div className="px-6 py-3 bg-rose-50 border-t border-rose-100 text-rose-700 text-xs font-bold flex justify-between">
-                  <span>Difference in Assets</span>
-                  <span className="font-mono">{fmt(Math.abs(diff))}</span>
+                <div className="px-6 py-3 bg-rose-50 text-rose-700 text-xs font-bold border-t border-rose-100 flex justify-between items-center italic">
+                  <span>Difference in Assets/Liabilities</span>
+                  <span>{fmt(Math.abs(diff))}</span>
                 </div>
               )}
-              <TotalRow amount={grandTotal} />
+              <div className="mt-auto px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+                <span className="font-black text-xs uppercase">
+                  Total Assets
+                </span>
+                <span className="font-mono font-bold text-lg">
+                  ₹{fmt(grandTotal)}
+                </span>
+              </div>
             </div>
           </div>
         </div>

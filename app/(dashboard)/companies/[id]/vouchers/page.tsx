@@ -13,10 +13,9 @@ import QuickVerify from "@/components/QuickVerify";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import VoucherSearch from "@/components/VoucherSearch";
 import VoucherListClient from "@/components/VoucherListClient";
+// Import the new component created above
+import VoucherTypeFilter from "@/components/VoucherTypeFilter";
 
-// --- CRITICAL FIX: CACHING & DYNAMIC RENDERING ---
-// This ensures that the page always fetches fresh data and applies
-// your updated Dr/Cr logic every time you refresh.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -29,6 +28,7 @@ export default async function VoucherListPage({
     from?: string;
     to?: string;
     q?: string;
+    type?: string; // Added type definition
   }>;
 }) {
   const { id } = await params;
@@ -44,7 +44,6 @@ export default async function VoucherListPage({
     startDate = new Date(p.from);
     endDate = new Date(p.to);
   } else {
-    // Auto-detect the last day with activity across all voucher types
     const [s, pu, pa, r, c, j] = await Promise.all([
       prisma.salesVoucher.findFirst({
         where: { companyId },
@@ -95,17 +94,26 @@ export default async function VoucherListPage({
     }
   }
 
-  // Set the end date to the very end of the day for accurate filtering
   endDate.setHours(23, 59, 59, 999);
 
-  // Fetch vouchers with the updated Dr/Cr logic from your action file
-  const vouchers = await getVouchers(companyId, startDate, endDate, p.q);
+  // 1. Fetch ALL vouchers for the date/search range
+  let vouchers = await getVouchers(companyId, startDate, endDate, p.q);
+
+  // 2. NEW FILTER LOGIC: Filter by Type if selected
+  // We assume your vouchers object has a 'type' property (e.g. "Sales", "Payment")
+  const filterType = p.type?.toUpperCase() || "ALL";
+
+  if (filterType !== "ALL") {
+    vouchers = vouchers.filter(
+      (v: any) => v.type?.toUpperCase() === filterType
+    );
+  }
+
   const baseUrl = `/companies/${id}/vouchers`;
   const isFiltered = !!(p.from && p.to);
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
-      {/* Background Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -114,10 +122,8 @@ export default async function VoucherListPage({
         }}
       />
 
-      {/* --- STICKY HEADER --- */}
       <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="max-w-[1920px] mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          {/* Left: Title & Breadcrumbs */}
           <div className="flex items-start gap-4">
             <Link
               href={`/companies/${id}`}
@@ -160,6 +166,9 @@ export default async function VoucherListPage({
             <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl shadow-sm">
               <DateRangeFilter />
               <div className="w-px h-5 bg-slate-200 mx-1" />
+              {/* NEW: Added VoucherTypeFilter here */}
+              <VoucherTypeFilter />
+              <div className="w-px h-5 bg-slate-200 mx-1" />
               <VoucherSearch />
             </div>
 
@@ -181,12 +190,9 @@ export default async function VoucherListPage({
         </div>
       </div>
 
-      {/* --- MAIN CONTENT --- */}
       <div className="flex-1 relative z-10 p-6 overflow-hidden">
         <div className="h-full max-w-[1920px] mx-auto flex flex-col">
-          {/* Table Container */}
           <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
-            {/* Empty State Overlay */}
             {vouchers.length === 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20 bg-white/50 backdrop-blur-sm">
                 <div className="w-16 h-16 bg-white border-2 border-dashed border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
@@ -196,17 +202,17 @@ export default async function VoucherListPage({
                   No Transactions Found
                 </h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-xs">
-                  There are no vouchers recorded for this date range.
+                  There are no vouchers found matching your filter.
                 </p>
-                {!isFiltered && (
+                {/* Updated Empty State Logic */}
+                {(isFiltered || filterType !== "ALL") && (
                   <p className="text-xs font-bold text-indigo-600 mt-2 uppercase tracking-wide">
-                    Try adjusting the date filter
+                    Try adjusting filters
                   </p>
                 )}
               </div>
             )}
 
-            {/* The Client List Component */}
             <VoucherListClient
               vouchers={vouchers}
               companyId={companyId}

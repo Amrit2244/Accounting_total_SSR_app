@@ -50,7 +50,6 @@ export default async function TrialBalancePage({
   let totalCredit = 0;
 
   ledgers.forEach((l: any) => {
-    // ✅ FIXED: Added explicit types to sum function and reduce parameters
     const sum = (arr: any[]) =>
       arr.reduce((acc: number, curr: any) => acc + curr.amount, 0);
 
@@ -62,36 +61,48 @@ export default async function TrialBalancePage({
       sum(l.contraEntries) +
       sum(l.journalEntries);
 
-    const closing = l.openingBalance + txTotal;
-    if (closing === 0) return;
+    // Standard Math: Balance = Opening + Sum of Transactions
+    const closing = (l.openingBalance || 0) + txTotal;
+
+    if (Math.abs(closing) < 0.01) return; // Skip zero balances
 
     const groupName = l.group?.name || "Ungrouped";
     if (!groupMap[groupName]) {
       groupMap[groupName] = { name: groupName, debit: 0, credit: 0 };
     }
 
-    if (closing > 0) {
-      groupMap[groupName].debit += closing;
-      totalDebit += closing;
+    /**
+     * ✅ LOGIC FIX:
+     * Tally/Import Standard: Negative (< 0) is Debit (Dr)
+     * Tally/Import Standard: Positive (> 0) is Credit (Cr)
+     */
+    if (closing < 0) {
+      const val = Math.abs(closing);
+      groupMap[groupName].debit += val;
+      totalDebit += val;
     } else {
-      groupMap[groupName].credit += Math.abs(closing);
-      totalCredit += Math.abs(closing);
+      const val = closing;
+      groupMap[groupName].credit += val;
+      totalCredit += val;
     }
   });
 
   const trialData = Object.values(groupMap).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
+
   const fmt = (val: number) =>
     val.toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+
+  // A Trial Balance should ideally result in totalDebit === totalCredit
   const difference = Math.abs(totalDebit - totalCredit);
-  const isMismatch = difference > 0.01;
+  const isMismatch = difference > 0.1; // Tolerance for floating point
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 py-8 font-sans">
+    <div className="max-w-5xl mx-auto space-y-6 py-8 font-sans px-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-slate-900 rounded-lg text-white shadow-sm">
@@ -115,9 +126,9 @@ export default async function TrialBalancePage({
       </div>
 
       {isMismatch && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md flex items-center justify-between animate-pulse">
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-md flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertTriangle size={18} />{" "}
+            <AlertTriangle size={18} className="text-rose-600" />
             <span className="text-sm font-bold">Trial Balance Mismatch!</span>
           </div>
           <div className="text-sm font-mono font-bold">
@@ -128,56 +139,62 @@ export default async function TrialBalancePage({
 
       <div
         className={`bg-white border rounded-xl shadow-lg overflow-hidden ${
-          isMismatch ? "border-red-300 ring-1 ring-red-100" : "border-slate-200"
+          isMismatch ? "border-rose-300" : "border-slate-200"
         }`}
       >
-        <div className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center p-3">
-          <div className="flex-1">Particulars</div>
-          <div className="w-40 text-right">Debit (₹)</div>
-          <div className="w-40 text-right">Credit (₹)</div>
+        <div className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center p-4">
+          <div className="flex-1 text-left pl-2">Group Particulars</div>
+          <div className="w-44 text-right pr-4 border-l border-slate-700">
+            Debit (₹)
+          </div>
+          <div className="w-44 text-right pr-2 border-l border-slate-700">
+            Credit (₹)
+          </div>
         </div>
+
         <div className="divide-y divide-slate-100">
           {trialData.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs uppercase font-bold">
-              No data available
+            <div className="p-12 text-center text-slate-400 text-xs uppercase font-bold">
+              No ledger balances found for this company
             </div>
           ) : (
             trialData.map((group: any) => (
               <div
                 key={group.name}
-                className="flex items-center p-3 hover:bg-slate-50 transition-colors text-sm"
+                className="flex items-center p-3.5 hover:bg-slate-50 transition-colors text-sm"
               >
-                <div className="flex-1 font-bold text-slate-700">
+                <div className="flex-1 font-bold text-slate-700 uppercase tracking-tight pl-2">
                   {group.name}
                 </div>
-                <div className="w-40 text-right font-mono font-medium text-slate-600">
+                <div className="w-44 text-right font-mono font-bold text-rose-700 pr-4">
                   {group.debit > 0 ? fmt(group.debit) : ""}
                 </div>
-                <div className="w-40 text-right font-mono font-medium text-slate-600">
+                <div className="w-44 text-right font-mono font-bold text-emerald-700 pr-2">
                   {group.credit > 0 ? fmt(group.credit) : ""}
                 </div>
               </div>
             ))
           )}
         </div>
-        <div className="bg-slate-100 border-t border-slate-200 flex items-center p-3 text-xs font-black uppercase">
-          <div className="flex-1 text-right pr-4 text-slate-500">
+
+        <div className="bg-slate-50 border-t border-slate-200 flex items-center p-4 text-xs font-black uppercase">
+          <div className="flex-1 text-right pr-6 text-slate-500 tracking-wider">
             Grand Total
           </div>
           <div
-            className={`w-40 text-right font-mono border-t-2 pt-1 ${
+            className={`w-44 text-right font-mono text-sm border-t-2 pt-1 pr-4 ${
               isMismatch
-                ? "text-red-600 border-red-300"
-                : "text-slate-900 border-slate-300"
+                ? "text-rose-600 border-rose-300"
+                : "text-slate-900 border-slate-900"
             }`}
           >
             {fmt(totalDebit)}
           </div>
           <div
-            className={`w-40 text-right font-mono border-t-2 pt-1 ${
+            className={`w-44 text-right font-mono text-sm border-t-2 pt-1 pr-2 ${
               isMismatch
-                ? "text-red-600 border-red-300"
-                : "text-slate-900 border-slate-300"
+                ? "text-rose-600 border-rose-300"
+                : "text-slate-900 border-slate-900"
             }`}
           >
             {fmt(totalCredit)}

@@ -32,20 +32,12 @@ export default async function ProfitLossPage({
   const companyId = parseInt(id);
   if (isNaN(companyId)) notFound();
 
-  // --- 1. DATE LOGIC ---
-  const todayStr = new Date().toISOString().split("T")[0];
-  const asOf = sp.date || todayStr;
-
+  const asOf = sp.date || new Date().toISOString().split("T")[0];
   const asOfDate = new Date(asOf);
   asOfDate.setHours(23, 59, 59, 999);
 
-  // Filter applied to all queries
-  const voucherFilter = {
-    status: "APPROVED",
-    date: { lte: asOfDate },
-  };
+  const voucherFilter = { status: "APPROVED", date: { lte: asOfDate } };
 
-  // --- 2. DATA FETCHING ---
   const [ledgers, stockItems] = await Promise.all([
     prisma.ledger.findMany({
       where: { companyId },
@@ -87,20 +79,20 @@ export default async function ProfitLossPage({
     }),
   ]);
 
+  // --- 1. STOCK CALCULATIONS ---
   let openingStockTotal = 0;
   let closingStockTotal = 0;
   let openingStockDetails: { name: string; amount: number }[] = [];
   let closingStockDetails: { name: string; amount: number }[] = [];
 
   stockItems.forEach((item: any) => {
-    const opVal = item.openingValue || 0;
-    if (opVal > 0) {
-      openingStockTotal += opVal;
-      openingStockDetails.push({ name: item.name, amount: opVal });
-    }
+    // Tally Opening Stock is usually negative (Debit)
+    const opVal = Math.abs(item.openingValue || 0);
+    openingStockTotal += opVal;
+    openingStockDetails.push({ name: item.name, amount: opVal });
 
     const allEntries = [
-      ...item.salesItems.map((e: any) => ({ qty: e.quantity, val: 0 })),
+      ...item.salesItems.map((e: any) => ({ qty: e.quantity, val: e.amount })),
       ...item.purchaseItems.map((e: any) => ({
         qty: e.quantity,
         val: e.amount,
@@ -118,8 +110,9 @@ export default async function ProfitLossPage({
     allEntries.forEach((e: any) => {
       currentQty += e.qty;
       if (e.qty > 0) {
+        // Inwards
         totalInwardQty += e.qty;
-        totalInwardVal += e.val;
+        totalInwardVal += Math.abs(e.val);
       }
     });
 
@@ -132,6 +125,7 @@ export default async function ProfitLossPage({
     }
   });
 
+  // --- 2. LEDGER CATEGORIZATION ---
   const tradingDrMap = new Map<string, GroupData>();
   const tradingCrMap = new Map<string, GroupData>();
   const plDrMap = new Map<string, GroupData>();
@@ -147,8 +141,8 @@ export default async function ProfitLossPage({
     if (!map.has(groupName))
       map.set(groupName, { groupName, amount: 0, ledgers: [], prefix });
     const g = map.get(groupName)!;
-    g.amount += amount;
-    g.ledgers.push({ name: ledgerName, amount });
+    g.amount += Math.abs(amount);
+    g.ledgers.push({ name: ledgerName, amount: Math.abs(amount) });
   };
 
   ledgers.forEach((l: any) => {
@@ -163,24 +157,34 @@ export default async function ProfitLossPage({
       sum(l.journalEntries);
 
     const netBalance = (l.openingBalance || 0) + txTotal;
-
     if (Math.abs(netBalance) < 0.01 || !l.group) return;
 
-    const absAmount = Math.abs(netBalance);
-    const gName = l.group.name;
-    const gLower = gName.toLowerCase();
+    const gLower = l.group.name.toLowerCase();
     const nature = l.group.nature?.toUpperCase();
 
-    if (gLower.includes("purchase") || gLower.includes("direct exp"))
-      addToMap(tradingDrMap, gName, l.name, absAmount, "To");
-    else if (gLower.includes("sales") || gLower.includes("direct inc"))
-      addToMap(tradingCrMap, gName, l.name, absAmount, "By");
-    else if (gLower.includes("indirect exp") || nature === "EXPENSE")
-      addToMap(plDrMap, gName, l.name, absAmount, "To");
-    else if (gLower.includes("indirect inc") || nature === "INCOME")
-      addToMap(plCrMap, gName, l.name, absAmount, "By");
+    /**
+     * ✅ CALCULATION LOGIC FIX:
+     * Dr (Negative) -> Expenses/Purchases -> Left Side
+     * Cr (Positive) -> Incomes/Sales -> Right Side
+     */
+    const isDirect =
+      gLower.includes("purchase") ||
+      gLower.includes("direct exp") ||
+      gLower.includes("sales") ||
+      gLower.includes("direct inc");
+
+    if (isDirect) {
+      if (netBalance < 0)
+        addToMap(tradingDrMap, l.group.name, l.name, netBalance, "To");
+      else addToMap(tradingCrMap, l.group.name, l.name, netBalance, "By");
+    } else if (nature === "EXPENSE" || gLower.includes("indirect exp")) {
+      addToMap(plDrMap, l.group.name, l.name, netBalance, "To");
+    } else if (nature === "INCOME" || gLower.includes("indirect inc")) {
+      addToMap(plCrMap, l.group.name, l.name, netBalance, "By");
+    }
   });
 
+  // --- 3. TRADING A/C TOTALS ---
   const tradingDr = Array.from(tradingDrMap.values());
   const tradingCr = Array.from(tradingCrMap.values());
 
@@ -192,7 +196,6 @@ export default async function ProfitLossPage({
       isSystem: true,
       prefix: "To",
     });
-
   if (closingStockTotal > 0)
     tradingCr.push({
       groupName: "Closing Stock",
@@ -202,12 +205,13 @@ export default async function ProfitLossPage({
       prefix: "By",
     });
 
-  const sumTradingDr = tradingDr.reduce((s: number, i: any) => s + i.amount, 0);
-  const sumTradingCr = tradingCr.reduce((s: number, i: any) => s + i.amount, 0);
+  const sumTradingDr = tradingDr.reduce((s, i) => s + i.amount, 0);
+  const sumTradingCr = tradingCr.reduce((s, i) => s + i.amount, 0);
   const grossDiff = sumTradingCr - sumTradingDr;
   const isGrossProfit = grossDiff >= 0;
   const tradingTotal = Math.max(sumTradingDr, sumTradingCr);
 
+  // --- 4. PROFIT & LOSS A/C TOTALS ---
   const plDr = Array.from(plDrMap.values());
   const plCr = Array.from(plCrMap.values());
 
@@ -222,15 +226,14 @@ export default async function ProfitLossPage({
   if (isGrossProfit) plCr.unshift(grossItem);
   else plDr.unshift(grossItem);
 
-  const sumPLDr = plDr.reduce((s: number, i: any) => s + i.amount, 0);
-  const sumPLCr = plCr.reduce((s: number, i: any) => s + i.amount, 0);
+  const sumPLDr = plDr.reduce((s, i) => s + i.amount, 0);
+  const sumPLCr = plCr.reduce((s, i) => s + i.amount, 0);
   const netDiff = sumPLCr - sumPLDr;
   const isNetProfit = netDiff >= 0;
   const plTotal = Math.max(sumPLDr, sumPLCr);
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
-      {/* Background Pattern */}
+    <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -240,7 +243,6 @@ export default async function ProfitLossPage({
       />
 
       <div className="relative z-10 max-w-[1920px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6">
-        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20 print:hidden">
           <div>
             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
@@ -251,169 +253,123 @@ export default async function ProfitLossPage({
                 Dashboard
               </Link>
               <ChevronRight size={10} />
-              <Link
-                href={`/companies/${companyId}/reports`}
-                className="hover:text-indigo-600 transition-colors"
-              >
-                Reports
-              </Link>
-              <ChevronRight size={10} />
-              <span className="text-slate-900">Profit & Loss</span>
+              <span className="text-slate-900 uppercase">Profit & Loss</span>
             </div>
             <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
               <TrendingUp className="text-indigo-600" size={32} />
               Profit & Loss A/c
             </h1>
-            <p className="text-slate-500 font-medium mt-2 max-w-xl">
-              Statement of financial performance as of{" "}
-              {asOfDate.toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-              .
+            <p className="text-slate-500 font-medium mt-2 text-sm uppercase">
+              Statement for the period ending{" "}
+              {asOfDate.toLocaleDateString("en-IN")}
             </p>
           </div>
-
           <div className="flex items-center gap-3">
             <BalanceSheetFilter />
-
-            <div className="h-8 w-px bg-slate-200 mx-1" />
-
             <PrintButton />
-
             <Link
               href={`/companies/${companyId}/reports`}
-              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-              title="Back to Reports"
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 rounded-xl transition-all shadow-sm"
             >
               <ArrowLeft size={20} />
             </Link>
           </div>
         </div>
 
-        {/* REPORT CARD */}
+        {/* REPORT TABLE */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[600px] print:shadow-none print:border-none">
-          {/* Main Header Row */}
-          <div className="flex border-b border-slate-200 bg-slate-50">
-            <div className="w-1/2 px-6 py-3 border-r border-slate-200 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
-              <span>Particulars</span>
-              <span>Debit (₹)</span>
+          <div className="flex border-b border-slate-200 bg-slate-900 text-white">
+            <div className="w-1/2 px-6 py-4 border-r border-slate-700 flex justify-between items-center text-xs font-black uppercase tracking-widest">
+              <span>Particulars (Debit)</span>
+              <span>Amount (₹)</span>
             </div>
-            <div className="w-1/2 px-6 py-3 flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-600">
-              <span>Particulars</span>
-              <span>Credit (₹)</span>
+            <div className="w-1/2 px-6 py-4 flex justify-between items-center text-xs font-black uppercase tracking-widest">
+              <span>Particulars (Credit)</span>
+              <span>Amount (₹)</span>
             </div>
           </div>
 
-          {/* Content Body */}
           <div className="flex flex-1 min-h-0">
-            {/* --- DEBIT SIDE (Left) --- */}
-            <div className="w-1/2 border-r border-slate-200 flex flex-col bg-slate-50/10">
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {/* Trading Account Dr */}
-                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10">
-                  Trading Account
-                </div>
-                <div className="p-2 space-y-1">
-                  {tradingDr.map((g: any) => (
-                    <ProfitLossDrillDown key={g.groupName} item={g} />
-                  ))}
-                  {isGrossProfit && (
-                    <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
-                      <span className="text-xs font-bold">
-                        To Gross Profit c/d
-                      </span>
-                      <span className="font-mono text-xs font-bold">
-                        {fmt(Math.abs(grossDiff))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Trading Total Dr */}
-                <div className="flex justify-between px-6 py-2 bg-slate-50 border-y border-slate-200 text-xs font-bold text-slate-700">
-                  <span>Total Trading</span>
-                  <span className="font-mono">{fmt(tradingTotal)}</span>
-                </div>
-
-                {/* P&L Account Dr */}
-                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10 mt-4">
-                  Profit & Loss Account
-                </div>
-                <div className="p-2 space-y-1">
-                  {plDr.map((g: any) => (
-                    <ProfitLossDrillDown key={g.groupName} item={g} />
-                  ))}
-                  {isNetProfit && (
-                    <div className="flex justify-between py-2 px-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-800">
-                      <span className="text-xs font-bold">To Net Profit</span>
-                      <span className="font-mono text-xs font-bold">
-                        {fmt(netDiff)}
-                      </span>
-                    </div>
-                  )}
-                </div>
+            {/* LEFT SIDE (DEBIT) */}
+            <div className="w-1/2 border-r border-slate-200 flex flex-col">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                <section>
+                  <h4 className="text-[10px] font-black text-indigo-600 uppercase mb-2">
+                    Trading Account
+                  </h4>
+                  <div className="space-y-1">
+                    {tradingDr.map((g) => (
+                      <ProfitLossDrillDown key={g.groupName} item={g} />
+                    ))}
+                    {isGrossProfit && (
+                      <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800 font-bold text-xs uppercase italic">
+                        <span>To Gross Profit c/d</span>
+                        <span className="font-mono">{fmt(grossDiff)}</span>
+                      </div>
+                    )}
+                  </div>
+                </section>
+                <section>
+                  <h4 className="text-[10px] font-black text-indigo-600 uppercase mb-2">
+                    Profit & Loss Account
+                  </h4>
+                  <div className="space-y-1">
+                    {plDr.map((g) => (
+                      <ProfitLossDrillDown key={g.groupName} item={g} />
+                    ))}
+                    {isNetProfit && (
+                      <div className="flex justify-between py-2 px-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-800 font-bold text-xs uppercase italic">
+                        <span>To Net Profit</span>
+                        <span className="font-mono">{fmt(netDiff)}</span>
+                      </div>
+                    )}
+                  </div>
+                </section>
               </div>
-
-              {/* Grand Total Dr */}
-              <div className="flex justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 border-b-4 border-b-slate-300 text-sm font-black text-slate-900 mt-auto">
-                <span>TOTAL</span>
+              <div className="flex justify-between px-6 py-4 bg-slate-900 text-white text-sm font-black mt-auto">
+                <span>TOTAL DEBIT</span>
                 <span className="font-mono">{fmt(plTotal)}</span>
               </div>
             </div>
 
-            {/* --- CREDIT SIDE (Right) --- */}
+            {/* RIGHT SIDE (CREDIT) */}
             <div className="w-1/2 flex flex-col">
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {/* Trading Account Cr */}
-                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10">
-                  Trading Account
-                </div>
-                <div className="p-2 space-y-1">
-                  {tradingCr.map((g: any) => (
-                    <ProfitLossDrillDown key={g.groupName} item={g} />
-                  ))}
-                  {!isGrossProfit && (
-                    <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
-                      <span className="text-xs font-bold">
-                        By Gross Loss c/d
-                      </span>
-                      <span className="font-mono text-xs font-bold">
-                        {fmt(Math.abs(grossDiff))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Trading Total Cr */}
-                <div className="flex justify-between px-6 py-2 bg-slate-50 border-y border-slate-200 text-xs font-bold text-slate-700">
-                  <span>Total Trading</span>
-                  <span className="font-mono">{fmt(tradingTotal)}</span>
-                </div>
-
-                {/* P&L Account Cr */}
-                <div className="px-4 py-2 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10 mt-4">
-                  Profit & Loss Account
-                </div>
-                <div className="p-2 space-y-1">
-                  {plCr.map((g: any) => (
-                    <ProfitLossDrillDown key={g.groupName} item={g} />
-                  ))}
-                  {!isNetProfit && (
-                    <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
-                      <span className="text-xs font-bold">By Net Loss</span>
-                      <span className="font-mono text-xs font-bold">
-                        {fmt(Math.abs(netDiff))}
-                      </span>
-                    </div>
-                  )}
-                </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                <section>
+                  <h4 className="text-[10px] font-black text-emerald-600 uppercase mb-2">
+                    Trading Account
+                  </h4>
+                  <div className="space-y-1">
+                    {tradingCr.map((g) => (
+                      <ProfitLossDrillDown key={g.groupName} item={g} />
+                    ))}
+                    {!isGrossProfit && (
+                      <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800 font-bold text-xs uppercase italic">
+                        <span>By Gross Loss c/d</span>
+                        <span className="font-mono">{fmt(grossDiff)}</span>
+                      </div>
+                    )}
+                  </div>
+                </section>
+                <section>
+                  <h4 className="text-[10px] font-black text-emerald-600 uppercase mb-2">
+                    Profit & Loss Account
+                  </h4>
+                  <div className="space-y-1">
+                    {plCr.map((g) => (
+                      <ProfitLossDrillDown key={g.groupName} item={g} />
+                    ))}
+                    {!isNetProfit && (
+                      <div className="flex justify-between py-2 px-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-800 font-bold text-xs uppercase italic">
+                        <span>By Net Loss</span>
+                        <span className="font-mono">{fmt(netDiff)}</span>
+                      </div>
+                    )}
+                  </div>
+                </section>
               </div>
-
-              {/* Grand Total Cr */}
-              <div className="flex justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 border-b-4 border-b-slate-300 text-sm font-black text-slate-900 mt-auto">
-                <span>TOTAL</span>
+              <div className="flex justify-between px-6 py-4 bg-slate-900 text-white text-sm font-black mt-auto">
+                <span>TOTAL CREDIT</span>
                 <span className="font-mono">{fmt(plTotal)}</span>
               </div>
             </div>

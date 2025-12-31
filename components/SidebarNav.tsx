@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -17,6 +18,7 @@ import {
   Factory,
   Zap,
   Users,
+  ClipboardList,
 } from "lucide-react";
 import clsx from "clsx";
 import packageJson from "@/package.json";
@@ -55,6 +57,7 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           href: `/companies/${companyId}/ledgers`,
           icon: UserCog,
         },
+
         {
           name: "Chart of Accounts",
           href: `/companies/${companyId}/chart-of-accounts`,
@@ -81,9 +84,14 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
       label: "Utilities & System",
       items: [
         {
-          name: "Import Data",
+          name: "Import Data With AutoSync",
           href: `/companies/${companyId}/import`,
           icon: FileUp,
+        },
+        {
+          name: "Import Data Manually",
+          href: `/companies/${companyId}/import/manual  `,
+          icon: ClipboardList,
         },
         {
           name: "Export Data",

@@ -10,6 +10,7 @@ import {
   Layers,
   ChevronRight,
   Receipt,
+  Quote,
 } from "lucide-react";
 import { format } from "date-fns";
 import VerifyBtn from "@/components/VerifyBtn";
@@ -39,53 +40,38 @@ async function getVoucherDetails(companyId: number, type: string, id: number) {
   const where = { id, companyId };
 
   const ledgerRel = { include: { ledger: true } };
-  // ✅ Ensure stockItem is included to get the item name
   const invRel = { include: { stockItem: true } };
+
+  // Helper to fetch based on model
+  const fetcher = async (model: any) => {
+    return model.findUnique({
+      where,
+      include: {
+        ledgerEntries: ledgerRel,
+        // Only include inventory if the model supports it
+        ...(["SALES", "PURCHASE", "STOCK_JOURNAL"].includes(t)
+          ? { inventoryEntries: invRel }
+          : {}),
+        createdBy: true,
+      },
+    });
+  };
 
   switch (t) {
     case "SALES":
-      return prisma.salesVoucher.findUnique({
-        where,
-        include: {
-          ledgerEntries: ledgerRel,
-          inventoryEntries: invRel,
-          createdBy: true,
-        },
-      });
+      return fetcher(prisma.salesVoucher);
     case "PURCHASE":
-      return prisma.purchaseVoucher.findUnique({
-        where,
-        include: {
-          ledgerEntries: ledgerRel,
-          inventoryEntries: invRel,
-          createdBy: true,
-        },
-      });
+      return fetcher(prisma.purchaseVoucher);
     case "PAYMENT":
-      return prisma.paymentVoucher.findUnique({
-        where,
-        include: { ledgerEntries: ledgerRel, createdBy: true },
-      });
+      return fetcher(prisma.paymentVoucher);
     case "RECEIPT":
-      return prisma.receiptVoucher.findUnique({
-        where,
-        include: { ledgerEntries: ledgerRel, createdBy: true },
-      });
+      return fetcher(prisma.receiptVoucher);
     case "CONTRA":
-      return prisma.contraVoucher.findUnique({
-        where,
-        include: { ledgerEntries: ledgerRel, createdBy: true },
-      });
+      return fetcher(prisma.contraVoucher);
     case "JOURNAL":
-      return prisma.journalVoucher.findUnique({
-        where,
-        include: { ledgerEntries: ledgerRel, createdBy: true },
-      });
+      return fetcher(prisma.journalVoucher);
     case "STOCK_JOURNAL":
-      return prisma.stockJournal.findUnique({
-        where,
-        include: { inventoryEntries: invRel, createdBy: true },
-      });
+      return fetcher(prisma.stockJournal);
     default:
       return null;
   }
@@ -109,7 +95,20 @@ export default async function VoucherDetailsPage({
   const isCreator = voucher.createdById === currentUser;
   const isPending = voucher.status === "PENDING";
 
-  const ledgerEntries = voucher.ledgerEntries || [];
+  // --- FIX 1: DEDUPLICATE LEDGER ENTRIES ---
+  // If import created duplicates, we merge them here by Ledger ID
+  const rawLedgers = voucher.ledgerEntries || [];
+  const mergedLedgers = Object.values(
+    rawLedgers.reduce((acc: any, curr: any) => {
+      const id = curr.ledgerId;
+      if (!acc[id]) {
+        acc[id] = { ...curr, amount: 0 };
+      }
+      acc[id].amount += curr.amount;
+      return acc;
+    }, {})
+  );
+
   const inventoryEntries = voucher.inventoryEntries || [];
 
   return (
@@ -221,9 +220,72 @@ export default async function VoucherDetailsPage({
             </div>
           </div>
 
+          {/* LEDGER ENTRIES TABLE (Deduped) */}
+          {mergedLedgers.length > 0 && (
+            <div className="p-6">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <Layers size={14} className="text-indigo-600" /> Ledger Accounts
+              </h3>
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 w-20 text-center">Type</th>
+                      <th className="px-4 py-3">Particulars</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {/* Explicitly cast mapped items to any to resolve TS errors */}
+                    {(mergedLedgers as any[]).map((entry: any, idx: number) => {
+                      // --- FIX 2: DR/CR LOGIC ---
+                      // Negative = Debit (Dr), Positive = Credit (Cr)
+                      // If amount is 0, we hide it or show Dr based on context, but usually it shouldn't be 0
+                      const isDebit = entry.amount < 0;
+                      const absAmount = Math.abs(entry.amount);
+
+                      return (
+                        <tr
+                          key={idx}
+                          className="hover:bg-slate-50/50 transition-colors"
+                        >
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`text-[10px] font-black px-2 py-1 rounded border uppercase ${
+                                isDebit
+                                  ? "bg-rose-50 text-rose-700 border-rose-100"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                              }`}
+                            >
+                              {isDebit ? "Dr" : "Cr"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-700 text-sm">
+                              {entry.ledger?.name || "Unknown Ledger"}
+                            </div>
+                          </td>
+                          <td
+                            className={`px-4 py-3 text-right font-mono font-bold text-xs ${
+                              isDebit ? "text-rose-600" : "text-emerald-600"
+                            }`}
+                          >
+                            {absAmount.toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* INVENTORY TABLE */}
           {inventoryEntries.length > 0 && (
-            <div className="p-6 border-b border-slate-100">
+            <div className="p-6 border-t border-slate-100">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <Package size={14} className="text-indigo-600" /> Inventory
                 Items
@@ -269,70 +331,12 @@ export default async function VoucherDetailsPage({
             </div>
           )}
 
-          {/* LEDGER ENTRIES TABLE */}
-          {ledgerEntries.length > 0 && (
-            <div className="p-6">
-              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Layers size={14} className="text-rose-600" /> Ledger Accounts
-              </h3>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 w-20 text-center">Type</th>
-                      <th className="px-4 py-3">Particulars</th>
-                      <th className="px-4 py-3 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {ledgerEntries.map((entry: any, idx: number) => (
-                      <tr
-                        key={idx}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className={`text-[10px] font-black px-1.5 py-0.5 rounded border uppercase ${
-                              entry.amount > 0
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-100"
-                                : "bg-rose-50 text-rose-700 border-rose-100"
-                            }`}
-                          >
-                            {entry.amount > 0 ? "Dr" : "Cr"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-700 text-sm">
-                            {entry.ledger?.name || "Unknown Ledger"}
-                          </div>
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right font-mono font-bold text-xs ${
-                            entry.amount > 0
-                              ? "text-indigo-600"
-                              : "text-rose-600"
-                          }`}
-                        >
-                          {Math.abs(entry.amount).toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {/* NARRATION */}
           {voucher.narration && (
-            <div className="px-6 pb-6">
-              <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-xl text-slate-700 text-xs italic">
-                <span className="font-black uppercase text-[9px] text-amber-600/70 tracking-widest block mb-1 not-italic">
-                  Narration
-                </span>
-                "{voucher.narration}"
+            <div className="px-6 pb-6 border-t border-slate-100 pt-6">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-xs flex gap-3 items-start">
+                <Quote size={16} className="text-slate-400 shrink-0 mt-0.5" />
+                <div className="italic">"{voucher.narration}"</div>
               </div>
             </div>
           )}

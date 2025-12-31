@@ -58,9 +58,22 @@ export default function InventoryTable({
     }
   };
 
+  const getUnitLabel = (item: any) => {
+    if (item.unit) {
+      if (typeof item.unit === "string") return item.unit;
+      if (typeof item.unit === "object")
+        return item.unit.symbol || item.unit.name || "";
+    }
+    if (item.stockItem?.unit) {
+      if (typeof item.stockItem.unit === "string") return item.stockItem.unit;
+      if (typeof item.stockItem.unit === "object")
+        return item.stockItem.unit.symbol || "";
+    }
+    return "";
+  };
+
   return (
     <div className="mt-4 relative">
-      {/* BULK ACTION BAR */}
       {selectedIds.length > 0 && (
         <div className="absolute -top-12 left-0 right-0 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex justify-between items-center z-20 animate-in fade-in slide-in-from-bottom-2 shadow-sm">
           <div className="flex items-center gap-2 text-indigo-800 font-bold text-xs">
@@ -102,6 +115,9 @@ export default function InventoryTable({
                 Category Group
               </th>
               <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">
+                Rate
+              </th>
+              <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">
                 Current Stock
               </th>
               <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right w-24">
@@ -112,7 +128,7 @@ export default function InventoryTable({
           <tbody className="divide-y divide-slate-100">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-12 text-center">
+                <td colSpan={6} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center opacity-50">
                     <Package size={48} className="text-slate-300 mb-3" />
                     <p className="text-sm font-bold text-slate-500">
@@ -127,6 +143,20 @@ export default function InventoryTable({
             ) : (
               items.map((item) => {
                 const isSelected = selectedIds.includes(item.id);
+
+                let displayRate = "0.00";
+                const qty = Number(item.quantity) || 0;
+                const amt = Number(item.amount) || 0;
+                const rate = Number(item.rate) || 0;
+
+                if (rate > 0) {
+                  displayRate = rate.toFixed(2);
+                } else if (qty > 0 && amt > 0) {
+                  displayRate = (amt / qty).toFixed(2);
+                }
+
+                const unitLabel = getUnitLabel(item);
+
                 return (
                   <tr
                     key={item.id}
@@ -156,7 +186,7 @@ export default function InventoryTable({
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-bold text-sm text-slate-800 group-hover:text-indigo-700 transition-colors">
-                        {item.name}
+                        {item.name || item.stockItem?.name}
                       </div>
                       {item.partNumber && (
                         <div className="text-[10px] font-mono text-slate-400 mt-0.5">
@@ -167,15 +197,31 @@ export default function InventoryTable({
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-wide">
                         <Archive size={10} />
-                        {item.group?.name || "Uncategorized"}
+                        {item.group?.name ||
+                          item.stockItem?.group?.name ||
+                          "General"}
                       </span>
                     </td>
+
                     <td className="py-3 px-4 text-right">
+                      <span className="font-mono text-xs font-bold text-slate-600">
+                        {/* Force Indian Locale for Rate */}
+                        {Number(displayRate).toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </span>
+                      <span className="text-[9px] text-slate-400 ml-1">
+                        /{unitLabel || "Unit"}
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-right">
+                      {/* FIX: Force 'en-IN' locale to prevent hydration mismatch */}
                       <span className="font-mono font-bold text-sm text-slate-700">
-                        {Number(item.quantity || 0).toLocaleString()}
+                        {Number(item.quantity || 0).toLocaleString("en-IN")}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400 ml-1 uppercase">
-                        {item.unit?.symbol}
+                        {unitLabel}
                       </span>
                     </td>
                     <td

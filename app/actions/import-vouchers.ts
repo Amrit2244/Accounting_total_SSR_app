@@ -9,7 +9,13 @@ function parseTallyNumber(str: string | null | undefined): number {
   if (!str) return 0;
   const clean = str.replace(/,/g, "");
   const match = clean.match(/-?\d+(\.\d+)?/);
-  return match ? -parseFloat(match[0]) : 0;
+
+  /**
+   * ROOT FIX: Maintain the Tally Sign Convention.
+   * Tally exports Dr as Negative and Cr as Positive.
+   * We remove the "-" multiplication to store the raw data.
+   */
+  return match ? parseFloat(match[0]) : 0;
 }
 
 function parseTallyUnit(str: string | null | undefined): string {
@@ -39,7 +45,7 @@ export async function importVouchers(
   let successCount = 0;
   let errorCount = 0;
 
-  const BATCH_SIZE = 10; // Reduced batch size slightly for safety with complex transactions
+  const BATCH_SIZE = 10;
 
   for (let i = 0; i < voucherNodes.length; i += BATCH_SIZE) {
     const batch = voucherNodes.slice(i, i + BATCH_SIZE);
@@ -50,7 +56,7 @@ export async function importVouchers(
           if (v.getAttribute("ACTION") === "Delete") return;
 
           const rawVoucherType = v.getAttribute("VCHTYPE") || "Unknown";
-          const voucherType = rawVoucherType.toLowerCase(); // Normalizing for switch case
+          const voucherType = rawVoucherType.toLowerCase();
 
           const voucherNumber =
             v.getElementsByTagName("VOUCHERNUMBER")[0]?.textContent || "AUTO";
@@ -58,7 +64,6 @@ export async function importVouchers(
           const narration =
             v.getElementsByTagName("NARRATION")[0]?.textContent || "";
 
-          // Date Parsing (YYYYMMDD)
           const year = dateStr.substring(0, 4);
           const month = dateStr.substring(4, 6);
           const day = dateStr.substring(6, 8);
@@ -75,13 +80,14 @@ export async function importVouchers(
             const itemName =
               itemNode.getElementsByTagName("STOCKITEMNAME")[0]?.textContent ||
               "";
-            const amount = parseTallyNumber(
+
+            // Raw Tally Amount (Negative for Sales/Dr, Positive for Purchase/Cr)
+            const rawAmount = parseTallyNumber(
               itemNode.getElementsByTagName("AMOUNT")[0]?.textContent
             );
 
-            inventoryTotal += Math.abs(amount);
+            inventoryTotal += Math.abs(rawAmount);
 
-            // Fetch Item ID
             const stockItem = await prisma.stockItem.findFirst({
               where: { name: itemName, companyId },
               select: { id: true },
@@ -103,7 +109,7 @@ export async function importVouchers(
                     itemNode.getElementsByTagName("RATE")[0]?.textContent
                   )
                 ),
-                amount: Math.abs(amount),
+                amount: rawAmount, // Keep original sign
               });
             }
           }
@@ -121,11 +127,14 @@ export async function importVouchers(
             const lNode = ledgerList[k];
             const ledgerName =
               lNode.getElementsByTagName("LEDGERNAME")[0]?.textContent || "";
+
+            // Raw Tally Amount
             const amount = parseTallyNumber(
               lNode.getElementsByTagName("AMOUNT")[0]?.textContent
             );
 
-            if (amount > 0) ledgerDebitTotal += amount;
+            // In Tally Dr is negative. For totalAmount we take absolute Dr side.
+            if (amount < 0) ledgerDebitTotal += Math.abs(amount);
 
             const ledger = await prisma.ledger.findFirst({
               where: { name: ledgerName, companyId },
@@ -135,7 +144,7 @@ export async function importVouchers(
             if (ledger) {
               ledgerData.push({
                 ledgerId: ledger.id,
-                amount,
+                amount: amount, // Keep original sign
               });
             }
           }
@@ -143,16 +152,13 @@ export async function importVouchers(
           const finalTotalAmount =
             inventoryTotal > 0 ? inventoryTotal : ledgerDebitTotal;
 
-          // --- 3. ROUTE TO CORRECT TABLE BASED ON TYPE ---
-
           const commonData = {
             date,
             narration,
             totalAmount: Math.abs(finalTotalAmount),
-            status: "APPROVED", // Importing usually implies approved history
+            status: "APPROVED",
           };
 
-          // Define Unique ID for Upsert (Composite key usually)
           const uniqueKey = {
             companyId_voucherNo: {
               companyId,
@@ -197,14 +203,8 @@ export async function importVouchers(
               },
             });
           } else if (voucherType.includes("payment")) {
-            // Note: PaymentVoucher 'voucherNo' is Int in schema, handle conversion if needed
-            // Assuming String for Tally compatibility based on previous schema,
-            // if schema requires Int, you must parse int.
-            // Based on your schema provided earlier: PaymentVoucher `voucherNo` is Int.
-            // If Tally sends alphanumeric, this will fail. Assuming auto-number or numeric for now.
             const vNoInt =
               parseInt(String(voucherNumber).replace(/\D/g, "")) || 0;
-
             await prisma.paymentVoucher.upsert({
               where: { companyId_voucherNo: { companyId, voucherNo: vNoInt } },
               update: {
@@ -256,33 +256,28 @@ export async function importVouchers(
                 ledgerEntries: { create: ledgerData },
               },
             });
-          } else if (voucherType.includes("journal")) {
-            // Exclude Stock Journal here
-            if (!voucherType.includes("stock")) {
-              const vNoInt =
-                parseInt(String(voucherNumber).replace(/\D/g, "")) || 0;
-              await prisma.journalVoucher.upsert({
-                where: {
-                  companyId_voucherNo: { companyId, voucherNo: vNoInt },
-                },
-                update: {
-                  ...commonData,
-                  ledgerEntries: { deleteMany: {}, create: ledgerData },
-                },
-                create: {
-                  companyId,
-                  voucherNo: vNoInt,
-                  transactionCode: generateTransactionCode("JRNL"),
-                  ...commonData,
-                  createdById: userId,
-                  ledgerEntries: { create: ledgerData },
-                },
-              });
-            }
+          } else if (
+            voucherType.includes("journal") &&
+            !voucherType.includes("stock")
+          ) {
+            const vNoInt =
+              parseInt(String(voucherNumber).replace(/\D/g, "")) || 0;
+            await prisma.journalVoucher.upsert({
+              where: { companyId_voucherNo: { companyId, voucherNo: vNoInt } },
+              update: {
+                ...commonData,
+                ledgerEntries: { deleteMany: {}, create: ledgerData },
+              },
+              create: {
+                companyId,
+                voucherNo: vNoInt,
+                transactionCode: generateTransactionCode("JRNL"),
+                ...commonData,
+                createdById: userId,
+                ledgerEntries: { create: ledgerData },
+              },
+            });
           }
-          // Note: Stock Journal import logic requires mapping source/destination (Consumption/Production)
-          // which is complex to infer from flat Tally XML without deeper parsing logic.
-          // Skipped for this basic fix to ensure build passes.
 
           successCount++;
         } catch (err) {
