@@ -12,10 +12,20 @@ export async function downloadBackup() {
   const userName = "Admin User";
 
   try {
-    // Cloud MySQL password
-    const { stdout } = await execPromise(
-      "/usr/bin/mysqldump -u root -p805728 tally_db"
-    );
+    // 1. /usr/bin/mysqldump ensures the OS finds the command
+    // 2. --column-statistics=0 is REQUIRED for MySQL 8+ to avoid permission errors
+    // 3. --no-tablespaces prevents 'Access Denied' for the process user
+    const command =
+      "/usr/bin/mysqldump --column-statistics=0 --no-tablespaces -u root -p805728 tally_db";
+
+    const { stdout, stderr } = await execPromise(command, {
+      maxBuffer: 1024 * 1024 * 50, // Allows backups up to 50MB
+    });
+
+    if (stderr && !stdout) {
+      console.error("mysqldump stderr:", stderr);
+      throw new Error(stderr);
+    }
 
     await prisma.dataActivityLog.create({
       data: {
@@ -26,9 +36,9 @@ export async function downloadBackup() {
     });
 
     return { success: true, data: stdout };
-  } catch (error) {
-    console.error("Backup Error:", error);
-    return { success: false, error: "Backup failed" };
+  } catch (error: any) {
+    console.error("FULL BACKUP ERROR:", error);
+    return { success: false, error: error.message || "Backup failed" };
   }
 }
 
@@ -42,14 +52,14 @@ export async function restoreDatabase(formData: FormData) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Save to temp folder on Linux Cloud Server
+    // Using /tmp is standard for Linux cloud servers
     const tempPath = path.join("/tmp", `restore_${Date.now()}.sql`);
     await fs.writeFile(tempPath, buffer);
 
-    // Import into MySQL
-    await execPromise(`mysql -u root -p805728 tally_db < ${tempPath}`);
+    // Import command using absolute path for mysql
+    const command = `/usr/bin/mysql -u root -p805728 tally_db < ${tempPath}`;
+    await execPromise(command);
 
-    // Clean up temp file
     await fs.unlink(tempPath);
 
     await prisma.dataActivityLog.create({
@@ -62,11 +72,8 @@ export async function restoreDatabase(formData: FormData) {
     });
 
     return { success: true };
-  } catch (error) {
-    console.error("Restore Error:", error);
-    return {
-      success: false,
-      error: "Restore failed. Ensure the file is a valid SQL dump.",
-    };
+  } catch (error: any) {
+    console.error("FULL RESTORE ERROR:", error);
+    return { success: false, error: error.message || "Restore failed" };
   }
 }
