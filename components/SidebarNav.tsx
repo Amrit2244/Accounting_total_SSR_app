@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -19,6 +18,7 @@ import {
   Zap,
   Users,
   ClipboardList,
+  Database, // Added for Backup & Restore
 } from "lucide-react";
 import clsx from "clsx";
 import packageJson from "@/package.json";
@@ -57,7 +57,6 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
           href: `/companies/${companyId}/ledgers`,
           icon: UserCog,
         },
-
         {
           name: "Chart of Accounts",
           href: `/companies/${companyId}/chart-of-accounts`,
@@ -90,13 +89,18 @@ export default function SidebarNav({ companyId }: { companyId: number }) {
         },
         {
           name: "Import Data Manually",
-          href: `/companies/${companyId}/import/manual  `,
+          href: `/companies/${companyId}/import/manual`,
           icon: ClipboardList,
         },
         {
           name: "Export Data",
           href: `/companies/${companyId}/export`,
           icon: FileDown,
+        },
+        {
+          name: "Backup & Restore", // NEW OPTION
+          href: `/companies/${companyId}/settings/data`,
+          icon: Database,
         },
         {
           name: "Verification",
