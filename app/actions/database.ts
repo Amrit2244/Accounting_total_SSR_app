@@ -13,7 +13,9 @@ export async function downloadBackup() {
 
   try {
     // Cloud MySQL password
-    const { stdout } = await execPromise("mysqldump -u root -p805728 tally_db");
+    const { stdout } = await execPromise(
+      "/usr/bin/mysqldump -u root -p805728 tally_db"
+    );
 
     await prisma.dataActivityLog.create({
       data: {
