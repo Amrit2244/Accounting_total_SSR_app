@@ -4,25 +4,28 @@ import { jwtVerify } from "jose";
 
 const encodedKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 
+// Update: params is now a Promise in Next.js 16
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 1. Auth Check
+    // 1. Await the params to get the ID
+    const resolvedParams = await params;
+    const ledgerId = parseInt(resolvedParams.id);
+
+    // 2. Auth Check
     const auth = req.headers.get("authorization");
-    if (!auth?.startsWith("Bearer "))
+    if (!auth?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const token = auth.split(" ")[1];
     await jwtVerify(token, encodedKey);
 
-    const ledgerId = parseInt(params.id);
     const { searchParams } = new URL(req.url);
     const companyId = parseInt(searchParams.get("companyId") || "0");
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
 
-    // 2. Fetch Ledger Info
+    // 3. Fetch Ledger Info
     const ledger = await prisma.ledger.findUnique({
       where: { id: ledgerId, companyId },
       include: { group: true },
@@ -31,8 +34,7 @@ export async function GET(
     if (!ledger)
       return NextResponse.json({ error: "Ledger not found" }, { status: 404 });
 
-    // 3. Fetch Entries across ALL voucher types (Same as Web Logic)
-    // We collect entries from Sales, Purchase, Payment, Receipt, Contra, Journal
+    // 4. Fetch Entries across ALL voucher types
     const [sales, purchase, payment, receipt, contra, journal] =
       await Promise.all([
         prisma.salesLedgerEntry.findMany({
@@ -73,7 +75,7 @@ export async function GET(
         }),
       ]);
 
-    // 4. Uniform Formatting (Tally Convention: Negative = Dr, Positive = Cr)
+    // 5. Format for Mobile
     const allEntries = [
       ...sales.map((e) => ({
         date: e.salesVoucher.date,
@@ -126,6 +128,7 @@ export async function GET(
       entries: allEntries,
     });
   } catch (error) {
+    console.error("Statement API Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch statement" },
       { status: 500 }
