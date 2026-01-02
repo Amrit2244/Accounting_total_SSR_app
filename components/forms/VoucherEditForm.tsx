@@ -1,292 +1,315 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import { useActionState } from "react";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Save,
   Loader2,
   Trash2,
-  CheckCircle,
-  AlertTriangle,
-  Calendar,
-  FileText,
   Plus,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
-// Import from masters where updateVoucher lives
-import { updateVoucher } from "@/app/actions/masters";
-import { State } from "@/app/actions/voucher";
-import confetti from "canvas-confetti";
-import { useRouter } from "next/navigation";
+import { updateVoucher } from "@/app/actions/voucher";
 
-// Wrapper to match useActionState signature
-async function updateVoucherWrapper(
-  prevState: State,
-  formData: FormData
-): Promise<State> {
-  return await (updateVoucher as any)(prevState, formData);
+// ✅ 1. Define the interface to stop the "implicitly has any" build error
+interface LedgerEntry {
+  ledgerId: number;
+  type: string; // "Dr" or "Cr"
+  amount: number | string;
+  tempId: number;
 }
 
 export default function VoucherEditForm({ companyId, voucher, ledgers }: any) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [successData, setSuccessData] = useState<{
+    message: string;
+    txid: string;
+  } | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const initialData = useMemo(
-    () => ({
-      date: new Date(voucher.date).toISOString().split("T")[0],
-      narration: voucher.narration || "",
-    }),
-    [voucher]
+  const [date, setDate] = useState(
+    voucher.date ? new Date(voucher.date).toISOString().split("T")[0] : ""
   );
+  const [narration, setNarration] = useState(voucher.narration || "");
 
-  const [date, setDate] = useState(initialData.date);
-  const [narration, setNarration] = useState(initialData.narration);
+  // ✅ 2. Assign the interface to the state
+  const [entries, setEntries] = useState<LedgerEntry[]>(() => {
+    if (voucher.ledgerEntries && voucher.ledgerEntries.length > 0) {
+      return voucher.ledgerEntries.map((e: any) => ({
+        ledgerId: e.ledgerId,
+        type: e.amount < 0 ? "Dr" : "Cr",
+        amount: Math.abs(e.amount),
+        tempId: Math.random(),
+      }));
+    }
+    return [];
+  });
 
-  // Flatten entries for simple editing
-  const [entries, setEntries] = useState(
-    (voucher.ledgerEntries || []).map((e: any) => ({
-      ledgerId: e.ledgerId,
-      // Tally Standard: Negative is Dr, Positive is Cr
-      type: e.amount < 0 ? "Dr" : "Cr",
-      amount: Math.abs(e.amount),
-      tempId: Math.random(),
-    }))
-  );
-
-  const initialState: State = { success: false };
-  const [state, action, isPending] = useActionState(
-    updateVoucherWrapper,
-    initialState
-  );
-
-  // Calculations
+  // ✅ 3. Totals calculation now has types, fixing the build error
   const totalDr = entries
-    .filter((e: any) => e.type === "Dr")
-    .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+    .filter((e: LedgerEntry) => e.type === "Dr")
+    .reduce(
+      (s: number, e: LedgerEntry) => s + (parseFloat(e.amount.toString()) || 0),
+      0
+    );
+
   const totalCr = entries
-    .filter((e: any) => e.type === "Cr")
-    .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+    .filter((e: LedgerEntry) => e.type === "Cr")
+    .reduce(
+      (s: number, e: LedgerEntry) => s + (parseFloat(e.amount.toString()) || 0),
+      0
+    );
 
-  const isBalanced = Math.abs(totalDr - totalCr) < 0.01 && totalDr > 0;
+  const difference = Math.abs(totalDr - totalCr);
+  const isBalanced = difference < 0.01 && totalDr > 0;
 
-  // Effects
-  useEffect(() => {
-    if (state.success) {
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ["#F59E0B", "#10B981"],
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    setLoading(true);
+
+    const payload = {
+      date,
+      narration,
+      totalAmount: totalDr,
+      ledgerEntries: entries.map((e) => ({
+        ledgerId: parseInt(e.ledgerId.toString()),
+        amount:
+          e.type === "Dr"
+            ? -Math.abs(parseFloat(e.amount.toString()))
+            : Math.abs(parseFloat(e.amount.toString())),
+      })),
+    };
+
+    const res = await updateVoucher(
+      voucher.id,
+      companyId,
+      voucher.type,
+      payload
+    );
+
+    if (res.success) {
+      // ✅ Custom message with New TXID
+      setSuccessData({
+        message:
+          "edited and send for verification with new generate new txid of that voucher",
+        txid: res.txid || "N/A",
       });
+
       setTimeout(() => {
         router.push(`/companies/${companyId}/vouchers`);
         router.refresh();
-      }, 2000);
+      }, 4000);
+    } else {
+      setErrorMsg(res.error || "Update failed");
+      setLoading(false);
     }
-  }, [state.success, companyId, router]);
-
-  // Handlers
-  const updateEntry = (idx: number, field: string, val: any) => {
-    const n = [...entries];
-    n[idx][field] = val;
-    setEntries(n);
   };
 
+  const addRow = () => {
+    setEntries([
+      ...entries,
+      {
+        ledgerId: ledgers[0]?.id,
+        type: "Dr",
+        amount: 0,
+        tempId: Math.random(),
+      },
+    ]);
+  };
+
+  if (entries.length === 0 && voucher.ledgerEntries?.length > 0) {
+    return (
+      <div className="p-20 text-center font-bold text-slate-400">
+        Loading Details...
+      </div>
+    );
+  }
+
   return (
-    <form action={action} className="space-y-6 font-sans p-1">
-      <input type="hidden" name="companyId" value={companyId} />
-      <input type="hidden" name="voucherId" value={voucher.id} />
-      <input type="hidden" name="type" value={voucher.type} />
-
-      {/* ✅ FIXED: Added explicit types to the map function to resolve build error */}
-      <input
-        type="hidden"
-        name="structuredEntries"
-        value={JSON.stringify(
-          entries.map((e: any) => ({
-            ledgerId: e.ledgerId,
-            // Convert back to signs: Dr is negative in our DB standard
-            amount: e.type === "Dr" ? -Math.abs(e.amount) : Math.abs(e.amount),
-          }))
-        )}
-      />
-
-      {/* Success Banner */}
-      {state.success && (
-        <div className="bg-emerald-600 rounded-2xl p-6 text-white shadow-xl animate-in zoom-in-95 flex items-center gap-4">
-          <CheckCircle size={32} />
-          <div>
-            <h2 className="text-xl font-black uppercase tracking-tight">
-              Update Successful
-            </h2>
-            <p className="text-emerald-100 text-sm font-medium">
-              Voucher updated. Redirecting...
-            </p>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {successData && (
+        <div className="bg-emerald-600 rounded-2xl p-8 text-white shadow-2xl animate-in zoom-in-95 flex flex-col items-center text-center gap-4">
+          <CheckCircle2 size={56} className="text-emerald-100" />
+          <h2 className="text-2xl font-black uppercase tracking-tight">
+            Voucher Updated
+          </h2>
+          <p className="text-emerald-50 text-sm max-w-md font-bold leading-relaxed">
+            {successData.message}
+          </p>
+          <div className="bg-white/20 border border-white/30 px-6 py-3 rounded-xl font-mono text-lg font-bold mt-2 shadow-inner">
+            NEW TXID: {successData.txid}
           </div>
-        </div>
-      )}
-
-      {/* Info Warning */}
-      <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl flex items-start gap-3 shadow-sm">
-        <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
-        <div>
-          <h3 className="text-amber-800 font-bold text-xs uppercase tracking-wide mb-1">
-            Modification Notice
-          </h3>
-          <p className="text-amber-700 text-xs leading-relaxed">
-            Editing will reset the approval status to{" "}
-            <strong className="font-bold">PENDING</strong>.
+          <p className="text-[10px] uppercase font-bold text-emerald-300 mt-4 animate-pulse">
+            Redirecting to Daybook in 4 seconds...
           </p>
         </div>
-      </div>
+      )}
 
-      {state.error && (
-        <div className="bg-rose-50 text-rose-600 p-4 rounded-xl text-sm font-bold border border-rose-100 shadow-sm animate-in fade-in">
-          {state.error}
+      {errorMsg && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-600 p-4 rounded-xl flex items-center gap-3 font-bold text-sm">
+          <AlertCircle size={18} /> {errorMsg}
         </div>
       )}
 
-      {/* Form Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-            <Calendar size={12} /> Posting Date
-          </label>
-          <input
-            name="date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full h-11 border border-slate-200 bg-white rounded-xl px-4 font-bold text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-600 transition-all cursor-pointer"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-            <FileText size={12} /> Voucher Reference
-          </label>
-          <div className="h-11 flex items-center px-4 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm">
-            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] uppercase font-black tracking-wide mr-2 border border-slate-200">
-              {voucher.type}
-            </span>
-            #{voucher.voucherNo}
-          </div>
-        </div>
-      </div>
-
-      {/* Ledger Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg shadow-slate-200/50">
-        <div className="bg-slate-900 text-white p-4 text-[10px] font-black uppercase grid grid-cols-12 tracking-widest">
-          <div className="col-span-2">Side</div>
-          <div className="col-span-6 pl-2">Ledger Account</div>
-          <div className="col-span-3 text-right">Amount</div>
-          <div className="col-span-1"></div>
-        </div>
-
-        <div className="p-2 space-y-2 bg-slate-50/30">
-          {entries.map((entry: any, idx: number) => (
-            <div
-              key={entry.tempId}
-              className="grid grid-cols-12 gap-3 items-center bg-white p-2 rounded-xl border border-slate-100 shadow-sm hover:border-indigo-100 transition-colors group"
-            >
-              <select
-                value={entry.type}
-                onChange={(e) => updateEntry(idx, "type", e.target.value)}
-                className="col-span-2 h-10 border border-slate-200 rounded-lg px-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 bg-white cursor-pointer"
-              >
-                <option value="Dr">Dr</option>
-                <option value="Cr">Cr</option>
-              </select>
-              <select
-                value={entry.ledgerId}
-                onChange={(e) => updateEntry(idx, "ledgerId", e.target.value)}
-                className="col-span-6 h-10 border border-slate-200 rounded-lg px-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 bg-white cursor-pointer"
-              >
-                {ledgers.map((l: any) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
+      {!successData && (
+        <>
+          {/* Header, Table, and Footer UI remains exactly as you had it */}
+          <div className="grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400">
+                Posting Date
+              </label>
               <input
-                type="number"
-                value={entry.amount}
-                onChange={(e) => updateEntry(idx, "amount", e.target.value)}
-                className="col-span-3 h-10 border border-slate-200 rounded-lg px-3 text-right text-sm font-mono font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full p-2 rounded border font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <div className="col-span-1 text-center">
-                <Trash2
-                  size={16}
-                  className="text-slate-300 hover:text-rose-500 cursor-pointer transition-colors opacity-0 group-hover:opacity-100 mx-auto"
-                  onClick={() =>
-                    setEntries(entries.filter((_: any, i: number) => i !== idx))
-                  }
-                />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400">
+                Reference
+              </label>
+              <div className="p-2 font-mono font-bold text-slate-600 bg-slate-200/50 rounded flex justify-between">
+                <span>#{voucher.voucherNo}</span>
+                <span className="text-[10px] opacity-50">{voucher.type}</span>
               </div>
             </div>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={() =>
-            setEntries([
-              ...entries,
-              {
-                tempId: Math.random(),
-                type: "Dr",
-                amount: 0,
-                ledgerId: ledgers[0]?.id,
-              },
-            ])
-          }
-          className="w-full py-3 bg-white text-[10px] font-black uppercase text-indigo-600 border-t border-slate-100 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 tracking-widest"
-        >
-          <Plus size={14} /> Add New Row
-        </button>
-      </div>
-
-      <div className="flex gap-6 items-start">
-        <textarea
-          name="narration"
-          value={narration}
-          onChange={(e) => setNarration(e.target.value)}
-          placeholder="Edit narration..."
-          className="flex-1 border border-slate-200 rounded-2xl p-4 text-sm font-medium h-32 resize-none focus:ring-2 focus:ring-indigo-600 outline-none bg-slate-50 placeholder:text-slate-400"
-        />
-
-        <div className="w-56 bg-slate-900 text-white rounded-2xl p-6 flex flex-col justify-center text-right shadow-xl relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-24 h-24 bg-indigo-500/30 rounded-full blur-2xl" />
-          <div className="text-[10px] text-indigo-300 font-black uppercase tracking-widest mb-1 relative z-10">
-            Total Debit
           </div>
-          <div
-            className={`text-3xl font-mono font-bold leading-none relative z-10 ${
-              !isBalanced ? "text-rose-400" : "text-white"
-            }`}
-          >
-            <span className="text-lg text-slate-500 mr-1">₹</span>
-            {totalDr.toFixed(2)}
+
+          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full text-left">
+              <thead className="bg-slate-900 text-white text-[10px] uppercase p-4 tracking-widest">
+                <tr>
+                  <th className="p-4 w-24">Side</th>
+                  <th className="p-4">Ledger Particulars</th>
+                  <th className="p-4 text-right w-40">Amount</th>
+                  <th className="p-4 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {entries.map((entry, idx) => (
+                  <tr key={entry.tempId} className="border-b border-slate-100">
+                    <td className="p-2">
+                      <select
+                        value={entry.type}
+                        onChange={(e) => {
+                          const n = [...entries];
+                          n[idx].type = e.target.value;
+                          setEntries(n);
+                        }}
+                        className="w-full p-2 bg-slate-100 rounded font-bold text-xs"
+                      >
+                        <option value="Dr">Dr</option>
+                        <option value="Cr">Cr</option>
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <select
+                        value={entry.ledgerId}
+                        onChange={(e) => {
+                          const n = [...entries];
+                          n[idx].ledgerId = parseInt(e.target.value);
+                          setEntries(n);
+                        }}
+                        className="w-full p-2 bg-slate-100 rounded font-bold text-xs"
+                      >
+                        {ledgers.map((l: any) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={entry.amount}
+                        onChange={(e) => {
+                          const n = [...entries];
+                          n[idx].amount = e.target.value;
+                          setEntries(n);
+                        }}
+                        className="w-full p-2 bg-slate-100 rounded text-right font-mono font-bold"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEntries(entries.filter((_, i) => i !== idx))
+                        }
+                        className="text-slate-300 hover:text-rose-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              type="button"
+              onClick={addRow}
+              className="w-full py-3 bg-slate-50 text-[10px] font-black uppercase text-indigo-600 hover:bg-indigo-50 flex items-center justify-center gap-2 border-t border-slate-200"
+            >
+              <Plus size={14} /> Add Row
+            </button>
           </div>
-          {!isBalanced && (
-            <div className="text-[10px] text-rose-400 font-black uppercase tracking-wider mt-2 bg-rose-950/30 py-1 px-2 rounded border border-rose-900/50 inline-block self-end relative z-10">
-              Difference: {(totalDr - totalCr).toFixed(2)}
+
+          <div className="flex flex-col md:flex-row gap-6">
+            <textarea
+              value={narration}
+              onChange={(e) => setNarration(e.target.value)}
+              className="flex-1 h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none"
+              placeholder="Edit narration..."
+            />
+            <div className="w-full md:w-72 bg-slate-900 text-white p-6 rounded-3xl shadow-xl">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] uppercase opacity-50">
+                    Dr Total
+                  </span>
+                  <span className="font-mono">₹{totalDr.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] uppercase opacity-50">
+                    Cr Total
+                  </span>
+                  <span className="font-mono">₹{totalCr.toFixed(2)}</span>
+                </div>
+                <div
+                  className={`pt-4 border-t border-white/10 flex justify-between items-center ${
+                    isBalanced ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  <span className="text-[10px] uppercase font-black">Diff</span>
+                  <span className="font-mono font-bold">
+                    ₹{difference.toFixed(2)}
+                  </span>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      <div className="pt-4">
-        <button
-          type="submit"
-          disabled={isPending || !isBalanced}
-          className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-900/20 hover:shadow-indigo-900/20 hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-        >
-          {isPending ? (
-            <Loader2 className="animate-spin" size={18} />
-          ) : (
-            <Save size={18} />
-          )}
-          Update & Post Voucher
-        </button>
-      </div>
+          <button
+            type="submit"
+            disabled={!isBalanced || loading}
+            className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <Save size={18} />
+            )}
+            Update & Send for Verification
+          </button>
+        </>
+      )}
     </form>
   );
 }

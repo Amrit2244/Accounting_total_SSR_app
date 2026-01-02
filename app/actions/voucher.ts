@@ -19,11 +19,16 @@ export type State = {
 
 // --- SAFE HELPER: PREVENT DUPLICATE TXID ---
 async function generateUniqueTXID(): Promise<string> {
-  let uniqueId = "";
-  let exists = true;
+  let digits = 5;
+  let attempts = 0;
+  const maxAttemptsAtLevel = 20;
 
-  while (exists) {
-    const candidate = Math.floor(10000 + Math.random() * 90000).toString();
+  while (true) {
+    const min = Math.pow(10, digits - 1);
+    const max = Math.pow(10, digits) - 1;
+    const candidate = Math.floor(
+      min + Math.random() * (max - min + 1)
+    ).toString();
 
     const checks = await Promise.all([
       prisma.salesVoucher.findUnique({ where: { transactionCode: candidate } }),
@@ -44,14 +49,15 @@ async function generateUniqueTXID(): Promise<string> {
       }),
     ]);
 
-    if (checks.every((v) => v === null)) {
-      uniqueId = candidate;
-      exists = false;
+    if (checks.every((v) => v === null)) return candidate;
+
+    attempts++;
+    if (attempts >= maxAttemptsAtLevel) {
+      digits++;
+      attempts = 0;
     }
   }
-  return uniqueId;
 }
-
 async function getCurrentUserId(): Promise<number | null> {
   try {
     const cookieStore = await cookies();
@@ -65,7 +71,111 @@ async function getCurrentUserId(): Promise<number | null> {
     return null;
   }
 }
+export async function updateVoucher(
+  voucherId: number,
+  companyId: number,
+  type: string,
+  data: any
+) {
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) return { success: false, error: "Unauthorized" };
 
+    const t = type.toUpperCase();
+    const newTxid = await generateUniqueTXID(); // Force new ID generation
+
+    const commonData = {
+      date: new Date(data.date),
+      narration: data.narration,
+      totalAmount: parseFloat(data.totalAmount),
+      transactionCode: newTxid, // New ID assigned
+      status: "PENDING", // Reset status
+      verifiedById: null, // Clear previous verifier
+      createdById: userId, // Update Maker to the person who edited
+      updatedAt: new Date(),
+    };
+
+    await prisma.$transaction(async (tx) => {
+      const tableMap: any = {
+        SALES: tx.salesVoucher,
+        PURCHASE: tx.purchaseVoucher,
+        PAYMENT: tx.paymentVoucher,
+        RECEIPT: tx.receiptVoucher,
+        CONTRA: tx.contraVoucher,
+        JOURNAL: tx.journalVoucher,
+      };
+
+      await tableMap[t].update({
+        where: { id: voucherId },
+        data: {
+          ...commonData,
+          ledgerEntries: {
+            deleteMany: {},
+            create: data.ledgerEntries.map((le: any) => ({
+              ledgerId: parseInt(le.ledgerId),
+              amount: parseFloat(le.amount),
+            })),
+          },
+        },
+      });
+    });
+
+    revalidatePath(`/companies/${companyId}/vouchers`);
+    return {
+      success: true,
+      message: `Voucher edited and sent for verification with new Transaction ID: ${newTxid}`,
+      txid: newTxid,
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function verifyVoucher(voucherId: number, type: string) {
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) return { success: false, error: "Unauthorized" };
+
+    const t = type.toUpperCase();
+    const tableMap: any = {
+      SALES: prisma.salesVoucher,
+      PURCHASE: prisma.purchaseVoucher,
+      PAYMENT: prisma.paymentVoucher,
+      RECEIPT: prisma.receiptVoucher,
+      CONTRA: prisma.contraVoucher,
+      JOURNAL: prisma.journalVoucher,
+    };
+
+    // 1. FETCH THE VOUCHER TO CHECK THE MAKER
+    const voucher = await tableMap[t].findUnique({
+      where: { id: voucherId },
+      select: { createdById: true },
+    });
+
+    // 2. STRICT MAKER-CHECKER ENFORCEMENT
+    if (voucher.createdById === userId) {
+      return {
+        success: false,
+        error:
+          "Access Denied: You cannot verify a voucher that you created or edited. Maker and Checker must be different users.",
+      };
+    }
+
+    await tableMap[t].update({
+      where: { id: voucherId },
+      data: {
+        status: "APPROVED",
+        verifiedById: userId,
+        updatedAt: new Date(),
+      },
+    });
+
+    revalidatePath("/");
+    return { success: true, message: "Voucher Verified Successfully." };
+  } catch (error: any) {
+    return { success: false, error: "Verification failed" };
+  }
+}
 // ==========================================
 // 1. GET VOUCHERS LIST (Daybook Logic)
 // ==========================================
@@ -368,44 +478,5 @@ export async function deleteBulkVouchers(
     return { success: true, message: "Vouchers deleted" };
   } catch (e) {
     return { success: false, error: "Failed to delete" };
-  }
-}
-
-// ==========================================
-// 6. VERIFY ACTION (APPROVAL)
-// ==========================================
-export async function verifyVoucher(
-  voucherId: number,
-  type: string
-): Promise<State> {
-  try {
-    const userId = await getCurrentUserId();
-    const t = type.toUpperCase();
-
-    const tableMap: any = {
-      SALES: prisma.salesVoucher,
-      PURCHASE: prisma.purchaseVoucher,
-      PAYMENT: prisma.paymentVoucher,
-      RECEIPT: prisma.receiptVoucher,
-      CONTRA: prisma.contraVoucher,
-      JOURNAL: prisma.journalVoucher,
-    };
-
-    await tableMap[t].update({
-      where: { id: voucherId },
-      data: {
-        status: "APPROVED",
-        verifiedById: userId,
-        updatedAt: new Date(),
-      },
-    });
-
-    revalidatePath("/");
-    return {
-      success: true,
-      message: "Voucher Approved and Posted to accounts.",
-    };
-  } catch (e) {
-    return { success: false, error: "Approval failed" };
   }
 }
