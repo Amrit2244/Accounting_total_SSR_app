@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { downloadBackup, restoreDatabase } from "../../actions/database";
+import {
+  downloadBackup,
+  restoreDatabase,
+} from "../../../../../actions/database";
 
 interface Log {
   id: string;
