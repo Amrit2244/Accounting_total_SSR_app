@@ -11,6 +11,8 @@ export async function proxy(req: NextRequest) {
 
   // --- MOBILE API CORS LOGIC ---
   if (pathname.startsWith("/api/mobile")) {
+    console.log(">>> MOBILE REQUEST DETECTED:", req.method, pathname); // This will show in your cloud terminal
+    // ... rest of the CORS logic
     // Handle Preflight (OPTIONS)
     if (req.method === "OPTIONS") {
       return new NextResponse(null, {
