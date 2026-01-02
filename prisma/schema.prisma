@@ -605,3 +605,17 @@ model AuditLog {
   
   createdAt   DateTime @default(now())
 }
+
+
+// ==========================================
+// 14. FOR BACKUP & RESTORING DATA AND LOGS
+// ==========================================
+
+model DataActivityLog {
+  id          String   @id @default(uuid())
+  actionType  String   // "BACKUP" or "RESTORE"
+  performedBy String   // User Name or Email
+  fileName    String?
+  timestamp   DateTime @default(now())
+  status      String   // "SUCCESS" or "FAILED"
+}
