@@ -14,13 +14,14 @@ import {
   Clock,
   AlertTriangle,
   ChevronDown,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import confetti from "canvas-confetti";
 
-// State Interface
+// --- TYPES ---
 interface VoucherActionState {
-  success?: boolean;
+  success: boolean;
   message?: string;
   code?: string;
   txid?: string;
@@ -28,15 +29,15 @@ interface VoucherActionState {
   error?: string;
 }
 
-const initialState: VoucherActionState = {};
-
-async function createVoucherWrapper(
-  prevState: any,
-  formData: FormData
-): Promise<VoucherActionState> {
-  const result = await createVoucher(prevState, formData);
-  return result as VoucherActionState;
-}
+// Strictly typed initial state to satisfy useActionState
+const initialState: VoucherActionState = {
+  success: false,
+  message: undefined,
+  code: undefined,
+  txid: undefined,
+  id: undefined,
+  error: undefined,
+};
 
 const SearchableRowLedgerSelect = ({
   rowIndex,
@@ -91,7 +92,7 @@ const SearchableRowLedgerSelect = ({
         />
       </div>
       {isOpen && (
-        <div className="absolute z-[100] w-full bg-white border border-slate-200 rounded-xl shadow-xl mt-1.5 overflow-hidden animate-in fade-in zoom-in-95 origin-top-left">
+        <div className="absolute z-[100] w-full bg-white border border-slate-200 rounded-xl shadow-xl mt-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <div className="max-h-48 overflow-y-auto custom-scrollbar">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((l: any) => (
@@ -130,10 +131,16 @@ const SearchableRowLedgerSelect = ({
   );
 };
 
-export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
+export default function VoucherForm({
+  companyId,
+  ledgers,
+  defaultType,
+  isAdmin,
+}: any) {
   const formRef = useRef<HTMLFormElement>(null);
+
   const [state, action, isPending] = useActionState(
-    createVoucherWrapper,
+    createVoucher as any,
     initialState
   );
 
@@ -186,11 +193,23 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
   const isBalanced = Math.abs(totalDr - totalCr) < 0.01 && totalDr > 0;
 
   useEffect(() => {
-    if (state?.success)
-      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-  }, [state?.success]);
+    if (state?.success) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: isAdmin
+          ? ["#6366f1", "#4f46e5", "#ffffff"]
+          : ["#10B981", "#3B82F6", "#FBBF24"],
+      });
+    }
+  }, [state?.success, isAdmin]);
 
+  // --- DYNAMIC SUCCESS VIEW ---
   if (state?.success) {
+    // ✅ CORE FIX: Identify if the server specifically authorized this (Admin Bypass)
+    const isAutoVerified = state.message === "Authorized";
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] text-center p-8 bg-white border border-slate-200 rounded-3xl shadow-xl animate-in zoom-in-95 duration-300 relative overflow-hidden">
         <div
@@ -200,17 +219,48 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
-          <div className="bg-emerald-50 p-6 rounded-full mb-6 text-emerald-600 shadow-sm border border-emerald-100">
-            <CheckCircle size={48} strokeWidth={1.5} />
+        <div
+          className={`absolute top-0 inset-x-0 h-2 ${
+            isAutoVerified ? "bg-indigo-600" : "bg-emerald-600"
+          }`}
+        />
+
+        <div className="relative z-10 w-full max-sm flex flex-col items-center">
+          <div
+            className={`${
+              isAutoVerified
+                ? "bg-indigo-50 text-indigo-600 border-indigo-100"
+                : "bg-emerald-50 text-emerald-600 border-emerald-100"
+            } p-6 rounded-full mb-6 shadow-sm border`}
+          >
+            {isAutoVerified ? (
+              <ShieldCheck size={48} strokeWidth={1.5} />
+            ) : (
+              <CheckCircle size={48} strokeWidth={1.5} />
+            )}
           </div>
+
           <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">
-            Submitted for Approval
+            {isAutoVerified ? "Voucher Authorized" : "Submitted for Approval"}
           </h2>
-          <div className="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 mb-8">
-            <ShieldAlert size={12} /> Status: Pending Verification
+
+          <div
+            className={`border px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 mb-8 ${
+              isAutoVerified
+                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                : "bg-amber-50 text-amber-700 border-amber-200"
+            }`}
+          >
+            {isAutoVerified ? (
+              <ShieldCheck size={12} />
+            ) : (
+              <Clock size={12} className="animate-pulse" />
+            )}
+            Status:{" "}
+            {isAutoVerified ? "Approved & Posted" : "Pending Verification"}
           </div>
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full shadow-inner mb-8">
+
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full shadow-inner mb-8 text-left">
             <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                 Voucher No
@@ -228,11 +278,16 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
               </span>
             </div>
           </div>
+
           <button
             onClick={() => window.location.reload()}
-            className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all active:scale-95"
+            className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
+              isAutoVerified
+                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                : "bg-slate-900 hover:bg-indigo-600 text-white"
+            }`}
           >
-            Create Another
+            Create Another Entry
           </button>
         </div>
       </div>
@@ -245,7 +300,6 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
       action={action}
       className="flex flex-col h-full space-y-6 font-sans p-1"
     >
-      {/* HIDDEN INPUTS - MATCHING THE SERVER ACTION EXPECTATIONS */}
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="type" value={defaultType} />
       <input type="hidden" name="totalAmount" value={totalDr.toString()} />
@@ -255,7 +309,6 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
         value={JSON.stringify(
           rows.map((r) => ({
             ledgerId: r.ledgerId,
-            // In your server logic: negative for Dr, positive for Cr
             amount:
               r.type === "Dr"
                 ? -Math.abs(parseFloat(r.amount))
@@ -264,7 +317,7 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
         )}
       />
 
-      {/* HEADER */}
+      {/* HEADER SECTION */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
@@ -298,13 +351,11 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
         </div>
       </div>
 
-      {/* GRID */}
+      {/* LEDGER ENTRIES GRID */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg shadow-slate-200/50 flex flex-col flex-1 overflow-hidden">
         <div className="grid grid-cols-12 bg-slate-900 text-white p-3 text-[10px] font-black uppercase tracking-widest">
           <div className="col-span-2 text-center">Type</div>
-          <div className="col-span-8 pl-2">
-            Particulars (Smart Filter Active)
-          </div>
+          <div className="col-span-8 pl-2">Particulars</div>
           <div className="col-span-2 text-right pr-4">Amount</div>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-slate-50/50 min-h-[200px]">
@@ -367,7 +418,7 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
         </button>
       </div>
 
-      {/* FOOTER */}
+      {/* FOOTER SECTION */}
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <textarea
           name="narration"
@@ -375,16 +426,20 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
           className="w-full md:flex-1 p-4 border border-slate-200 rounded-2xl text-xs font-medium resize-none shadow-sm focus:ring-2 focus:ring-indigo-600 outline-none bg-white"
           placeholder="Enter narration..."
         />
-        <div className="w-full md:w-72 bg-slate-900 text-white p-5 rounded-2xl flex flex-col justify-between h-32 shadow-xl relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
+        <div
+          className={`w-full md:w-72 text-white p-5 rounded-2xl flex flex-col justify-between h-32 shadow-xl relative overflow-hidden ${
+            isAdmin ? "bg-indigo-900" : "bg-slate-900"
+          }`}
+        >
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
           <div className="flex flex-col text-[10px] font-bold border-b border-white/10 pb-3 space-y-1.5 relative z-10">
-            <div className="flex justify-between text-indigo-300">
+            <div className="flex justify-between text-indigo-200">
               <span>Dr Total:</span>{" "}
               <span className="font-mono text-white tracking-wide">
                 {totalDr.toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between text-orange-300">
+            <div className="flex justify-between text-orange-200">
               <span>Cr Total:</span>{" "}
               <span className="font-mono text-white tracking-wide">
                 {totalCr.toFixed(2)}
@@ -404,14 +459,20 @@ export default function VoucherForm({ companyId, ledgers, defaultType }: any) {
             <button
               type="submit"
               disabled={!isBalanced || isPending}
-              className="h-9 px-4 bg-white text-slate-900 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg disabled:opacity-50 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+              className={`h-9 px-4 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                isAdmin
+                  ? "bg-indigo-500 text-white hover:bg-indigo-400"
+                  : "bg-white text-slate-900 hover:bg-indigo-50"
+              }`}
             >
               {isPending ? (
                 <Loader2 className="animate-spin" size={14} />
+              ) : isAdmin ? (
+                <ShieldCheck size={14} />
               ) : (
                 <Save size={14} />
               )}
-              {isPending ? "..." : "Submit"}
+              {isPending ? "..." : isAdmin ? "Authorize Instantly" : "Submit"}
             </button>
           </div>
         </div>

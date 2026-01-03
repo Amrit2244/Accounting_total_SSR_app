@@ -6,9 +6,28 @@ import {
   ArrowLeft,
   ChevronRight,
   ListTodo,
+  Info,
 } from "lucide-react";
 import VoucherTable from "@/components/VoucherTable";
 import Link from "next/link";
+import { jwtVerify } from "jose";
+import { cookies } from "next/headers";
+
+const secretKey =
+  process.env.SESSION_SECRET || "your-super-secret-key-change-this";
+const encodedKey = new TextEncoder().encode(secretKey);
+
+async function getUserRole(): Promise<string> {
+  try {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session")?.value;
+    if (!session) return "USER";
+    const { payload } = await jwtVerify(session, encodedKey);
+    return (payload.role as string) || "USER";
+  } catch {
+    return "USER";
+  }
+}
 
 export default async function VerificationQueuePage({
   params,
@@ -17,6 +36,8 @@ export default async function VerificationQueuePage({
 }) {
   const { id } = await params;
   const companyId = parseInt(id);
+  const userRole = await getUserRole();
+  const isAdmin = userRole === "ADMIN";
 
   const [sales, purchase, payment, receipt, contra, journal, stock] =
     await Promise.all([
@@ -122,7 +143,6 @@ export default async function VerificationQueuePage({
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
-      {/* Background Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -156,6 +176,14 @@ export default async function VerificationQueuePage({
           </div>
 
           <div className="flex items-center gap-3">
+            {isAdmin && (
+              <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100 mr-2">
+                <ShieldCheck size={16} />
+                <span className="text-[10px] font-bold uppercase tracking-wide">
+                  Admin Mode Active
+                </span>
+              </div>
+            )}
             {pendingVouchers.length > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-100 shadow-sm">
                 <Clock size={16} />
@@ -164,16 +192,28 @@ export default async function VerificationQueuePage({
                 </span>
               </div>
             )}
-
             <Link
               href={`/companies/${companyId}/vouchers`}
               className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-              title="Back to All Vouchers"
             >
               <ArrowLeft size={20} />
             </Link>
           </div>
         </div>
+
+        {/* ADMIN INFO BANNER */}
+        {isAdmin && (
+          <div className="bg-indigo-600 rounded-2xl p-4 flex items-center gap-4 text-white shadow-lg shadow-indigo-200">
+            <div className="bg-white/20 p-2 rounded-lg">
+              <Info size={20} />
+            </div>
+            <div className="text-sm">
+              <span className="font-bold">Note:</span> Your entries are{" "}
+              <strong>auto-verified</strong> and skip this queue. You are only
+              seeing vouchers created by other staff members.
+            </div>
+          </div>
+        )}
 
         {/* CONTENT */}
         {pendingVouchers.length > 0 ? (

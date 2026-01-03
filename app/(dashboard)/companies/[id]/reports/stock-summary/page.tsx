@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Package, ChevronRight, Boxes } from "lucide-react";
+import {
+  ArrowLeft,
+  Package,
+  ChevronRight,
+  Boxes,
+  ShieldCheck,
+} from "lucide-react";
 import { notFound } from "next/navigation";
 
 const fmt = (v: number) =>
@@ -25,7 +31,10 @@ export default async function StockSummaryPage({
 
   if (isNaN(companyId)) notFound();
 
-  // 1. Fetch Items with ALL approved inventory source types
+  /** * ✅ AUTO-VERIFY COMPATIBILITY:
+   * We fetch source data only from APPROVED vouchers.
+   * This includes standard checker-approved AND admin auto-approved vouchers.
+   */
   const items = await prisma.stockItem.findMany({
     where: { companyId },
     include: {
@@ -43,31 +52,31 @@ export default async function StockSummaryPage({
     orderBy: { name: "asc" },
   });
 
-  // 2. Process Data for Valuation
+  // 2. Process Data for Valuation using Weighted Average Logic
   const stockData = items.map((item: any) => {
     const openingQty = item.openingQty || 0;
-    const openingVal = item.openingValue || 0;
+    const openingVal = Math.abs(item.openingValue || 0);
 
     let inwardQty = 0;
     let inwardVal = 0;
     let outwardQty = 0;
 
-    // Process Purchases (Inwards)
+    // Inwards (Purchases)
     item.purchaseItems.forEach((p: any) => {
       inwardQty += p.quantity;
-      inwardVal += p.amount;
+      inwardVal += Math.abs(p.amount);
     });
 
-    // Process Sales (Outwards)
+    // Outwards (Sales)
     item.salesItems.forEach((s: any) => {
       outwardQty += Math.abs(s.quantity);
     });
 
-    // Process Stock Journals (Can be In or Out)
+    // Stock Journals (Adjustment In/Out)
     item.journalEntries.forEach((j: any) => {
       if (j.quantity > 0) {
         inwardQty += j.quantity;
-        inwardVal += j.amount;
+        inwardVal += Math.abs(j.amount);
       } else {
         outwardQty += Math.abs(j.quantity);
       }
@@ -75,7 +84,7 @@ export default async function StockSummaryPage({
 
     const closingQty = openingQty + inwardQty - outwardQty;
 
-    // Weighted Average Cost (WAC) Calculation
+    // Valuation Logic: Average inward rate applied to closing quantity
     const totalBasisQty = openingQty + inwardQty;
     const totalBasisVal = openingVal + inwardVal;
     const avgRate = totalBasisQty > 0 ? totalBasisVal / totalBasisQty : 0;
@@ -92,10 +101,10 @@ export default async function StockSummaryPage({
       outwardQty,
       closingQty,
       closingVal,
+      avgRate,
     };
   });
 
-  // Grand Totals
   const totals = stockData.reduce(
     (acc: any, curr: any) => ({
       op: acc.op + curr.openingVal,
@@ -107,7 +116,6 @@ export default async function StockSummaryPage({
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
-      {/* Background Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -119,13 +127,13 @@ export default async function StockSummaryPage({
       <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-8 flex flex-col h-full space-y-6 flex-1">
         {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
-          <div>
+          <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
               <Link
                 href={`/companies/${companyId}`}
                 className="hover:text-indigo-600 transition-colors"
               >
-                Dashboard
+                Workspace
               </Link>
               <ChevronRight size={10} />
               <Link
@@ -141,33 +149,35 @@ export default async function StockSummaryPage({
               <Boxes className="text-indigo-600" size={32} />
               Stock Summary
             </h1>
-            <p className="text-slate-500 font-medium mt-2 max-w-xl">
-              Detailed inventory valuation using Weighted Average Cost (WAC)
-              method.
-            </p>
           </div>
 
-          <Link
-            href={`/companies/${companyId}/reports`}
-            className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-            title="Back to Reports"
-          >
-            <ArrowLeft size={20} />
-          </Link>
+          <div className="flex items-center gap-3">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl mr-2">
+              <ShieldCheck size={14} className="text-emerald-600" />
+              <span className="text-[10px] font-black uppercase text-emerald-700">
+                Audit-Verified Valuation
+              </span>
+            </div>
+            <Link
+              href={`/companies/${companyId}/reports`}
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 rounded-xl shadow-sm"
+            >
+              <ArrowLeft size={20} />
+            </Link>
+          </div>
         </div>
 
         {/* REPORT TABLE */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
           <div className="flex-1 overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
-                {/* Super Header */}
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest text-center">
                   <th
                     rowSpan={2}
                     className="p-4 text-left border-r border-slate-700 w-64 bg-slate-900 sticky left-0 z-20"
                   >
-                    Item Particulars
+                    Item Description
                   </th>
                   <th
                     colSpan={2}
@@ -179,19 +189,18 @@ export default async function StockSummaryPage({
                     colSpan={2}
                     className="p-2 border-b border-slate-700 border-r border-slate-700 bg-emerald-900/50"
                   >
-                    Inwards
+                    Inwards (Purchase)
                   </th>
                   <th className="p-2 border-b border-slate-700 border-r border-slate-700 bg-rose-900/50">
-                    Outwards
+                    Outwards (Sales)
                   </th>
                   <th
                     colSpan={2}
                     className="p-2 border-b border-slate-700 bg-indigo-900/50"
                   >
-                    Closing Balance
+                    Closing Stock
                   </th>
                 </tr>
-                {/* Sub Header */}
                 <tr className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-200">
                   <th className="p-2 text-right border-r border-slate-200 w-24">
                     Qty
@@ -199,23 +208,20 @@ export default async function StockSummaryPage({
                   <th className="p-2 text-right border-r border-slate-200 w-32">
                     Value
                   </th>
-
-                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-emerald-50 text-emerald-700">
+                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-emerald-50">
                     Qty
                   </th>
-                  <th className="p-2 text-right border-r border-slate-200 w-32 bg-emerald-50 text-emerald-700">
+                  <th className="p-2 text-right border-r border-slate-200 w-32 bg-emerald-50">
                     Value
                   </th>
-
-                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-rose-50 text-rose-700">
+                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-rose-50">
                     Qty
                   </th>
-
-                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-indigo-50 text-indigo-700">
+                  <th className="p-2 text-right border-r border-slate-200 w-24 bg-indigo-50">
                     Qty
                   </th>
-                  <th className="p-2 text-right w-32 bg-indigo-50 text-indigo-700">
-                    Value
+                  <th className="p-2 text-right w-32 bg-indigo-50">
+                    Closing Val
                   </th>
                 </tr>
               </thead>
@@ -224,89 +230,62 @@ export default async function StockSummaryPage({
                 {stockData.map((row: any) => (
                   <tr
                     key={row.id}
-                    className="group hover:bg-slate-50 transition-colors text-xs"
+                    className="group hover:bg-slate-50 transition-colors text-[11px]"
                   >
-                    <td className="p-4 font-bold text-slate-700 border-r border-slate-100 bg-white sticky left-0 group-hover:bg-slate-50 transition-colors">
+                    <td className="p-4 font-bold text-slate-700 border-r border-slate-100 bg-white sticky left-0 group-hover:bg-slate-50">
                       {row.name}
                     </td>
-
-                    {/* Opening */}
                     <td className="p-2 text-right border-r border-slate-100 font-mono text-slate-500">
-                      {row.openingQty > 0 ? (
-                        `${fmtQty(row.openingQty)} ${row.unit}`
-                      ) : (
-                        <span className="opacity-20">-</span>
-                      )}
+                      {row.openingQty > 0
+                        ? `${fmtQty(row.openingQty)} ${row.unit}`
+                        : "-"}
                     </td>
                     <td className="p-2 text-right border-r border-slate-100 font-mono text-slate-500">
-                      {row.openingVal > 0 ? (
-                        fmt(row.openingVal)
-                      ) : (
-                        <span className="opacity-20">-</span>
-                      )}
+                      {row.openingVal > 0 ? fmt(row.openingVal) : "-"}
                     </td>
 
-                    {/* Inwards */}
-                    <td className="p-2 text-right border-r border-slate-100 font-mono text-emerald-600 bg-emerald-50/5 group-hover:bg-emerald-50/20">
-                      {row.inwardQty > 0 ? (
-                        `${fmtQty(row.inwardQty)} ${row.unit}`
-                      ) : (
-                        <span className="opacity-20">-</span>
-                      )}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-emerald-600 bg-emerald-50/10">
+                      {row.inwardQty > 0
+                        ? `${fmtQty(row.inwardQty)} ${row.unit}`
+                        : "-"}
                     </td>
-                    <td className="p-2 text-right border-r border-slate-100 font-mono text-emerald-600 bg-emerald-50/5 group-hover:bg-emerald-50/20">
-                      {row.inwardVal > 0 ? (
-                        fmt(row.inwardVal)
-                      ) : (
-                        <span className="opacity-20">-</span>
-                      )}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-emerald-600 bg-emerald-50/10">
+                      {row.inwardVal > 0 ? fmt(row.inwardVal) : "-"}
                     </td>
 
-                    {/* Outwards */}
-                    <td className="p-2 text-right border-r border-slate-100 font-mono text-rose-600 bg-rose-50/5 group-hover:bg-rose-50/20">
-                      {row.outwardQty > 0 ? (
-                        `${fmtQty(row.outwardQty)} ${row.unit}`
-                      ) : (
-                        <span className="opacity-20">-</span>
-                      )}
+                    <td className="p-2 text-right border-r border-slate-100 font-mono text-rose-600 bg-rose-50/10">
+                      {row.outwardQty > 0
+                        ? `${fmtQty(row.outwardQty)} ${row.unit}`
+                        : "-"}
                     </td>
 
-                    {/* Closing */}
-                    <td className="p-2 text-right border-r border-slate-100 font-mono font-bold text-slate-900 bg-indigo-50/5 group-hover:bg-indigo-50/20">
-                      {fmtQty(row.closingQty)}{" "}
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        {row.unit}
-                      </span>
+                    <td className="p-2 text-right border-r border-slate-100 font-mono font-bold text-slate-900 bg-indigo-50/10">
+                      {fmtQty(row.closingQty)}
                     </td>
-                    <td className="p-2 text-right font-mono font-bold text-slate-900 bg-indigo-50/5 group-hover:bg-indigo-50/20">
+                    <td className="p-2 text-right font-mono font-black text-indigo-700 bg-indigo-50/20">
                       {fmt(row.closingVal)}
                     </td>
                   </tr>
                 ))}
               </tbody>
 
-              {/* Footer Totals */}
-              <tfoot className="bg-slate-100 font-black text-xs uppercase border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-lg">
+              <tfoot className="bg-slate-900 text-white font-black text-[10px] uppercase border-t border-slate-800 sticky bottom-0 z-10">
                 <tr>
-                  <td className="p-4 text-right text-slate-600 sticky left-0 bg-slate-100 border-r border-slate-300">
-                    Grand Total
+                  <td className="p-4 text-right sticky left-0 bg-slate-900 border-r border-slate-700">
+                    Total Company Valuation
                   </td>
-
-                  <td className="p-2 border-r border-slate-300"></td>
-                  <td className="p-2 text-right border-r border-slate-300 font-mono text-slate-700">
+                  <td className="p-2 border-r border-slate-700"></td>
+                  <td className="p-2 text-right border-r border-slate-700 font-mono">
                     {fmt(totals.op)}
                   </td>
-
-                  <td className="p-2 border-r border-slate-300"></td>
-                  <td className="p-2 text-right border-r border-slate-300 font-mono text-emerald-700">
+                  <td className="p-2 border-r border-slate-700"></td>
+                  <td className="p-2 text-right border-r border-slate-700 font-mono text-emerald-400">
                     {fmt(totals.in)}
                   </td>
-
-                  <td className="p-2 border-r border-slate-300"></td>
-
-                  <td className="p-2 border-r border-slate-300 bg-slate-200"></td>
-                  <td className="p-2 text-right font-mono bg-slate-200 text-indigo-900 border-l border-slate-300">
-                    {fmt(totals.cl)}
+                  <td className="p-2 border-r border-slate-700"></td>
+                  <td className="p-2 border-r border-slate-700"></td>
+                  <td className="p-2 text-right font-mono text-indigo-300 text-sm">
+                    ₹ {fmt(totals.cl)}
                   </td>
                 </tr>
               </tfoot>

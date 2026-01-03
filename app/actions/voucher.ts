@@ -58,19 +58,31 @@ async function generateUniqueTXID(): Promise<string> {
     }
   }
 }
-async function getCurrentUserId(): Promise<number | null> {
+
+// Updated to return both ID and Role
+async function getCurrentUser() {
   try {
     const cookieStore = await cookies();
     const session = cookieStore.get("session")?.value;
     if (!session) return null;
+
     const { payload } = await jwtVerify(session, encodedKey);
-    return typeof payload.userId === "string"
-      ? parseInt(payload.userId)
-      : (payload.userId as number);
-  } catch {
+
+    // Explicitly debug here if the role still fails
+    // console.log("JWT Payload:", payload);
+
+    return {
+      id:
+        typeof payload.userId === "string"
+          ? parseInt(payload.userId)
+          : (payload.userId as number),
+      role: (payload.role as string)?.toUpperCase() || "USER",
+    };
+  } catch (error) {
     return null;
   }
 }
+
 export async function updateVoucher(
   voucherId: number,
   companyId: number,
@@ -78,22 +90,27 @@ export async function updateVoucher(
   data: any
 ) {
   try {
-    const userId = await getCurrentUserId();
-    if (!userId) return { success: false, error: "Unauthorized" };
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized" };
 
     const t = type.toUpperCase();
-    const newTxid = await generateUniqueTXID(); // Force new ID generation
+    const newTxid = await generateUniqueTXID();
+    const isAdmin = user.role === "ADMIN";
 
-    const commonData = {
+    // Build base object without nulls for dates if possible
+    const commonData: any = {
       date: new Date(data.date),
       narration: data.narration,
       totalAmount: parseFloat(data.totalAmount),
-      transactionCode: newTxid, // New ID assigned
-      status: "PENDING", // Reset status
-      verifiedById: null, // Clear previous verifier
-      createdById: userId, // Update Maker to the person who edited
+      transactionCode: newTxid,
+      status: isAdmin ? "APPROVED" : "PENDING",
       updatedAt: new Date(),
     };
+
+    if (isAdmin) {
+      commonData.verifiedById = user.id;
+      commonData.verifiedAt = new Date();
+    }
 
     await prisma.$transaction(async (tx) => {
       const tableMap: any = {
@@ -123,7 +140,9 @@ export async function updateVoucher(
     revalidatePath(`/companies/${companyId}/vouchers`);
     return {
       success: true,
-      message: `Voucher edited and sent for verification with new Transaction ID: ${newTxid}`,
+      message: isAdmin
+        ? `Voucher updated and auto-verified (Admin). ID: ${newTxid}`
+        : `Voucher edited and sent for verification. ID: ${newTxid}`,
       txid: newTxid,
     };
   } catch (error: any) {
@@ -133,8 +152,8 @@ export async function updateVoucher(
 
 export async function verifyVoucher(voucherId: number, type: string) {
   try {
-    const userId = await getCurrentUserId();
-    if (!userId) return { success: false, error: "Unauthorized" };
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized" };
 
     const t = type.toUpperCase();
     const tableMap: any = {
@@ -146,18 +165,16 @@ export async function verifyVoucher(voucherId: number, type: string) {
       JOURNAL: prisma.journalVoucher,
     };
 
-    // 1. FETCH THE VOUCHER TO CHECK THE MAKER
     const voucher = await tableMap[t].findUnique({
       where: { id: voucherId },
       select: { createdById: true },
     });
 
-    // 2. STRICT MAKER-CHECKER ENFORCEMENT
-    if (voucher.createdById === userId) {
+    // Maker-Checker still applies to non-admin or standard verification flow
+    if (voucher.createdById === user.id && user.role !== "ADMIN") {
       return {
         success: false,
-        error:
-          "Access Denied: You cannot verify a voucher that you created or edited. Maker and Checker must be different users.",
+        error: "Access Denied: Maker and Checker must be different users.",
       };
     }
 
@@ -165,7 +182,8 @@ export async function verifyVoucher(voucherId: number, type: string) {
       where: { id: voucherId },
       data: {
         status: "APPROVED",
-        verifiedById: userId,
+        verifiedById: user.id,
+        verifiedAt: new Date(),
         updatedAt: new Date(),
       },
     });
@@ -175,17 +193,6 @@ export async function verifyVoucher(voucherId: number, type: string) {
   } catch (error: any) {
     return { success: false, error: "Verification failed" };
   }
-}
-// ==========================================
-// 1. GET VOUCHERS LIST (Daybook Logic)
-// ==========================================
-export async function getApprovedEntries(ledgerId: number) {
-  return await prisma.receiptLedgerEntry.findMany({
-    where: {
-      ledgerId,
-      receiptVoucher: { status: "APPROVED" },
-    },
-  });
 }
 
 export async function getVouchers(
@@ -244,38 +251,26 @@ export async function getVouchers(
         crLabel = "—";
       const entries = v.ledgerEntries || [];
 
-      /**
-       * TALLY CONVENTION LOGIC:
-       * In Tally-imported data:
-       * Negative Amount = Debit (Dr)
-       * Positive Amount = Credit (Cr)
-       */
-
       if (type === "SALES") {
         drLabel = v.partyName || "Sales Party";
-        // Cr side is usually the positive sales ledger
         crLabel =
           entries.find((e: any) => e.amount > 0)?.ledger?.name || "Sales A/c";
       } else if (type === "PURCHASE") {
         crLabel = v.partyName || "Purchase Party";
-        // Dr side is usually the negative purchase ledger
         drLabel =
           entries.find((e: any) => e.amount < 0)?.ledger?.name ||
           "Purchase A/c";
       } else if (type === "PAYMENT") {
-        // Receiver is Dr (Negative), Bank/Cash is Cr (Positive)
         drLabel =
           entries.find((e: any) => e.amount < 0)?.ledger?.name || "Receiver";
         crLabel =
           entries.find((e: any) => e.amount > 0)?.ledger?.name || "Bank/Cash";
       } else if (type === "RECEIPT") {
-        // Bank/Cash is Dr (Negative), Giver is Cr (Positive)
         drLabel =
           entries.find((e: any) => e.amount < 0)?.ledger?.name || "Bank/Cash";
         crLabel =
           entries.find((e: any) => e.amount > 0)?.ledger?.name || "Giver";
       } else {
-        // For CONTRA and JOURNAL
         drLabel = entries.find((e: any) => e.amount < 0)?.ledger?.name || "—";
         crLabel = entries.find((e: any) => e.amount > 0)?.ledger?.name || "—";
       }
@@ -289,7 +284,7 @@ export async function getVouchers(
         entries: entries.map((e: any) => ({
           ...e,
           displayAmount: Math.abs(e.amount),
-          side: e.amount < 0 ? "Dr" : "Cr", // Negative as Dr, Positive as Cr
+          side: e.amount < 0 ? "Dr" : "Cr",
         })),
       };
     };
@@ -324,138 +319,109 @@ export async function getVouchers(
   }
 }
 
-// ==========================================
-// 2. FETCH FULL VOUCHER BY CODE
-// ==========================================
-export async function getVoucherByCode(txCode: string, companyId: number) {
-  const where = { transactionCode: txCode, companyId };
-  const tables = [
-    { model: prisma.salesVoucher, type: "SALES", hasInv: true },
-    { model: prisma.purchaseVoucher, type: "PURCHASE", hasInv: true },
-    { model: prisma.paymentVoucher, type: "PAYMENT", hasInv: false },
-    { model: prisma.receiptVoucher, type: "RECEIPT", hasInv: false },
-    { model: prisma.contraVoucher, type: "CONTRA", hasInv: false },
-    { model: prisma.journalVoucher, type: "JOURNAL", hasInv: false },
-  ];
+// app/actions/voucher.ts
 
-  for (const t of tables) {
-    const include: any = {
-      createdBy: { select: { id: true, name: true } },
-      ledgerEntries: { include: { ledger: { include: { group: true } } } },
-    };
-    if (t.hasInv) include.inventoryEntries = { include: { stockItem: true } };
-    const v = await (t.model as any).findFirst({ where, include });
-    if (v)
-      return {
-        ...v,
-        type: t.type,
-        entries: v.ledgerEntries || [],
-        inventory: v.inventoryEntries || [],
-      };
-  }
-  return null;
-}
-
-// ==========================================
-// 3. QUICK FIND FOR VERIFICATION
-// ==========================================
-export async function findVoucherByCode(txCode: string, companyId: number) {
+export async function createVoucher(prevState: any, formData: FormData) {
   try {
-    const v = await getVoucherByCode(txCode, companyId);
-    return v
-      ? { success: true, id: v.id, type: v.type }
-      : { success: false, error: "Voucher not found" };
-  } catch (e) {
-    return { success: false, error: "Database error" };
-  }
-}
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized access." };
 
-// ==========================================
-// 4. ACTION: CREATE VOUCHER (Collision Resistant)
-// ==========================================
-export async function createVoucher(
-  prevState: any,
-  formData: FormData
-): Promise<State> {
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) return { success: false, error: "Unauthorized" };
+    // Check if user is an Admin
+    const isAdmin = user.role === "ADMIN";
 
+    // Parse form basics
     const companyId = parseInt(formData.get("companyId") as string);
     const type = ((formData.get("type") as string) || "").toUpperCase();
     const date = new Date(formData.get("date") as string);
     const narration = (formData.get("narration") as string) || "";
     const totalAmount = parseFloat(formData.get("totalAmount") as string) || 0;
-    const ledgerData = JSON.parse(
-      (formData.get("ledgerEntries") as string) || "[]"
-    );
 
-    if (totalAmount === 0 || ledgerData.length === 0) {
-      return { success: false, error: "Amount or Ledger Entries missing." };
+    // Parse Ledger Postings (from the dynamic grid)
+    const ledgerEntriesRaw = formData.get("ledgerEntries") as string;
+    const ledgerData = JSON.parse(ledgerEntriesRaw || "[]");
+
+    if (ledgerData.length === 0) {
+      return {
+        success: false,
+        error: "At least two ledger entries are required.",
+      };
     }
 
     const txid = await generateUniqueTXID();
 
+    // START TRANSACTION
     const result = await prisma.$transaction(async (tx) => {
+      // A. Generate the sequential Voucher Number for this company/type
       const seq = await tx.voucherSequence.upsert({
-        where: { companyId_voucherType: { companyId, voucherType: type } },
+        where: {
+          companyId_voucherType: { companyId, voucherType: type },
+        },
         update: { lastNo: { increment: 1 } },
         create: { companyId, voucherType: type, lastNo: 1 },
       });
 
-      const base = {
+      // B. Prepare the Voucher Data Object
+      const voucherData: any = {
         companyId,
         voucherNo: seq.lastNo,
         transactionCode: txid,
         date,
         narration,
         totalAmount,
-        createdById: userId,
-        status: "PENDING",
+        createdById: user.id,
+
+        // ✅ ADMIN BYPASS: Set status to APPROVED immediately if Admin
+        status: isAdmin ? "APPROVED" : "PENDING",
+
+        // Ledger Relations
+        ledgerEntries: {
+          create: ledgerData.map((e: any) => ({
+            ledgerId: parseInt(e.ledgerId),
+            amount: parseFloat(e.amount),
+          })),
+        },
       };
 
-      const ledgerOps = {
-        create: ledgerData.map((e: any) => ({
-          ledgerId: parseInt(e.ledgerId),
-          amount: parseFloat(e.amount),
-        })),
+      // C. If Admin, add the "Checker" metadata instantly (Self-Verification)
+      if (isAdmin) {
+        voucherData.verifiedById = user.id;
+        voucherData.verifiedAt = new Date();
+      }
+
+      // D. Determine which Prisma model to use
+      const modelMap: Record<string, any> = {
+        PAYMENT: tx.paymentVoucher,
+        RECEIPT: tx.receiptVoucher,
+        CONTRA: tx.contraVoucher,
+        JOURNAL: tx.journalVoucher,
+        SALES: tx.salesVoucher,
+        PURCHASE: tx.purchaseVoucher,
       };
 
-      if (type === "RECEIPT")
-        return tx.receiptVoucher.create({
-          data: { ...base, ledgerEntries: ledgerOps },
-        });
-      if (type === "PAYMENT")
-        return tx.paymentVoucher.create({
-          data: { ...base, ledgerEntries: ledgerOps },
-        });
-      if (type === "CONTRA")
-        return tx.contraVoucher.create({
-          data: { ...base, ledgerEntries: ledgerOps },
-        });
-      if (type === "JOURNAL")
-        return tx.journalVoucher.create({
-          data: { ...base, ledgerEntries: ledgerOps },
-        });
+      const model = modelMap[type];
+      if (!model) throw new Error(`Unsupported voucher type: ${type}`);
 
-      throw new Error("Invalid Voucher Type");
+      return await model.create({ data: voucherData });
     });
 
+    // Revalidate the cache so the Daybook updates
     revalidatePath(`/companies/${companyId}/vouchers`);
+
     return {
       success: true,
-      message: "Voucher Created (Awaiting Approval)",
-      txid,
-      id: result.id,
+      id: result.voucherNo,
+      txid: txid,
+      // Pass "Authorized" message so the frontend shows the Green/Shield UI
+      message: isAdmin ? "Authorized" : "Pending",
     };
-  } catch (e: any) {
-    return { success: false, error: e.message };
+  } catch (error: any) {
+    console.error("Voucher Action Error:", error);
+    return {
+      success: false,
+      error: error.message || "An unexpected error occurred.",
+    };
   }
 }
-
-// ==========================================
-// 5. BULK DELETE
-// ==========================================
 export async function deleteBulkVouchers(
   items: { id: number; type: string }[],
   companyId?: number
@@ -478,5 +444,43 @@ export async function deleteBulkVouchers(
     return { success: true, message: "Vouchers deleted" };
   } catch (e) {
     return { success: false, error: "Failed to delete" };
+  }
+}
+// Add this to your app/actions/voucher.ts file
+
+export async function getVoucherByCode(txCode: string, companyId: number) {
+  try {
+    const where = { transactionCode: txCode, companyId };
+
+    // Define the tables to search through
+    const tables = [
+      { model: prisma.salesVoucher, type: "SALES" },
+      { model: prisma.purchaseVoucher, type: "PURCHASE" },
+      { model: prisma.paymentVoucher, type: "PAYMENT" },
+      { model: prisma.receiptVoucher, type: "RECEIPT" },
+      { model: prisma.contraVoucher, type: "CONTRA" },
+      { model: prisma.journalVoucher, type: "JOURNAL" },
+      { model: prisma.stockJournal, type: "STOCK_JOURNAL" },
+    ];
+
+    for (const t of tables) {
+      // @ts-ignore - dynamic model access
+      const v = await t.model.findUnique({
+        where,
+        select: { id: true },
+      });
+
+      if (v) {
+        return {
+          success: true,
+          id: v.id,
+          type: t.type,
+        };
+      }
+    }
+
+    return { success: false, error: "Voucher not found" };
+  } catch (error) {
+    return { success: false, error: "Database search failed" };
   }
 }

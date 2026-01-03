@@ -11,17 +11,17 @@ datasource db {
 }
 
 // ==========================================
-// 1. USER MANAGEMENT (Roles for Maker-Checker)
+// 1. USER MANAGEMENT
 // ==========================================
 model User {
-  id       Int      @id @default(autoincrement())
-  username String   @unique
-  password String
-  name     String
-  role     String   @default("MAKER") // MAKER, CHECKER, ADMIN
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("MAKER") // MAKER, CHECKER, ADMIN
   createdAt DateTime @default(now())
 
-  // Relations - Updated to reference specific voucher types
+  // Relations
   createdSales    SalesVoucher[]    @relation("SalesCreatedBy")
   verifiedSales   SalesVoucher[]    @relation("SalesVerifiedBy")
   
@@ -50,16 +50,15 @@ model User {
 // 2. COMPANY DATA
 // ==========================================
 model Company {
-  id               Int      @id @default(autoincrement())
-  name             String
-  address          String?  @db.Text
-  state            String?
-  pincode          String?
-  email            String?
-  gstin            String?
+  id                Int      @id @default(autoincrement())
+  name              String
+  address           String?  @db.Text
+  state             String?
+  pincode           String?
+  email             String?
+  gstin             String?
   
-  // Settings
-  currencySymbol   String   @default("₹")
+  currencySymbol    String   @default("₹")
   financialYearFrom DateTime
   booksBeginFrom    DateTime
 
@@ -72,7 +71,6 @@ model Company {
   sequences        VoucherSequence[]
   boms             BOM[]
   
-  // Separate Voucher Relations
   salesVouchers    SalesVoucher[]
   purchaseVouchers PurchaseVoucher[]
   paymentVouchers  PaymentVoucher[]
@@ -91,14 +89,14 @@ model VoucherSequence {
   id          Int     @id @default(autoincrement())
   companyId   Int
   company     Company @relation(fields: [companyId], references: [id])
-  voucherType String  // PAYMENT, RECEIPT, CONTRA, JOURNAL, STOCK_JOURNAL
+  voucherType String  
   lastNo      Int     @default(0)
 
   @@unique([companyId, voucherType])
 }
 
 // ==========================================
-// 4. ACCOUNTING MASTERS (Groups & Ledgers)
+// 4. ACCOUNTING MASTERS
 // ==========================================
 model Group {
   id        Int     @id @default(autoincrement())
@@ -110,7 +108,6 @@ model Group {
   
   ledgers   Ledger[]
   
-  // Self-Relation (Groups inside Groups)
   parentId  Int?
   parent    Group?  @relation("GroupHierarchy", fields: [parentId], references: [id])
   children  Group[] @relation("GroupHierarchy")
@@ -119,33 +116,30 @@ model Group {
 }
 
 model Ledger {
-  id              Int     @id @default(autoincrement())
-  name            String
-  address         String? @db.Text
-  openingBalance  Float   @default(0.0)
+  id               Int     @id @default(autoincrement())
+  name             String
+  address          String? @db.Text
+  openingBalance   Float   @default(0.0)
   
-  groupId         Int?
-  group           Group?  @relation(fields: [groupId], references: [id])
+  groupId          Int?
+  group            Group?  @relation(fields: [groupId], references: [id])
   
-  companyId       Int
-  company         Company @relation(fields: [companyId], references: [id])
+  companyId        Int
+  company          Company @relation(fields: [companyId], references: [id])
   
-  // Relations to Voucher Entries (One for each type)
-  salesEntries    SalesLedgerEntry[]
-  purchaseEntries PurchaseLedgerEntry[]
-  paymentEntries  PaymentLedgerEntry[]
-  receiptEntries  ReceiptLedgerEntry[]
-  contraEntries   ContraLedgerEntry[]
-  journalEntries  JournalLedgerEntry[]
+  salesEntries     SalesLedgerEntry[]
+  purchaseEntries  PurchaseLedgerEntry[]
+  paymentEntries   PaymentLedgerEntry[]
+  receiptEntries   ReceiptLedgerEntry[]
+  contraEntries    ContraLedgerEntry[]
+  journalEntries   JournalLedgerEntry[]
 
-  // Also referenced as Party Ledger in transactions
-  salesParties    SalesVoucher[]    @relation("SalesPartyLedger")
-  purchaseParties PurchaseVoucher[] @relation("PurchasePartyLedger")
+  salesParties     SalesVoucher[]    @relation("SalesPartyLedger")
+  purchaseParties  PurchaseVoucher[] @relation("PurchasePartyLedger")
 
-  // Tally Specifics
-  tallyName       String?
-  state           String?
-  gstin           String?
+  tallyName        String?
+  state            String?
+  gstin            String?
 
   @@unique([name, companyId])
 }
@@ -182,33 +176,23 @@ model StockItem {
   id             Int      @id @default(autoincrement())
   name           String
   partNumber     String?
-  
-  // Balance Fields
   openingQty     Float    @default(0)
   openingValue   Float    @default(0)
-  quantity       Float    @default(0) // Current Stock level
-  
-  // Alerts
+  quantity       Float    @default(0) 
   minStock       Float    @default(0) 
 
   groupId        Int?
   group          StockGroup? @relation(fields: [groupId], references: [id])
-  
   unitId         Int?
   unit           Unit?       @relation(fields: [unitId], references: [id])
-  
   companyId      Int
   company        Company     @relation(fields: [companyId], references: [id])
-  
   gstRate        Float       @default(0) 
 
-  // Relations to Voucher Inventory Entries
   salesItems     SalesItemEntry[]
   purchaseItems  PurchaseItemEntry[]
-  
   journalEntries StockJournalEntry[] 
 
-  // BOM Relations
   producedBy     BOM[]       @relation("FinishedGood")
   usedInBoms     BOMItem[]   @relation("BOMComponent")
   
@@ -218,16 +202,12 @@ model StockItem {
 model BOM {
   id             Int       @id @default(autoincrement())
   name           String    
-  
   finishedGoodId Int
   finishedGood   StockItem @relation("FinishedGood", fields: [finishedGoodId], references: [id])
   targetQty      Float     @default(1.0) 
-  
   components     BOMItem[]
-
   companyId      Int
   company        Company   @relation(fields: [companyId], references: [id])
-
   createdById    Int
   createdBy      User      @relation("BOMMaker", fields: [createdById], references: [id])
   createdAt      DateTime  @default(now())
@@ -238,52 +218,43 @@ model BOMItem {
   id          Int       @id @default(autoincrement())
   bomId       Int
   bom         BOM       @relation(fields: [bomId], references: [id], onDelete: Cascade)
-  
   stockItemId Int
   stockItem   StockItem @relation("BOMComponent", fields: [stockItemId], references: [id])
   quantity    Float    
 }
 
 // ==========================================
-// 6. SALES VOUCHER (Manual No + Inventory)
+// 6. SALES VOUCHER
 // ==========================================
 model SalesVoucher {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
-  
-  // MANUAL NUMBERING (String)
-  voucherNo       String   
-  transactionCode String?  @unique
-  
-  date            DateTime
-  narration       String?  @db.Text
-  totalAmount     Float
-
-  // Specific Fields
-  partyName       String?
-  partyLedgerId   Int?
-  partyLedger     Ledger?  @relation("SalesPartyLedger", fields: [partyLedgerId], references: [id])
-  gstin           String?
-  placeOfSupply   String?
-  
-  // Relations
-  ledgerEntries   SalesLedgerEntry[]
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        String   
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  totalAmount      Float
+  partyName        String?
+  partyLedgerId    Int?
+  partyLedger      Ledger?  @relation("SalesPartyLedger", fields: [partyLedgerId], references: [id])
+  gstin            String?
+  placeOfSupply    String?
+  ledgerEntries    SalesLedgerEntry[]
   inventoryEntries SalesItemEntry[]
+  status           String   @default("PENDING")
+  rejectionReason  String?  @db.Text
+  
+  createdById      Int
+  createdBy        User     @relation("SalesCreatedBy", fields: [createdById], references: [id])
+  
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("SalesVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
 
-  // Approval Workflow
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  rejectionReason String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   
-  createdById     Int
-  createdBy       User     @relation("SalesCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("SalesVerifiedBy", fields: [verifiedById], references: [id])
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // PREVENT DUPLICATE VOUCHER NO IN SALES
   @@unique([companyId, voucherNo])
 }
 
@@ -293,9 +264,7 @@ model SalesLedgerEntry {
   salesVoucher  SalesVoucher @relation(fields: [salesId], references: [id], onDelete: Cascade)
   ledgerId      Int
   ledger        Ledger       @relation(fields: [ledgerId], references: [id])
-  amount        Float        // Debit/Credit
-  
-  // ✅ ADDED FOR BANK RECONCILIATION
+  amount        Float        
   bankDate      DateTime?    
 }
 
@@ -312,41 +281,35 @@ model SalesItemEntry {
 }
 
 // ==========================================
-// 7. PURCHASE VOUCHER (Manual No + Inventory)
+// 7. PURCHASE VOUCHER
 // ==========================================
 model PurchaseVoucher {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
-
-  // MANUAL NUMBERING (String)
-  voucherNo       String   
-  transactionCode String?  @unique
-  
-  date            DateTime
-  narration       String?  @db.Text
-  totalAmount     Float
-  
-  supplierRef     String?
-  partyName       String?
-  partyLedgerId   Int?
-  partyLedger     Ledger?  @relation("PurchasePartyLedger", fields: [partyLedgerId], references: [id])
-  gstin           String?
-
-  ledgerEntries   PurchaseLedgerEntry[]
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        String   
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  totalAmount      Float
+  supplierRef      String?
+  partyName        String?
+  partyLedgerId    Int?
+  partyLedger      Ledger?  @relation("PurchasePartyLedger", fields: [partyLedgerId], references: [id])
+  gstin            String?
+  ledgerEntries    PurchaseLedgerEntry[]
   inventoryEntries PurchaseItemEntry[]
+  status           String   @default("PENDING")
+  rejectionReason  String?  @db.Text
+  createdById      Int
+  createdBy        User     @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("PurchaseVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
 
-  status          String   @default("PENDING")
-  rejectionReason String?  @db.Text
-
-  createdById     Int
-  createdBy       User     @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("PurchaseVerifiedBy", fields: [verifiedById], references: [id])
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   @@unique([companyId, voucherNo])
 }
 
@@ -357,8 +320,6 @@ model PurchaseLedgerEntry {
   ledgerId        Int
   ledger          Ledger          @relation(fields: [ledgerId], references: [id])
   amount          Float
-  
-  // ✅ ADDED FOR BANK RECONCILIATION
   bankDate        DateTime?       
 }
 
@@ -375,34 +336,29 @@ model PurchaseItemEntry {
 }
 
 // ==========================================
-// 8. PAYMENT VOUCHER (Auto No, No Inventory)
+// 8. PAYMENT VOUCHER
 // ==========================================
 model PaymentVoucher {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
-
-  // AUTO NUMBERING (Int) - Managed by sequence logic
-  voucherNo       Int      
-  transactionCode String?  @unique
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        Int      
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  totalAmount      Float
+  ledgerEntries    PaymentLedgerEntry[]
+  status           String   @default("PENDING")
+  rejectionReason  String?  @db.Text
+  createdById      Int
+  createdBy        User     @relation("PaymentCreatedBy", fields: [createdById], references: [id])
   
-  date            DateTime
-  narration       String?  @db.Text
-  totalAmount     Float
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
 
-  ledgerEntries   PaymentLedgerEntry[]
-
-  status          String   @default("PENDING")
-  rejectionReason String?  @db.Text
-
-  createdById     Int
-  createdBy       User     @relation("PaymentCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id])
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   @@unique([companyId, voucherNo])
 }
 
@@ -413,38 +369,33 @@ model PaymentLedgerEntry {
   ledgerId       Int
   ledger         Ledger         @relation(fields: [ledgerId], references: [id])
   amount         Float
-  
-  // ✅ ADDED FOR BANK RECONCILIATION
   bankDate       DateTime?      
 }
 
 // ==========================================
-// 9. RECEIPT VOUCHER (Auto No)
+// 9. RECEIPT VOUCHER
 // ==========================================
 model ReceiptVoucher {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        Int      
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  totalAmount      Float
+  ledgerEntries    ReceiptLedgerEntry[]
+  status           String   @default("PENDING")
+  rejectionReason  String?  @db.Text
+  createdById      Int
+  createdBy        User     @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("ReceiptVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
 
-  voucherNo       Int      
-  transactionCode String?  @unique
-  date            DateTime
-  narration       String?  @db.Text
-  totalAmount     Float
-
-  ledgerEntries   ReceiptLedgerEntry[]
-
-  status          String   @default("PENDING")
-  rejectionReason String?  @db.Text
-
-  createdById     Int
-  createdBy       User     @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("ReceiptVerifiedBy", fields: [verifiedById], references: [id])
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   @@unique([companyId, voucherNo])
 }
 
@@ -455,38 +406,33 @@ model ReceiptLedgerEntry {
   ledgerId       Int
   ledger         Ledger         @relation(fields: [ledgerId], references: [id])
   amount         Float
-  
-  // ✅ ADDED FOR BANK RECONCILIATION
   bankDate       DateTime?      
 }
 
 // ==========================================
-// 10. CONTRA VOUCHER (Auto No)
+// 10. CONTRA VOUCHER
 // ==========================================
 model ContraVoucher {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        Int      
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  totalAmount      Float
+  ledgerEntries    ContraLedgerEntry[]
+  status           String   @default("PENDING")
+  rejectionReason  String?  @db.Text
+  createdById      Int
+  createdBy        User     @relation("ContraCreatedBy", fields: [createdById], references: [id])
+  
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("ContraVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
 
-  voucherNo       Int      
-  transactionCode String?  @unique
-  date            DateTime
-  narration       String?  @db.Text
-  totalAmount     Float
-
-  ledgerEntries   ContraLedgerEntry[]
-
-  status          String   @default("PENDING")
-  rejectionReason String?  @db.Text
-
-  createdById     Int
-  createdBy       User     @relation("ContraCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("ContraVerifiedBy", fields: [verifiedById], references: [id])
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   @@unique([companyId, voucherNo])
 }
 
@@ -497,38 +443,33 @@ model ContraLedgerEntry {
   ledgerId      Int
   ledger        Ledger        @relation(fields: [ledgerId], references: [id])
   amount        Float
-  
-  // ✅ ADDED FOR BANK RECONCILIATION
   bankDate      DateTime?     
 }
 
 // ==========================================
-// 11. JOURNAL VOUCHER (Auto No)
+// 11. JOURNAL VOUCHER
 // ==========================================
 model JournalVoucher {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        Int      
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  totalAmount      Float
+  ledgerEntries    JournalLedgerEntry[]
+  status           String   @default("PENDING")
+  rejectionReason  String?  @db.Text
+  createdById      Int
+  createdBy        User     @relation("JournalCreatedBy", fields: [createdById], references: [id])
+  
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("JournalVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
 
-  voucherNo       Int      
-  transactionCode String?  @unique
-  date            DateTime
-  narration       String?  @db.Text
-  totalAmount     Float
-
-  ledgerEntries   JournalLedgerEntry[]
-
-  status          String   @default("PENDING")
-  rejectionReason String?  @db.Text
-
-  createdById     Int
-  createdBy       User     @relation("JournalCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("JournalVerifiedBy", fields: [verifiedById], references: [id])
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   @@unique([companyId, voucherNo])
 }
 
@@ -539,37 +480,31 @@ model JournalLedgerEntry {
   ledgerId       Int
   ledger         Ledger         @relation(fields: [ledgerId], references: [id])
   amount         Float
-  
-  // ✅ ADDED FOR BANK RECONCILIATION
   bankDate       DateTime?      
 }
 
 // ==========================================
-// 12. STOCK JOURNAL (Manufacturing)
+// 12. STOCK JOURNAL
 // ==========================================
 model StockJournal {
-  id              Int      @id @default(autoincrement())
-  companyId       Int
-  company         Company  @relation(fields: [companyId], references: [id])
+  id               Int      @id @default(autoincrement())
+  companyId        Int
+  company          Company  @relation(fields: [companyId], references: [id])
+  voucherNo        String   
+  transactionCode  String?  @unique
+  date             DateTime
+  narration        String?  @db.Text
+  status           String   @default("PENDING")
+  createdById      Int
+  createdBy        User     @relation("StockJournalCreatedBy", fields: [createdById], references: [id])
   
-  // Use Manual (String) or Auto (Int) - Let's stick to String "SJ-XXXX" for simplicity
-  voucherNo       String   
-  transactionCode String?  @unique
-  
-  date            DateTime
-  narration       String?  @db.Text
-  
-  status          String   @default("PENDING")
-  createdById     Int
-  createdBy       User     @relation("StockJournalCreatedBy", fields: [createdById], references: [id])
-  verifiedById    Int?
-  verifiedBy      User?    @relation("StockJournalVerifiedBy", fields: [verifiedById], references: [id])
-  
+  verifiedById     Int?     // SCALAR
+  verifiedBy       User?    @relation("StockJournalVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt       DateTime?
+
   inventoryEntries StockJournalEntry[]
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   @@unique([companyId, voucherNo])
 }
 
@@ -577,15 +512,12 @@ model StockJournalEntry {
   id             Int          @id @default(autoincrement())
   stockJournalId Int
   stockJournal   StockJournal @relation(fields: [stockJournalId], references: [id], onDelete: Cascade)
-  
   stockItemId    Int
   stockItem      StockItem    @relation(fields: [stockItemId], references: [id])
-  
-  quantity       Float        // Positive = Production, Negative = Consumption
+  quantity       Float        
   rate           Float
   amount         Float
-  
-  isProduction   Boolean      // True = Source (Production), False = Destination (Consumption)
+  isProduction   Boolean      
 }
 
 // ==========================================
@@ -593,29 +525,23 @@ model StockJournalEntry {
 // ==========================================
 model AuditLog {
   id          Int      @id @default(autoincrement())
-  
-  // We store ID and Type loosely because they refer to different tables now
   voucherId   Int      
-  voucherType String   // e.g. "SALES", "PAYMENT"
-  
+  voucherType String   
   userId      Int
   userName    String
-  action      String   // CREATED, EDITED, VERIFIED, REJECTED
+  action      String   
   details     String?  @db.Text
-  
   createdAt   DateTime @default(now())
 }
 
-
 // ==========================================
-// 14. FOR BACKUP & RESTORING DATA AND LOGS
+// 14. DATA LOGS
 // ==========================================
-
 model DataActivityLog {
   id          String   @id @default(uuid())
-  actionType  String   // "BACKUP" or "RESTORE"
-  performedBy String   // User Name or Email
+  actionType  String   
+  performedBy String   
   fileName    String?
   timestamp   DateTime @default(now())
-  status      String   // "SUCCESS" or "FAILED"
+  status      String   
 }

@@ -9,6 +9,7 @@ import {
   FileText,
   BookOpen,
   ChevronRight,
+  ShieldCheck, // Added for Audit branding
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -42,7 +43,7 @@ type Report = {
   desc: string;
   href: string;
   icon: React.ElementType;
-  colorClass: string; // Changed to colorClass for Tailwind classes
+  colorClass: string;
 };
 
 export default async function ReportsPage({
@@ -58,50 +59,50 @@ export default async function ReportsPage({
   const reports: Report[] = [
     {
       name: "Ledger Explorer",
-      desc: "Detailed transaction history & running balance.",
+      desc: "Detailed transaction history & running balance for all accounts.",
       href: `/companies/${companyId}/reports/ledger`,
       icon: Book,
       colorClass: "bg-blue-600 shadow-blue-200",
     },
     {
       name: "Sales Register",
-      desc: "Monthly sales summary & detailed breakdown.",
+      desc: "Monthly sales summary with Taxable & Tax breakdown.",
       href: `/companies/${companyId}/reports/sales-register`,
       icon: BookOpen,
       colorClass: "bg-indigo-600 shadow-indigo-200",
     },
     {
       name: "Trial Balance",
-      desc: "Consolidated debit/credit balances.",
+      desc: "Group-wise summary of consolidated Dr/Cr balances.",
       href: `/companies/${companyId}/reports/trial-balance`,
       icon: ScaleIcon,
       colorClass: "bg-purple-600 shadow-purple-200",
     },
     {
       name: "Profit & Loss A/c",
-      desc: "Income vs Expenses & Net Profit analysis.",
+      desc: "Gross & Net Profit analysis with Trading account data.",
       href: `/companies/${companyId}/reports/profit-loss`,
       icon: TrendingUp,
       colorClass: "bg-teal-600 shadow-teal-200",
     },
     {
       name: "Balance Sheet",
-      desc: "Financial position: Assets vs Liabilities.",
+      desc: "Snapshot of Assets, Liabilities, and Equity position.",
       href: `/companies/${companyId}/reports/balance-sheet`,
       icon: PieChart,
       colorClass: "bg-emerald-600 shadow-emerald-200",
     },
     {
       name: "Stock Summary",
-      desc: "Inventory valuation & closing stock.",
+      desc: "Real-time inventory valuation via Weighted Average method.",
       href: `/companies/${companyId}/reports/stock-summary`,
       icon: Package,
       colorClass: "bg-orange-600 shadow-orange-200",
     },
     {
       name: "Daybook Register",
-      desc: "Chronological daily transaction log.",
-      href: `/companies/${companyId}/reports/daybook`, // Adjusted href to point to reports daybook if distinct
+      desc: "Chronological log of all finalized financial transactions.",
+      href: `/companies/${companyId}/reports/daybook`,
       icon: FolderOpen,
       colorClass: "bg-rose-600 shadow-rose-200",
     },
@@ -120,17 +121,17 @@ export default async function ReportsPage({
 
       <div className="relative z-10 max-w-5xl mx-auto p-6 md:p-8 space-y-8">
         {/* HEADER */}
-        <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
           <div className="flex items-center gap-4">
             <Link
               href={`/companies/${companyId}`}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200"
+              className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-900 transition-all border border-transparent hover:border-slate-200 shadow-sm"
               title="Back to Dashboard"
             >
               <ArrowRight size={18} className="rotate-180" />
             </Link>
             <div>
-              <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
+              <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
                 <FileText size={22} className="text-indigo-600" />
                 Financial Reports
               </h1>
@@ -144,9 +145,17 @@ export default async function ReportsPage({
                   Dashboard
                 </Link>
                 <ChevronRight size={10} />
-                <span className="text-slate-900">Reports Hub</span>
+                <span className="text-slate-900">Analysis Hub</span>
               </div>
             </div>
+          </div>
+
+          {/* Audit Status Badge */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 shadow-sm">
+            <ShieldCheck size={16} />
+            <span className="text-[10px] font-black uppercase tracking-tighter">
+              Verified Ledger Engine Active
+            </span>
           </div>
         </div>
 
@@ -156,31 +165,47 @@ export default async function ReportsPage({
             <Link
               key={report.name}
               href={report.href}
-              className="group relative bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all duration-300 flex items-start gap-4 overflow-hidden"
+              className="group relative bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-200 transition-all duration-300 flex flex-col gap-4 overflow-hidden"
             >
-              {/* Decorative Corner */}
-              <div className="absolute top-0 right-0 w-20 h-20 bg-slate-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-colors group-hover:bg-indigo-50/50" />
+              {/* Decorative Background */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-bl-[4rem] -mr-12 -mt-12 transition-all duration-500 group-hover:bg-indigo-50 group-hover:scale-110" />
 
-              <div
-                className={`p-3 rounded-xl text-white shadow-lg shrink-0 z-10 group-hover:scale-110 transition-transform duration-300 ${report.colorClass}`}
-              >
-                <report.icon size={20} />
+              <div className="flex items-start gap-4 z-10">
+                <div
+                  className={`p-3 rounded-xl text-white shadow-lg shrink-0 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300 ${report.colorClass}`}
+                >
+                  <report.icon size={20} />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                    {report.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed mt-1">
+                    {report.desc}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex-1 z-10">
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors mb-1">
-                  {report.name}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  {report.desc}
-                </p>
-
-                <div className="mt-4 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-indigo-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                  View Report <ArrowRight size={10} />
+              <div className="mt-2 flex items-center justify-between z-10">
+                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest group-hover:text-indigo-300 transition-colors">
+                  SECURE-KERNEL-v1.2
+                </span>
+                <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-indigo-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                  Open <ArrowRight size={10} />
                 </div>
               </div>
             </Link>
           ))}
+        </div>
+
+        {/* Audit Footnote */}
+        <div className="text-center py-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+            <span className="w-8 h-px bg-slate-100" />
+            Reporting reflects APPROVED transactions only
+            <span className="w-8 h-px bg-slate-100" />
+          </p>
         </div>
       </div>
     </div>

@@ -14,18 +14,21 @@ import {
   AlertCircle,
   CheckCircle2,
   Edit3,
+  ShieldCheck, // New Icon for Admin status
 } from "lucide-react";
-import { deleteBulkVouchers } from "@/app/actions/masters";
+import { deleteBulkVouchers } from "@/app/actions/voucher"; // Updated to match your path
 import { useRouter } from "next/navigation";
 
 export default function VoucherListClient({
   vouchers,
   companyId,
   baseUrl,
+  isAdmin, // Added isAdmin prop
 }: {
   vouchers: any[];
   companyId: number;
   baseUrl: string;
+  isAdmin?: boolean; // Optional prop
 }) {
   const router = useRouter();
   const [selectedItems, setSelectedItems] = useState<
@@ -68,7 +71,7 @@ export default function VoucherListClient({
         setSelectedItems([]);
         router.refresh();
       } else {
-        alert(result.message || "Failed to delete.");
+        alert(result.error || "Failed to delete.");
       }
     });
   };
@@ -166,6 +169,7 @@ export default function VoucherListClient({
             ) : (
               vouchers.map((v) => {
                 const selected = isSelected(v.id, v.type);
+                const isApproved = v.status === "APPROVED";
 
                 return (
                   <tr
@@ -256,18 +260,26 @@ export default function VoucherListClient({
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border shadow-sm ${
-                            v.status === "APPROVED"
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase border shadow-sm ${
+                            isApproved
                               ? "bg-emerald-50 text-emerald-600 border-emerald-100"
                               : "bg-amber-50 text-amber-600 border-amber-100 animate-pulse"
                           }`}
                         >
-                          {v.status === "APPROVED" ? (
-                            <CheckCircle2 size={8} />
+                          {isApproved ? (
+                            // Show Shield icon for Admin auto-verified, otherwise Checkmark
+                            isAdmin ? (
+                              <ShieldCheck
+                                size={8}
+                                className="text-indigo-600"
+                              />
+                            ) : (
+                              <CheckCircle2 size={8} />
+                            )
                           ) : (
                             <AlertCircle size={8} />
                           )}
-                          {v.status}
+                          {isApproved && isAdmin ? "Auto-Verified" : v.status}
                         </span>
                       </div>
                     </td>
@@ -313,6 +325,12 @@ export default function VoucherListClient({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             Selected: {selectedItems.length}
           </span>
+          {isAdmin && (
+            <span className="flex items-center gap-1.5 text-indigo-500">
+              <ShieldCheck size={10} />
+              Admin Privilege Enabled
+            </span>
+          )}
         </div>
         <span>Accounting Cloud System • v1.2.0</span>
       </div>

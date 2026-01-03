@@ -6,17 +6,36 @@ import {
   ArrowLeft,
   ListFilter,
   CreditCard,
+  ShieldCheck,
 } from "lucide-react";
 import { format } from "date-fns";
-import { getVouchers } from "@/app/actions/voucher";
+import { getVouchers } from "@/app/actions/voucher"; // Fixed path to match your file name
 import QuickVerify from "@/components/QuickVerify";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import VoucherSearch from "@/components/VoucherSearch";
 import VoucherListClient from "@/components/VoucherListClient";
 import VoucherTypeFilter from "@/components/VoucherTypeFilter";
+import { jwtVerify } from "jose";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const secretKey =
+  process.env.SESSION_SECRET || "your-super-secret-key-change-this";
+const encodedKey = new TextEncoder().encode(secretKey);
+
+async function getUserRole(): Promise<string> {
+  try {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session")?.value;
+    if (!session) return "USER";
+    const { payload } = await jwtVerify(session, encodedKey);
+    return (payload.role as string) || "USER";
+  } catch {
+    return "USER";
+  }
+}
 
 export default async function VoucherListPage({
   params,
@@ -33,12 +52,14 @@ export default async function VoucherListPage({
   const { id } = await params;
   const p = await searchParams;
   const companyId = parseInt(id);
+  const userRole = await getUserRole();
+  const isAdmin = userRole === "ADMIN";
 
   let startDate: Date;
   let endDate: Date;
   let isLatestData = false;
 
-  // --- Date Logic (Finds the date of the very last transaction in the system) ---
+  // --- Date Logic ---
   if (p.from && p.to) {
     startDate = new Date(p.from);
     endDate = new Date(p.to);
@@ -93,13 +114,9 @@ export default async function VoucherListPage({
     }
   }
 
-  // Set the end of the day to capture all time-stamped entries
   endDate.setHours(23, 59, 59, 999);
 
-  // 1. Fetch ALL vouchers for the date/search range from your Server Action
   let vouchers = await getVouchers(companyId, startDate, endDate, p.q);
-
-  // 2. Filter by Voucher Type (Tally Style)
   const filterType = p.type?.toUpperCase() || "ALL";
 
   if (filterType !== "ALL") {
@@ -113,7 +130,6 @@ export default async function VoucherListPage({
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
-      {/* Background Decorative Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -147,6 +163,15 @@ export default async function VoucherListPage({
                       ` — ${format(endDate, "dd MMM yyyy")}`}
                   </span>
                 </div>
+
+                {isAdmin && (
+                  <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-indigo-50 border border-indigo-100 rounded-md">
+                    <ShieldCheck size={12} className="text-indigo-600" />
+                    <span className="text-[10px] font-black text-indigo-700 uppercase">
+                      Admin Access
+                    </span>
+                  </div>
+                )}
 
                 {!isFiltered && (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -194,7 +219,6 @@ export default async function VoucherListPage({
       <div className="flex-1 relative z-10 p-6 overflow-hidden">
         <div className="h-full max-w-[1920px] mx-auto flex flex-col">
           <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
-            {/* EMPTY STATE */}
             {vouchers.length === 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20 bg-white/50 backdrop-blur-sm">
                 <div className="w-16 h-16 bg-white border-2 border-dashed border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
@@ -217,11 +241,11 @@ export default async function VoucherListPage({
               </div>
             )}
 
-            {/* DATA TABLE COMPONENT */}
             <VoucherListClient
               vouchers={vouchers}
               companyId={companyId}
               baseUrl={baseUrl}
+              isAdmin={isAdmin}
             />
           </div>
         </div>

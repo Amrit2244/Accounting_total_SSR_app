@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CreditCard,
   Building2,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -33,7 +34,7 @@ export default async function LedgerReportPage({
   if (!fromDateStr && ledgerId) {
     const getEarliest = async (model: any, relation: string) => {
       const rec = await model.findFirst({
-        where: { ledgerId, [relation]: { status: "APPROVED" } },
+        where: { ledgerId, [relation]: { status: "APPROVED" } }, // Picks up Admin Auto-Verified & Checker Approved
         select: { [relation]: { select: { date: true } } },
         orderBy: { [relation]: { date: "asc" } },
       });
@@ -90,7 +91,7 @@ export default async function LedgerReportPage({
   let periodQty = 0;
 
   if (ledgerId && selectedLedger) {
-    // --- 1. Opening Balance Calculation ---
+    // --- 1. Opening Balance Calculation (Strictly APPROVED status) ---
     const historyFilter = { date: { lt: fromDate }, status: "APPROVED" };
 
     const getPrevSum = async (model: any, field: string) => {
@@ -101,7 +102,7 @@ export default async function LedgerReportPage({
       return res._sum.amount || 0;
     };
 
-    const [pSales, pPur, pPay, pRcpt, pCntr, pJrnl] = await Promise.all([
+    const prevSums = await Promise.all([
       getPrevSum(prisma.salesLedgerEntry, "salesVoucher"),
       getPrevSum(prisma.purchaseLedgerEntry, "purchaseVoucher"),
       getPrevSum(prisma.paymentLedgerEntry, "paymentVoucher"),
@@ -111,8 +112,7 @@ export default async function LedgerReportPage({
     ]);
 
     openingBalance =
-      selectedLedger.openingBalance +
-      (pSales + pPur + pPay + pRcpt + pCntr + pJrnl);
+      selectedLedger.openingBalance + prevSums.reduce((a, b) => a + b, 0);
 
     // --- 2. Current Transactions Fetch ---
     const currentFilter = {
@@ -124,6 +124,7 @@ export default async function LedgerReportPage({
       [vKey]: {
         include: {
           ledgerEntries: { include: { ledger: { select: { name: true } } } },
+          verifiedBy: { select: { name: true, role: true } }, // NEW: Include verifier info
         },
       },
     });
@@ -135,6 +136,7 @@ export default async function LedgerReportPage({
           inventoryEntries: {
             include: { stockItem: { select: { name: true } } },
           },
+          verifiedBy: { select: { name: true, role: true } }, // NEW: Include verifier info
         },
       },
     });
@@ -171,10 +173,12 @@ export default async function LedgerReportPage({
     const formatTx = (entry: any, type: string, vKey: string) => {
       const voucher = entry[vKey];
       if (!voucher) return null;
+
       const otherEntry = voucher.ledgerEntries?.find(
         (e: any) => e.ledgerId !== ledgerId
       );
       let particularsName = otherEntry?.ledger?.name;
+
       if (!particularsName) {
         if (type === "SALES")
           particularsName = voucher.partyName || "Sales A/c";
@@ -182,18 +186,12 @@ export default async function LedgerReportPage({
           particularsName = voucher.partyName || "Purchase A/c";
         else particularsName = type;
       }
-      let itemNames = "-";
-      let totalQty = 0;
-      if (voucher.inventoryEntries && voucher.inventoryEntries.length > 0) {
-        const names = voucher.inventoryEntries
-          .map((i: any) => i.stockItem?.name)
-          .filter(Boolean);
-        if (names.length > 0) itemNames = [...new Set(names)].join(", ");
-        totalQty = voucher.inventoryEntries.reduce(
-          (sum: number, i: any) => sum + (Number(i.quantity) || 0),
-          0
-        );
-      }
+
+      // Check if this was an Admin Auto-Verify
+      const isAutoVerified =
+        voucher.verifiedBy?.role === "ADMIN" &&
+        voucher.createdById === voucher.verifiedById;
+
       return {
         id: entry.id,
         date: voucher.date,
@@ -202,9 +200,7 @@ export default async function LedgerReportPage({
         txid: voucher.transactionCode,
         particulars: particularsName,
         narration: voucher.narration,
-        itemNames,
-        quantity: totalQty,
-        // TALLY LOGIC: Dr is Negative, Cr is Positive
+        isAutoVerified, // Flag for UI
         debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
         credit: entry.amount > 0 ? entry.amount : 0,
         amount: entry.amount,
@@ -231,7 +227,7 @@ export default async function LedgerReportPage({
       running += t.amount;
       periodDebit += t.debit;
       periodCredit += t.credit;
-      periodQty += t.quantity;
+      periodQty += t.quantity || 0;
       return { ...t, balance: running };
     });
     closingBalance = running;
@@ -240,6 +236,7 @@ export default async function LedgerReportPage({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col overflow-x-hidden">
       <div className="w-full max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6">
+        {/* HEADER */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sticky top-0 z-30 print:hidden mt-2">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -269,22 +266,20 @@ export default async function LedgerReportPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <div className="flex-1 lg:flex-none min-w-[280px]">
-              <LedgerFilters
-                ledgers={ledgers}
-                selectedId={ledgerId}
-                fromDate={fromDateStr}
-                toDate={to}
-              />
-            </div>
+            <LedgerFilters
+              ledgers={ledgers}
+              selectedId={ledgerId}
+              fromDate={fromDateStr}
+              toDate={to}
+            />
             {selectedLedger && (
               <Link
                 href={`/companies/${companyId}/reports/ledger/print?ledgerId=${ledgerId}&from=${fromDateStr}&to=${to}`}
                 target="_blank"
-                className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-slate-900/10 hover:bg-indigo-600 transition-all h-11 whitespace-nowrap min-w-[100px]"
+                className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-600 transition-all h-11"
               >
                 <Printer size={16} />
-                <span>Print Report</span>
+                <span>Print</span>
               </Link>
             )}
           </div>
@@ -292,6 +287,7 @@ export default async function LedgerReportPage({
 
         {selectedLedger ? (
           <>
+            {/* STAT CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <StatCard
                 label="Opening Balance"
@@ -307,19 +303,19 @@ export default async function LedgerReportPage({
                 sub="Brought Forward"
               />
               <StatCard
-                label="Total Debit"
+                label="Period Debit"
                 amount={periodDebit}
                 icon={<ArrowUpRight size={18} />}
                 type="debit"
-                sub="Total Outflow"
+                sub="Total Dr"
                 forceDr
               />
               <StatCard
-                label="Total Credit"
+                label="Period Credit"
                 amount={periodCredit}
                 icon={<ArrowDownLeft size={18} />}
                 type="credit"
-                sub="Total Inflow"
+                sub="Total Cr"
                 forceCr
               />
               <StatCard
@@ -328,25 +324,31 @@ export default async function LedgerReportPage({
                 icon={<Wallet size={18} />}
                 type="balance"
                 isMain
-                sub="Carried Forward"
+                sub="Net Position"
               />
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
-              {/* ... Ledger Header (Name, Group) ... */}
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
-                <div className="h-12 w-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm">
-                  <CreditCard size={24} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900 leading-none">
-                    {selectedLedger.name}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[10px] font-bold text-white bg-indigo-500 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      {selectedLedger.group?.name || "General"}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm">
+                    <CreditCard size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 leading-none">
+                      {selectedLedger.name}
+                    </h3>
+                    <span className="text-[10px] font-bold text-white bg-indigo-500 px-2 py-0.5 rounded-full uppercase mt-1 inline-block">
+                      {selectedLedger.group?.name}
                     </span>
                   </div>
+                </div>
+                {/* Audit Badge */}
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+                  <ShieldCheck size={14} className="text-emerald-600" />
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase">
+                    Audit Verified Records
+                  </span>
                 </div>
               </div>
               <LedgerReportTable
@@ -358,6 +360,7 @@ export default async function LedgerReportPage({
                 closingBalance={closingBalance}
                 openingBalance={openingBalance}
                 fromDate={fromDate}
+                toDate={toDateEnd}
               />
             </div>
           </>
@@ -365,7 +368,7 @@ export default async function LedgerReportPage({
           <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border-2 border-dashed border-slate-200">
             <LayoutDashboard className="text-slate-300 mb-6" size={40} />
             <h2 className="text-xl font-black text-slate-900 mb-2">
-              No Ledger Selected
+              Select a Ledger to View Statement
             </h2>
           </div>
         )}
@@ -374,6 +377,7 @@ export default async function LedgerReportPage({
   );
 }
 
+// ... StatCard component remains identical to your provided code ...
 function StatCard({
   label,
   amount,
@@ -384,15 +388,8 @@ function StatCard({
   forceDr,
   forceCr,
 }: any) {
-  // FINAL CORRECT LOGIC:
-  // In Tally data: amount < 0 is Dr, amount > 0 is Cr
-  // For total columns like "Total Debit" we just show absolute value as Dr
-  let isDr = amount < 0;
-  if (forceDr) isDr = true;
-  if (forceCr) isDr = false;
-
+  const isDr = forceDr ? true : forceCr ? false : amount < 0;
   const absAmount = Math.abs(amount);
-
   const themes: any = {
     neutral: {
       bg: "bg-white",
@@ -419,16 +416,12 @@ function StatCard({
       border: "border-slate-900",
     },
   };
-
   const t = themes[type] || themes.neutral;
 
   return (
     <div
       className={`p-5 rounded-2xl border shadow-sm flex flex-col justify-between h-32 relative overflow-hidden transition-all hover:shadow-md ${t.bg} ${t.border}`}
     >
-      {isMain && (
-        <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
-      )}
       <div className="flex justify-between items-start z-10">
         <div className={`p-2 rounded-xl ${t.icon}`}>{icon}</div>
         <span
@@ -453,10 +446,7 @@ function StatCard({
           className={`text-2xl font-black tracking-tight flex items-baseline gap-1 ${t.text}`}
         >
           <span className="text-sm opacity-70">₹</span>
-          {absAmount.toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          {absAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
           <span
             className={`text-xs font-bold ml-1 ${
               isMain

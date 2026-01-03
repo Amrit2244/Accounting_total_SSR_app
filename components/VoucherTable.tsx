@@ -13,8 +13,9 @@ import {
   CheckSquare,
   Square,
   Loader2,
-  AlertCircle,
   FileText,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { deleteBulkVouchers } from "@/app/actions/voucher";
 import { useRouter } from "next/navigation";
@@ -22,9 +23,11 @@ import { useRouter } from "next/navigation";
 export default function VoucherTable({
   vouchers = [],
   companyId,
+  isAdmin = false,
 }: {
   vouchers: any[];
   companyId: number;
+  isAdmin?: boolean;
 }) {
   const [searchId, setSearchId] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -83,33 +86,33 @@ export default function VoucherTable({
 
   return (
     <div className="relative font-sans h-full flex flex-col">
-      {/* BULK ACTION BAR (Floating) */}
+      {/* BULK ACTION BAR */}
       {selectedIds.length > 0 && (
-        <div className="absolute top-2 left-4 right-4 z-50 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex justify-between items-center animate-in fade-in slide-in-from-top-2 shadow-lg shadow-indigo-100/50">
-          <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs">
-            <span className="bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded text-[10px]">
+        <div className="absolute top-2 left-4 right-4 z-50 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 flex justify-between items-center animate-in fade-in slide-in-from-top-2 shadow-2xl">
+          <div className="flex items-center gap-3 text-white font-bold text-xs">
+            <span className="bg-indigo-500 text-white px-2 py-0.5 rounded text-[10px] font-black">
               {selectedIds.length}
             </span>
-            <span>Vouchers Selected</span>
+            <span className="tracking-tight uppercase">Vouchers Selected</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleBulkDelete}
               disabled={isDeleting}
-              className="bg-rose-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              className="bg-rose-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               {isDeleting ? (
                 <Loader2 size={12} className="animate-spin" />
               ) : (
                 <Trash2 size={12} />
               )}
-              <span>Delete</span>
+              <span>Delete Permanently</span>
             </button>
             <button
               onClick={() => setSelectedIds([])}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white transition-colors"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -127,14 +130,17 @@ export default function VoucherTable({
             placeholder="Search ID or Voucher No..."
             value={searchId}
             onChange={(e) => setSearchId(e.target.value)}
-            className="w-full pl-9 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:font-medium placeholder:text-slate-400"
+            className="w-full pl-9 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            {filteredVouchers.length} Entries
-          </span>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-lg">
+            <ShieldCheck size={12} className="text-indigo-600" />
+            <span className="text-[9px] font-black text-indigo-700 uppercase tracking-tighter">
+              Admin View Active
+            </span>
+          </div>
+        )}
       </div>
 
       {/* TABLE */}
@@ -142,7 +148,7 @@ export default function VoucherTable({
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 sticky top-0 z-20 shadow-sm">
-              <tr>
+              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <th className="px-4 py-3 w-12 text-center border-b border-slate-200">
                   <button
                     onClick={toggleSelectAll}
@@ -156,26 +162,26 @@ export default function VoucherTable({
                     )}
                   </button>
                 </th>
-                <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 w-32">
+                <th className="px-4 py-3 border-b border-slate-200 w-32">
                   Date
                 </th>
-                <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 w-32">
+                <th className="px-4 py-3 border-b border-slate-200 w-32">
                   Ref Info
                 </th>
-                <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-center w-28">
+                <th className="px-4 py-3 border-b border-slate-200 text-center w-32">
                   Status
                 </th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
+                <th className="px-6 py-3 border-b border-slate-200">
                   Particulars
                 </th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-right w-32">
-                  Debit (₹)
+                <th className="px-6 py-3 border-b border-slate-200 text-right w-32">
+                  Debit (Dr)
                 </th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-right w-32">
-                  Credit (₹)
+                <th className="px-6 py-3 border-b border-slate-200 text-right w-32">
+                  Credit (Cr)
                 </th>
-                <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-center w-16">
-                  Edit
+                <th className="px-4 py-3 border-b border-slate-200 text-center w-16">
+                  Action
                 </th>
               </tr>
             </thead>
@@ -189,40 +195,42 @@ export default function VoucherTable({
                       <p className="text-sm font-bold text-slate-500">
                         No vouchers found
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Adjust your search to see results.
-                      </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filteredVouchers.map((voucher: any) => {
-                  const isPending = voucher.status === "PENDING";
+                  const isApproved = voucher.status === "APPROVED";
                   const isSelected = selectedIds.includes(voucher.id);
                   const isStockJournal = voucher.type === "STOCK_JOURNAL";
-                  // Render logic: Stock Journals get 1 row, others get 1 row per entry
+
+                  // Ensure entries exists even if empty
+                  const entries = voucher.entries || [];
                   const rowsToRender = isStockJournal
                     ? [{ id: `sj-${voucher.id}`, isSJ: true }]
-                    : voucher.entries;
+                    : entries;
+
+                  // Admin Auto-Verify check
+                  const isAutoVerified =
+                    isApproved && voucher.verifiedBy?.role === "ADMIN";
 
                   return (
                     <React.Fragment key={voucher.id}>
                       {rowsToRender.map((row: any, index: number) => (
                         <tr
-                          key={row.id}
+                          key={row.id || index}
                           className={`group transition-colors ${
                             isSelected
                               ? "bg-indigo-50/60"
-                              : isPending
-                              ? "bg-amber-50/40"
+                              : !isApproved
+                              ? "bg-amber-50/30"
                               : "hover:bg-slate-50"
                           }`}
                         >
                           {index === 0 && (
                             <>
-                              {/* CHECKBOX */}
                               <td
-                                className="px-4 py-3 text-center align-top border-r border-slate-50/50"
+                                className="px-4 py-3 text-center align-top border-r border-slate-50"
                                 rowSpan={rowsToRender.length}
                               >
                                 <button
@@ -239,13 +247,11 @@ export default function VoucherTable({
                                   )}
                                 </button>
                               </td>
-
-                              {/* DATE */}
                               <td
-                                className="px-4 py-3 align-top"
+                                className="px-4 py-3 align-top whitespace-nowrap"
                                 rowSpan={rowsToRender.length}
                               >
-                                <div className="text-xs font-bold text-slate-700">
+                                <div className="text-xs font-black text-slate-700">
                                   {new Date(voucher.date).toLocaleDateString(
                                     "en-IN",
                                     {
@@ -255,62 +261,71 @@ export default function VoucherTable({
                                     }
                                   )}
                                 </div>
-                                <div className="text-[9px] font-black text-slate-400 uppercase">
+                                <div className="text-[9px] font-bold text-slate-400 uppercase">
                                   {new Date(voucher.date).toLocaleDateString(
                                     "en-IN",
                                     { weekday: "long" }
                                   )}
                                 </div>
                               </td>
-
-                              {/* REF INFO (ID/No) */}
                               <td
                                 className="px-4 py-3 align-top"
                                 rowSpan={rowsToRender.length}
                               >
-                                <div className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 inline-block mb-1">
+                                <div className="font-mono text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 inline-block mb-1">
                                   {voucher.transactionCode || "-"}
                                 </div>
                                 <div className="text-[10px] font-bold text-slate-400">
                                   #{voucher.voucherNo}
                                 </div>
                               </td>
-
-                              {/* STATUS */}
                               <td
                                 className="px-4 py-3 text-center align-top"
                                 rowSpan={rowsToRender.length}
                               >
                                 <div
-                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide border shadow-sm ${
-                                    isPending
-                                      ? "bg-amber-50 text-amber-600 border-amber-100"
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-black uppercase border shadow-sm ${
+                                    isAutoVerified
+                                      ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                                      : !isApproved
+                                      ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse"
                                       : "bg-emerald-50 text-emerald-600 border-emerald-100"
                                   }`}
                                 >
-                                  {isPending ? (
+                                  {isAutoVerified ? (
+                                    <ShieldCheck size={10} />
+                                  ) : !isApproved ? (
                                     <Clock size={10} />
                                   ) : (
                                     <CheckCircle2 size={10} />
                                   )}
-                                  {voucher.status || "APPROVED"}
+                                  {isAutoVerified
+                                    ? "Auto-Verified"
+                                    : voucher.status || "APPROVED"}
                                 </div>
                               </td>
                             </>
                           )}
 
-                          {/* PARTICULARS (Entries) */}
                           <td className="px-6 py-2 border-l border-slate-50">
                             {isStockJournal ? (
-                              <div className="flex items-center gap-2 font-bold text-[10px] uppercase text-indigo-600 bg-indigo-50/50 p-1.5 rounded-lg border border-indigo-100 w-fit">
-                                <Package size={12} /> Stock Journal Entry
+                              <div className="flex items-center gap-2 font-bold text-[10px] uppercase text-indigo-600 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100 w-fit">
+                                <Package size={12} /> Stock Journal
                               </div>
                             ) : (
                               <div
-                                className={`text-xs font-medium flex items-center ${
-                                  index > 0 ? "pl-4" : ""
+                                className={`text-xs font-bold text-slate-700 flex items-center ${
+                                  index > 0
+                                    ? "pl-6 text-slate-500 font-medium"
+                                    : ""
                                 }`}
                               >
+                                {index > 0 && (
+                                  <Zap
+                                    size={10}
+                                    className="mr-2 text-slate-300"
+                                  />
+                                )}
                                 {row.ledger?.name || (
                                   <span className="text-slate-400 italic">
                                     Unknown Ledger
@@ -320,28 +335,26 @@ export default function VoucherTable({
                             )}
                           </td>
 
-                          {/* DEBIT */}
                           <td className="px-6 py-2 text-right font-mono font-bold text-[10px] text-emerald-700">
                             {!isStockJournal && row.amount > 0
                               ? formatMoney(row.amount)
                               : ""}
                           </td>
-
-                          {/* CREDIT */}
                           <td className="px-6 py-2 text-right font-mono font-bold text-[10px] text-rose-700">
                             {!isStockJournal && row.amount < 0
                               ? formatMoney(row.amount)
                               : ""}
                           </td>
 
-                          {/* ACTION (Edit) */}
                           {index === 0 && (
                             <td
                               className="px-4 py-3 text-center border-l border-slate-50 align-top"
                               rowSpan={rowsToRender.length}
                             >
                               <Link
-                                href={`/companies/${companyId}/vouchers/${voucher.type}/${voucher.id}/edit`}
+                                href={`/companies/${companyId}/vouchers/${voucher.type.toLowerCase()}/${
+                                  voucher.id
+                                }/edit`}
                                 className="inline-flex p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                               >
                                 <FileEdit size={14} />
@@ -350,9 +363,8 @@ export default function VoucherTable({
                           )}
                         </tr>
                       ))}
-                      {/* Spacer Row for visual separation between vouchers */}
                       <tr>
-                        <td colSpan={8} className="h-px bg-slate-50"></td>
+                        <td colSpan={8} className="h-px bg-slate-100"></td>
                       </tr>
                     </React.Fragment>
                   );

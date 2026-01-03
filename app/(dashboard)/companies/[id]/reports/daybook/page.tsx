@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import {
-  ArrowLeft,
   FolderOpen,
   ArrowUpRight,
   ChevronRight,
   CalendarDays,
   Filter,
+  ArrowLeft,
+  ShieldCheck, // Icon for Admin Auto-Verified
 } from "lucide-react";
 import DaybookFilters from "@/components/reports/DaybookFilters";
 
@@ -39,7 +40,6 @@ export default async function DaybookPage({
   const startDate = from ? new Date(from) : new Date(today);
   const endDate = to ? new Date(to) : new Date(today);
 
-  // Adjust time to cover full day
   const startISO = new Date(startDate);
   startISO.setHours(0, 0, 0, 0);
 
@@ -50,7 +50,13 @@ export default async function DaybookPage({
   const whereClause: any = {
     companyId,
     date: { gte: startISO, lte: endISO },
-    status: "APPROVED",
+    status: "APPROVED", // Includes Admin Auto-Verified & Standard Approved
+  };
+
+  // Include verifier role to detect Admin bypass
+  const commonInclude = {
+    ledgerEntries: { include: { ledger: true } },
+    verifiedBy: { select: { role: true, name: true } },
   };
 
   const [sales, purchase, payment, receipt, contra, journal, stock] =
@@ -58,41 +64,44 @@ export default async function DaybookPage({
       !type || type === "ALL" || type === "SALES"
         ? prisma.salesVoucher.findMany({
             where: whereClause,
-            include: { ledgerEntries: { include: { ledger: true } } },
+            include: commonInclude,
           })
         : [],
       !type || type === "ALL" || type === "PURCHASE"
         ? prisma.purchaseVoucher.findMany({
             where: whereClause,
-            include: { ledgerEntries: { include: { ledger: true } } },
+            include: commonInclude,
           })
         : [],
       !type || type === "ALL" || type === "PAYMENT"
         ? prisma.paymentVoucher.findMany({
             where: whereClause,
-            include: { ledgerEntries: { include: { ledger: true } } },
+            include: commonInclude,
           })
         : [],
       !type || type === "ALL" || type === "RECEIPT"
         ? prisma.receiptVoucher.findMany({
             where: whereClause,
-            include: { ledgerEntries: { include: { ledger: true } } },
+            include: commonInclude,
           })
         : [],
       !type || type === "ALL" || type === "CONTRA"
         ? prisma.contraVoucher.findMany({
             where: whereClause,
-            include: { ledgerEntries: { include: { ledger: true } } },
+            include: commonInclude,
           })
         : [],
       !type || type === "ALL" || type === "JOURNAL"
         ? prisma.journalVoucher.findMany({
             where: whereClause,
-            include: { ledgerEntries: { include: { ledger: true } } },
+            include: commonInclude,
           })
         : [],
       !type || type === "ALL" || type === "STOCK_JOURNAL"
-        ? prisma.stockJournal.findMany({ where: whereClause })
+        ? prisma.stockJournal.findMany({
+            where: whereClause,
+            include: { verifiedBy: { select: { role: true } } },
+          })
         : [],
     ]);
 
@@ -135,15 +144,13 @@ export default async function DaybookPage({
     })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const totalTransactions = vouchers.length;
   const totalValue = vouchers.reduce(
     (sum: number, v: any) => sum + (v.totalAmount || 0),
     0
   );
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
-      {/* Background Pattern */}
+    <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -159,16 +166,9 @@ export default async function DaybookPage({
             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
               <Link
                 href={`/companies/${companyId}`}
-                className="hover:text-indigo-600 transition-colors"
+                className="hover:text-indigo-600"
               >
                 Dashboard
-              </Link>
-              <ChevronRight size={10} />
-              <Link
-                href={`/companies/${companyId}/reports`}
-                className="hover:text-indigo-600 transition-colors"
-              >
-                Reports
               </Link>
               <ChevronRight size={10} />
               <span className="text-slate-900">Daybook</span>
@@ -177,31 +177,32 @@ export default async function DaybookPage({
               <FolderOpen className="text-indigo-600" size={32} />
               Daybook Register
             </h1>
-            <p className="text-slate-500 font-medium mt-2 max-w-xl">
-              Detailed chronological record of all financial transactions.
-            </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Filter Component */}
+            {/* Audit Badge */}
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+              <ShieldCheck size={14} className="text-emerald-600" />
+              <span className="text-[10px] font-black uppercase text-emerald-700 tracking-tighter">
+                Verified Audit Log
+              </span>
+            </div>
             <div className="bg-white border border-slate-200 p-1 rounded-xl shadow-sm flex items-center">
               <div className="px-3 text-slate-400 border-r border-slate-100">
                 <Filter size={16} />
               </div>
               <DaybookFilters />
             </div>
-
             <Link
               href={`/companies/${companyId}/reports`}
-              className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-              title="Back to Reports"
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl"
             >
               <ArrowLeft size={20} />
             </Link>
           </div>
         </div>
 
-        {/* MAIN TABLE CARD */}
+        {/* MAIN TABLE */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-[500px]">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
@@ -211,133 +212,93 @@ export default async function DaybookPage({
                   <th className="py-3 px-6 w-[140px]">Type</th>
                   <th className="py-3 px-6 w-[100px]">Vch No.</th>
                   <th className="py-3 px-6">Particulars</th>
-                  <th className="py-3 px-6 text-right w-[160px]">Debit</th>
-                  <th className="py-3 px-6 text-right w-[160px]">Credit</th>
-                  <th className="py-3 px-6 text-center w-[100px]">Action</th>
+                  <th className="py-3 px-6 text-right w-[160px]">Amount</th>
+                  <th className="py-3 px-6 text-center w-[120px]">Auth Mode</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {vouchers.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-20 text-center">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <CalendarDays className="text-slate-300" size={32} />
-                      </div>
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                        No Entries Found
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Try adjusting the date range or filters.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  vouchers.map((v: any) => {
-                    const primaryEntry = v.entries?.[0];
-                    const pName = v.partyName ? v.partyName : null;
-                    const ledgerName =
-                      primaryEntry?.ledger?.name ||
-                      pName ||
-                      v.narration ||
-                      "Unknown";
-                    const amount = v.totalAmount || 0;
+                {vouchers.map((v: any) => {
+                  const isAutoVerified =
+                    v.verifiedBy?.role === "ADMIN" &&
+                    v.createdById === v.verifiedById;
+                  const ledgerName =
+                    v.entries?.[0]?.ledger?.name || v.partyName || "Unknown";
 
-                    // Voucher Type Styling
-                    let typeClass =
-                      "bg-slate-100 text-slate-600 border-slate-200";
-                    if (v.type === "SALES")
-                      typeClass =
-                        "bg-emerald-50 text-emerald-700 border-emerald-100";
-                    if (v.type === "PURCHASE")
-                      typeClass = "bg-blue-50 text-blue-700 border-blue-100";
-                    if (v.type === "PAYMENT")
-                      typeClass = "bg-amber-50 text-amber-700 border-amber-100";
-                    if (v.type === "RECEIPT")
-                      typeClass =
-                        "bg-indigo-50 text-indigo-700 border-indigo-100";
-                    if (v.type === "CONTRA")
-                      typeClass =
-                        "bg-purple-50 text-purple-700 border-purple-100";
-
-                    return (
-                      <tr
-                        key={`${v.type}-${v.id}`}
-                        className="group hover:bg-slate-50 transition-colors"
-                      >
-                        <td className="py-3 px-6 text-xs font-bold text-slate-600 whitespace-nowrap">
-                          {fmtDate(new Date(v.date))}
-                        </td>
-                        <td className="py-3 px-6">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded border text-[9px] font-black uppercase tracking-wide ${typeClass}`}
+                  return (
+                    <tr
+                      key={`${v.type}-${v.id}`}
+                      className="group hover:bg-slate-50/50"
+                    >
+                      <td className="py-4 px-6 text-xs font-bold text-slate-600">
+                        {fmtDate(new Date(v.date))}
+                      </td>
+                      <td className="py-4 px-6">
+                        <span
+                          className={`px-2 py-0.5 rounded border text-[9px] font-black uppercase tracking-wide ${
+                            v.type === "SALES"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                              : "bg-slate-100"
+                          }`}
+                        >
+                          {v.type.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-xs font-mono font-bold text-slate-500">
+                        #{v.voucherNo}
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="text-sm font-bold text-slate-800">
+                          {ledgerName}
+                        </div>
+                        <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                          {v.transactionCode}
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-right font-mono text-xs font-black text-slate-900">
+                        ₹ {fmt(v.totalAmount || 0)}
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        {isAutoVerified ? (
+                          <div
+                            className="inline-flex items-center gap-1 text-[9px] font-black text-indigo-600 uppercase"
+                            title="Admin Auto-Verified"
                           >
-                            {v.type.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="py-3 px-6 text-xs font-mono font-bold text-slate-500">
-                          #{v.voucherNo}
-                        </td>
-                        <td className="py-3 px-6">
-                          <div className="text-sm font-bold text-slate-800">
-                            {ledgerName}
+                            <ShieldCheck size={10} />
+                            Admin
                           </div>
-                          {v.narration && (
-                            <div className="text-[10px] text-slate-400 italic truncate max-w-[300px] mt-0.5">
-                              {v.narration}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-6 text-right font-mono text-xs font-bold text-slate-900">
-                          {fmt(amount)}
-                        </td>
-                        <td className="py-3 px-6 text-right font-mono text-xs font-bold text-slate-900">
-                          {fmt(amount)}
-                        </td>
-                        <td className="py-3 px-6 text-center">
-                          <Link
-                            href={`/companies/${companyId}/vouchers/${v.type.toLowerCase()}/${
-                              v.id
-                            }/edit`}
-                            className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            View <ArrowUpRight size={10} />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                        ) : (
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">
+                            Standard
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* FOOTER TOTALS */}
-          <div className="bg-slate-900 border-t border-slate-800 px-6 py-3 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
+          {/* FOOTER */}
+          <div className="bg-slate-900 border-t border-slate-800 px-6 py-4 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
             <div className="flex gap-6">
               <span>
-                Rows: <span className="text-white">{totalTransactions}</span>
+                Entries: <span className="text-white">{vouchers.length}</span>
               </span>
               <span>
-                Period:{" "}
+                Range:{" "}
                 <span className="text-white">
-                  {from ? fmtDate(startDate) : "Today"} —{" "}
-                  {to ? fmtDate(endDate) : "Today"}
+                  {fmtDate(startDate)} - {fmtDate(endDate)}
                 </span>
               </span>
             </div>
-            <div className="flex gap-8">
-              <div>
-                Total Dr:{" "}
-                <span className="text-emerald-400 text-xs ml-2">
+            <div className="flex gap-8 items-center">
+              <span className="flex items-center gap-2">
+                Total Volume:{" "}
+                <span className="text-white text-sm font-black">
                   ₹ {fmt(totalValue)}
                 </span>
-              </div>
-              <div>
-                Total Cr:{" "}
-                <span className="text-blue-400 text-xs ml-2">
-                  ₹ {fmt(totalValue)}
-                </span>
-              </div>
+              </span>
             </div>
           </div>
         </div>
