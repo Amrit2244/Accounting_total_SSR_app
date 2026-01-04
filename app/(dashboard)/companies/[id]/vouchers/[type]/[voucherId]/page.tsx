@@ -4,15 +4,13 @@ import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   Printer,
-  FileText,
   User,
   Package,
   Layers,
-  ChevronRight,
   Receipt,
   Quote,
   ShieldCheck,
-  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import VerifyBtn from "@/components/VerifyBtn";
@@ -43,42 +41,33 @@ async function getCurrentUser() {
 
 async function getVoucherDetails(companyId: number, type: string, id: number) {
   const t = type.toUpperCase();
-  const where = { id, companyId };
 
-  const ledgerRel = { include: { ledger: true } };
-  const invRel = { include: { stockItem: true } };
-
-  const fetcher = async (model: any) => {
-    return model.findUnique({
-      where,
-      include: {
-        ledgerEntries: ledgerRel,
-        ...(["SALES", "PURCHASE", "STOCK_JOURNAL"].includes(t)
-          ? { inventoryEntries: invRel }
-          : {}),
-        createdBy: true,
-      },
-    });
+  // Define relations
+  const include = {
+    ledgerEntries: { include: { ledger: true } },
+    createdBy: true,
+    // Conditionally include inventory for Sales/Purchase
+    ...(["SALES", "PURCHASE", "STOCK_JOURNAL"].includes(t)
+      ? { inventoryEntries: { include: { stockItem: true } } }
+      : {}),
   };
 
-  switch (t) {
-    case "SALES":
-      return fetcher(prisma.salesVoucher);
-    case "PURCHASE":
-      return fetcher(prisma.purchaseVoucher);
-    case "PAYMENT":
-      return fetcher(prisma.paymentVoucher);
-    case "RECEIPT":
-      return fetcher(prisma.receiptVoucher);
-    case "CONTRA":
-      return fetcher(prisma.contraVoucher);
-    case "JOURNAL":
-      return fetcher(prisma.journalVoucher);
-    case "STOCK_JOURNAL":
-      return fetcher(prisma.stockJournal);
-    default:
-      return null;
-  }
+  const modelMap: any = {
+    SALES: prisma.salesVoucher,
+    PURCHASE: prisma.purchaseVoucher,
+    PAYMENT: prisma.paymentVoucher,
+    RECEIPT: prisma.receiptVoucher,
+    CONTRA: prisma.contraVoucher,
+    JOURNAL: prisma.journalVoucher,
+    STOCK_JOURNAL: prisma.stockJournal,
+  };
+
+  if (!modelMap[t]) return null;
+
+  return await modelMap[t].findUnique({
+    where: { id, companyId },
+    include,
+  });
 }
 
 export default async function VoucherDetailsPage({
@@ -99,20 +88,9 @@ export default async function VoucherDetailsPage({
   const isCreator = voucher.createdById === user?.id;
   const isPending = voucher.status === "PENDING";
 
-  // Deduplicate Ledger Entries
-  const rawLedgers = voucher.ledgerEntries || [];
-  const mergedLedgers = Object.values(
-    rawLedgers.reduce((acc: any, curr: any) => {
-      const id = curr.ledgerId;
-      if (!acc[id]) {
-        acc[id] = { ...curr, amount: 0 };
-      }
-      acc[id].amount += curr.amount;
-      return acc;
-    }, {})
-  );
-
+  // Data processing
   const inventoryEntries = voucher.inventoryEntries || [];
+  const ledgerEntries = voucher.ledgerEntries || [];
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
@@ -186,7 +164,7 @@ export default async function VoucherDetailsPage({
           </div>
         </div>
 
-        {/* METADATA CARD */}
+        {/* DETAILS CARD */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="bg-slate-50/50 p-6 grid grid-cols-2 md:grid-cols-4 gap-6 border-b border-slate-100">
             <MetadataItem
@@ -233,7 +211,7 @@ export default async function VoucherDetailsPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {(mergedLedgers as any[]).map((entry: any, idx: number) => {
+                  {ledgerEntries.map((entry: any, idx: number) => {
                     const isDebit = entry.amount < 0;
                     return (
                       <tr
@@ -271,50 +249,60 @@ export default async function VoucherDetailsPage({
             </div>
           </div>
 
-          {/* INVENTORY TABLE */}
-          {inventoryEntries.length > 0 && (
+          {/* INVENTORY TABLE - Now with fallback if empty */}
+          {["SALES", "PURCHASE"].includes(type.toUpperCase()) && (
             <div className="p-6 pt-0">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <Package size={14} className="text-indigo-600" /> Stock Movement
               </h3>
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3">Stock Item</th>
-                      <th className="px-4 py-3 text-right">Quantity</th>
-                      <th className="px-4 py-3 text-right">Rate</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {inventoryEntries.map((item: any, idx: number) => (
-                      <tr
-                        key={idx}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-4 py-3 font-bold text-slate-700">
-                          {item.stockItem?.name || "Unknown Item"}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-slate-600 text-xs">
-                          {Math.abs(item.quantity)}{" "}
-                          <span className="text-[9px] text-slate-400 uppercase">
-                            {item.unit || "nos"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-slate-600 text-xs">
-                          {item.rate.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 text-xs">
-                          {item.amount.toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </td>
+
+              {inventoryEntries.length > 0 ? (
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3">Stock Item</th>
+                        <th className="px-4 py-3 text-right">Quantity</th>
+                        <th className="px-4 py-3 text-right">Rate</th>
+                        <th className="px-4 py-3 text-right">Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {inventoryEntries.map((item: any, idx: number) => (
+                        <tr
+                          key={idx}
+                          className="hover:bg-slate-50/50 transition-colors"
+                        >
+                          <td className="px-4 py-3 font-bold text-slate-700">
+                            {item.stockItem?.name || "Unknown Item"}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-slate-600 text-xs">
+                            {Math.abs(item.quantity)}{" "}
+                            <span className="text-[9px] text-slate-400 uppercase">
+                              {item.unit || "nos"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-slate-600 text-xs">
+                            {item.rate.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 text-xs">
+                            {item.amount.toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-4 border border-dashed border-slate-300 rounded-xl bg-slate-50 text-center flex flex-col items-center justify-center gap-2">
+                  <AlertTriangle size={16} className="text-slate-400" />
+                  <span className="text-xs font-medium text-slate-500">
+                    No Inventory Details Found for this {type} Voucher.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
