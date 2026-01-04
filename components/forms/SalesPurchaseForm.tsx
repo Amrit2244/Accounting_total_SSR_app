@@ -12,7 +12,6 @@ import {
   ChevronDown,
   Percent,
   ShieldCheck,
-  Clock,
   Database,
   XCircle,
   Filter,
@@ -47,7 +46,7 @@ type VoucherRow = {
   qty: string;
   rate: string;
   gst: number;
-  amount: number;
+  amount: string | number; // Changed to allow typing
   taxAmount: number;
 };
 
@@ -93,7 +92,6 @@ const SearchableLedgerSelect = ({
   const filtered = useMemo(() => {
     if (!options) return [];
     if (!query) return options.slice(0, 100);
-
     const lowercaseQuery = query.toLowerCase();
     return options
       .filter(
@@ -260,11 +258,10 @@ export default function SalesPurchaseForm({
     { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
 
-  // ✅ 1. PARTY LEDGER FILTER (Kept as is - Works Fine)
+  // ✅ 1. PARTY LEDGER FILTER (Inclusive)
   const partyLedgerOptions = useMemo(() => {
     if (!ledgers || ledgers.length === 0) return [];
 
-    // Keywords for Party Accounts (Debtors, Creditors, Bank, Cash)
     const validGroups = [
       "debtor",
       "creditor",
@@ -285,28 +282,25 @@ export default function SalesPurchaseForm({
     return filtered.length > 0 ? filtered : ledgers;
   }, [ledgers]);
 
-  // ✅ 2. SALES/PURCHASE FILTER (STRICT MODE UPDATED)
+  // ✅ 2. SALES/PURCHASE FILTER (Strict)
   const accountLedgerOptions = useMemo(() => {
     if (!ledgers || ledgers.length === 0) return [];
 
     const filtered = ledgers.filter((l) => {
       const g = l.group?.name?.toLowerCase() || "";
 
-      // STRICT FILTER: Only groups containing 'sales' for SALES voucher
       if (type === "SALES") {
         return g.includes("sales");
-      }
-      // STRICT FILTER: Only groups containing 'purchase' for PURCHASE voucher
-      else if (type === "PURCHASE") {
+      } else if (type === "PURCHASE") {
         return g.includes("purchase");
       }
       return true;
     });
 
-    // Fallback only if the strict filter is completely empty (prevent blocking)
     return filtered.length > 0 ? filtered : ledgers;
   }, [ledgers, type]);
 
+  // ✅ 3. TAX FILTER
   const taxLedgerOptions = useMemo(() => {
     if (!ledgers) return [];
     return ledgers.filter((l) => {
@@ -315,6 +309,7 @@ export default function SalesPurchaseForm({
     });
   }, [ledgers]);
 
+  // ✅ 4. BIDIRECTIONAL CALCULATION
   const updateRow = (
     index: number,
     field: keyof VoucherRow,
@@ -322,22 +317,51 @@ export default function SalesPurchaseForm({
   ) => {
     const newRows = [...rows];
     (newRows[index] as any)[field] = value;
+
+    // Reset row logic if item changes
     if (field === "itemId") {
       const item = items.find((i) => i.id.toString() === value);
       newRows[index].gst = item?.gstRate || 0;
+      newRows[index].qty = "";
+      newRows[index].rate = "";
+      newRows[index].amount = "";
     }
-    const q = parseFloat(newRows[index].qty.toString()) || 0;
-    const r = parseFloat(newRows[index].rate.toString()) || 0;
-    const g = newRows[index].gst || 0;
-    newRows[index].amount = q * r;
-    newRows[index].taxAmount = q * r * (g / 100);
+
+    // Parse values for calculation
+    const qty = parseFloat(newRows[index].qty.toString()) || 0;
+    const rate = parseFloat(newRows[index].rate.toString()) || 0;
+    const amount = parseFloat(newRows[index].amount.toString()) || 0;
+    const gst = newRows[index].gst || 0;
+
+    // Logic: Calculate Amount if Qty/Rate changes
+    if (field === "qty" || field === "rate") {
+      if (qty !== 0 && rate !== 0) {
+        newRows[index].amount = qty * rate;
+      }
+    }
+    // Logic: Calculate Rate if Amount changes (and Qty exists)
+    else if (field === "amount") {
+      if (qty > 0 && amount > 0) {
+        newRows[index].rate = (amount / qty).toFixed(2);
+      }
+    }
+
+    // Always recalc Tax based on new Amount
+    const finalAmount = parseFloat(newRows[index].amount.toString()) || 0;
+    newRows[index].taxAmount = finalAmount * (gst / 100);
+
     setRows(newRows);
   };
 
   const removeRow = (index: number) => {
     if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
   };
-  const totalBaseAmount = rows.reduce((sum, r) => sum + r.amount, 0);
+
+  // Calculate Totals
+  const totalBaseAmount = rows.reduce(
+    (sum, r) => sum + (parseFloat(r.amount.toString()) || 0),
+    0
+  );
   const totalTaxAmount = rows.reduce((sum, r) => sum + r.taxAmount, 0);
   const grandTotal = totalBaseAmount + (enableTax ? totalTaxAmount : 0);
 
@@ -515,7 +539,7 @@ export default function SalesPurchaseForm({
         </div>
       </div>
 
-      {/* ITEM TABLE */}
+      {/* ITEM TABLE (Editable Amount) */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg mb-8">
         <div className="grid grid-cols-12 bg-slate-900 text-white py-4 px-4 text-[10px] uppercase font-black tracking-widest">
           <div className="col-span-5 pl-2">Item Description</div>
@@ -560,9 +584,17 @@ export default function SalesPurchaseForm({
                 onChange={(e) => updateRow(idx, "rate", e.target.value)}
                 placeholder="0.00"
               />
-              <div className="col-span-2 text-right pr-4 font-mono font-bold text-slate-900 text-sm">
-                {formatCurrency(row.amount)}
-              </div>
+
+              {/* ✅ EDITABLE AMOUNT INPUT */}
+              <input
+                type="number"
+                step="any"
+                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold outline-none bg-white focus:ring-2 focus:ring-indigo-500"
+                value={row.amount}
+                onChange={(e) => updateRow(idx, "amount", e.target.value)}
+                placeholder="0.00"
+              />
+
               <button
                 type="button"
                 onClick={() => removeRow(idx)}
