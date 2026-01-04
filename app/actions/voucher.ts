@@ -35,6 +35,7 @@ async function generateUniqueTXID(): Promise<string> {
   }
 }
 
+// --- HELPER: GET USER ---
 async function getCurrentUser() {
   try {
     const cookieStore = await cookies();
@@ -60,7 +61,6 @@ export async function updateVoucher(
   type: string,
   data: any
 ): Promise<State> {
-  // 👈 Explicit Return Type Fixed Here
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, error: "Unauthorized" };
@@ -109,18 +109,58 @@ export async function updateVoucher(
     });
 
     revalidatePath(`/companies/${companyId}/vouchers`);
-
     return {
       success: true,
-      message: isAdmin
-        ? `Voucher updated and auto-verified (Admin).`
-        : `Voucher edited and sent for verification.`,
+      message: isAdmin ? "Updated and Authorized" : "Updated and Pending",
       txid: newTxid,
     };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
 }
+
+// --- VERIFY VOUCHER ---
+export async function verifyVoucher(voucherId: number, type: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized" };
+
+    const t = type.toUpperCase();
+    const tableMap: any = {
+      SALES: prisma.salesVoucher,
+      PURCHASE: prisma.purchaseVoucher,
+      PAYMENT: prisma.paymentVoucher,
+      RECEIPT: prisma.receiptVoucher,
+      CONTRA: prisma.contraVoucher,
+      JOURNAL: prisma.journalVoucher,
+    };
+
+    const voucher = await tableMap[t].findUnique({
+      where: { id: voucherId },
+      select: { createdById: true },
+    });
+
+    if (voucher.createdById === user.id && user.role !== "ADMIN") {
+      return { success: false, error: "Maker and Checker must be different." };
+    }
+
+    await tableMap[t].update({
+      where: { id: voucherId },
+      data: {
+        status: "APPROVED",
+        verifiedById: user.id,
+        verifiedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    revalidatePath("/");
+    return { success: true, message: "Verified Successfully." };
+  } catch (error: any) {
+    return { success: false, error: "Verification failed." };
+  }
+}
+
 // --- GET VOUCHERS ---
 export async function getVouchers(
   companyId: number,
@@ -234,7 +274,8 @@ export async function getVouchers(
     return [];
   }
 }
-// --- CREATE VOUCHER (CRASH PROOF FIX) ---
+
+// --- CREATE VOUCHER (FIXED TYPE ERROR) ---
 export async function createVoucher(
   prevState: any,
   formData: FormData
@@ -252,10 +293,10 @@ export async function createVoucher(
 
     const txid = await generateUniqueTXID();
 
-    // 1. DATA PREP
     let ledgerData: any[] = [];
     let inventoryData: any[] = [];
 
+    // CASE A: SALES / PURCHASE
     if (type === "SALES" || type === "PURCHASE") {
       const partyId = parseInt(formData.get("partyLedgerId") as string);
       const accountId = parseInt(
@@ -281,7 +322,9 @@ export async function createVoucher(
         if (taxId && taxVal > 0)
           ledgerData.push({ ledgerId: taxId, amount: -Math.abs(taxVal) });
       }
-    } else {
+    }
+    // CASE B: OTHER VOUCHERS (Payment, Receipt, etc.)
+    else {
       const rawLedgers = formData.get("ledgerEntries") as string;
       ledgerData = JSON.parse(rawLedgers || "[]");
     }
@@ -308,23 +351,19 @@ export async function createVoucher(
       const model = tableMap[type];
       if (!model) throw new Error(`Invalid Voucher Type: ${type}`);
 
-      // --- SELF HEALING LOOP: Find next available Voucher No ---
+      // Self-Healing Voucher Number
       let nextNo = 0;
       let isUnique = false;
       let attempts = 0;
 
       while (!isUnique && attempts < 50) {
-        // 1. Get next number from Sequence table
         const seq = await tx.voucherSequence.upsert({
           where: { companyId_voucherType: { companyId, voucherType: type } },
           update: { lastNo: { increment: 1 } },
           create: { companyId, voucherType: type, lastNo: 1 },
         });
-
         nextNo = seq.lastNo;
 
-        // 2. Double check if this specific number exists in the actual voucher table
-        // (This handles cases where the sequence is lagging behind actual data)
         const existing = await model.findFirst({
           where: {
             companyId,
@@ -335,20 +374,13 @@ export async function createVoucher(
           },
         });
 
-        if (!existing) {
-          isUnique = true;
-        } else {
-          // If collision, loop again (which triggers another increment)
-          attempts++;
-        }
+        if (!existing) isUnique = true;
+        else attempts++;
       }
 
-      if (!isUnique)
-        throw new Error(
-          "Failed to generate unique voucher number after 50 attempts."
-        );
+      if (!isUnique) throw new Error("Failed to generate voucher number.");
 
-      // --- CREATE VOUCHER ---
+      // Create Object
       const voucherData: any = {
         companyId,
         voucherNo:
@@ -359,10 +391,12 @@ export async function createVoucher(
         totalAmount,
         createdById: user.id,
         status: isAdmin ? "APPROVED" : "PENDING",
+
+        // ✅ CRITICAL FIX: Force Parse Int for Ledger ID
         ledgerEntries: {
           create: ledgerData.map((e) => ({
-            ledgerId: e.ledgerId,
-            amount: e.amount,
+            ledgerId: parseInt(e.ledgerId.toString()), // Fixes "Expected Int, provided String"
+            amount: parseFloat(e.amount.toString()),
           })),
         },
       };
@@ -407,7 +441,7 @@ export async function createVoucher(
   }
 }
 
-// ... delete and getByCode functions remain as is ...
+// ... delete and getByCode (unchanged) ...
 export async function deleteBulkVouchers(
   items: { id: number; type: string }[],
   companyId?: number
@@ -454,45 +488,5 @@ export async function getVoucherByCode(txCode: string, companyId: number) {
     return { success: false, error: "Voucher not found" };
   } catch (error) {
     return { success: false, error: "Database search failed" };
-  }
-}
-export async function verifyVoucher(voucherId: number, type: string) {
-  try {
-    const user = await getCurrentUser();
-    if (!user) return { success: false, error: "Unauthorized" };
-
-    const t = type.toUpperCase();
-    const tableMap: any = {
-      SALES: prisma.salesVoucher,
-      PURCHASE: prisma.purchaseVoucher,
-      PAYMENT: prisma.paymentVoucher,
-      RECEIPT: prisma.receiptVoucher,
-      CONTRA: prisma.contraVoucher,
-      JOURNAL: prisma.journalVoucher,
-    };
-
-    const voucher = await tableMap[t].findUnique({
-      where: { id: voucherId },
-      select: { createdById: true },
-    });
-
-    if (voucher.createdById === user.id && user.role !== "ADMIN") {
-      return { success: false, error: "Maker and Checker must be different." };
-    }
-
-    await tableMap[t].update({
-      where: { id: voucherId },
-      data: {
-        status: "APPROVED",
-        verifiedById: user.id,
-        verifiedAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
-
-    revalidatePath("/");
-    return { success: true, message: "Voucher Verified Successfully." };
-  } catch (error: any) {
-    return { success: false, error: "Verification failed." };
   }
 }
