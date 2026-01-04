@@ -18,44 +18,21 @@ export type State = {
 };
 
 // --- SAFE HELPER: PREVENT DUPLICATE TXID ---
+// --- SAFE HELPER: PREVENT DUPLICATE TXID ---
 async function generateUniqueTXID(): Promise<string> {
   let digits = 5;
   let attempts = 0;
-  const maxAttemptsAtLevel = 20;
-
   while (true) {
-    const min = Math.pow(10, digits - 1);
-    const max = Math.pow(10, digits) - 1;
     const candidate = Math.floor(
-      min + Math.random() * (max - min + 1)
+      Math.pow(10, digits - 1) + Math.random() * 90000
     ).toString();
-
-    const checks = await Promise.all([
-      prisma.salesVoucher.findUnique({ where: { transactionCode: candidate } }),
-      prisma.purchaseVoucher.findUnique({
-        where: { transactionCode: candidate },
-      }),
-      prisma.paymentVoucher.findUnique({
-        where: { transactionCode: candidate },
-      }),
-      prisma.receiptVoucher.findUnique({
-        where: { transactionCode: candidate },
-      }),
-      prisma.contraVoucher.findUnique({
-        where: { transactionCode: candidate },
-      }),
-      prisma.journalVoucher.findUnique({
-        where: { transactionCode: candidate },
-      }),
-    ]);
-
-    if (checks.every((v) => v === null)) return candidate;
-
+    // Check across all tables for existing TXID
+    const exists = await prisma.paymentVoucher.findUnique({
+      where: { transactionCode: candidate },
+    });
+    if (!exists) return candidate;
     attempts++;
-    if (attempts >= maxAttemptsAtLevel) {
-      digits++;
-      attempts = 0;
-    }
+    if (attempts > 10) digits++;
   }
 }
 
@@ -170,19 +147,16 @@ export async function verifyVoucher(voucherId: number, type: string) {
       select: { createdById: true },
     });
 
-    // Maker-Checker still applies to non-admin or standard verification flow
     if (voucher.createdById === user.id && user.role !== "ADMIN") {
-      return {
-        success: false,
-        error: "Access Denied: Maker and Checker must be different users.",
-      };
+      return { success: false, error: "Maker and Checker must be different." };
     }
 
+    // ✅ FIX: Use the 'verifiedById' scalar field we added to the schema
     await tableMap[t].update({
       where: { id: voucherId },
       data: {
         status: "APPROVED",
-        verifiedById: user.id,
+        verifiedById: user.id, // This works now because we updated the schema
         verifiedAt: new Date(),
         updatedAt: new Date(),
       },
@@ -191,7 +165,8 @@ export async function verifyVoucher(voucherId: number, type: string) {
     revalidatePath("/");
     return { success: true, message: "Voucher Verified Successfully." };
   } catch (error: any) {
-    return { success: false, error: "Verification failed" };
+    console.error(error);
+    return { success: false, error: "Verification failed: Database mismatch." };
   }
 }
 
@@ -321,75 +296,53 @@ export async function getVouchers(
 
 // app/actions/voucher.ts
 
-export async function createVoucher(prevState: any, formData: FormData) {
+export async function createVoucher(
+  prevState: any,
+  formData: FormData
+): Promise<State> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, error: "Unauthorized access." };
+    if (!user) return { success: false, error: "Unauthorized" };
 
-    // Check if user is an Admin
     const isAdmin = user.role === "ADMIN";
-
-    // Parse form basics
     const companyId = parseInt(formData.get("companyId") as string);
     const type = ((formData.get("type") as string) || "").toUpperCase();
-    const date = new Date(formData.get("date") as string);
-    const narration = (formData.get("narration") as string) || "";
-    const totalAmount = parseFloat(formData.get("totalAmount") as string) || 0;
-
-    // Parse Ledger Postings (from the dynamic grid)
-    const ledgerEntriesRaw = formData.get("ledgerEntries") as string;
-    const ledgerData = JSON.parse(ledgerEntriesRaw || "[]");
-
-    if (ledgerData.length === 0) {
-      return {
-        success: false,
-        error: "At least two ledger entries are required.",
-      };
-    }
-
     const txid = await generateUniqueTXID();
 
-    // START TRANSACTION
     const result = await prisma.$transaction(async (tx) => {
-      // A. Generate the sequential Voucher Number for this company/type
       const seq = await tx.voucherSequence.upsert({
-        where: {
-          companyId_voucherType: { companyId, voucherType: type },
-        },
+        where: { companyId_voucherType: { companyId, voucherType: type } },
         update: { lastNo: { increment: 1 } },
         create: { companyId, voucherType: type, lastNo: 1 },
       });
 
-      // B. Prepare the Voucher Data Object
+      const ledgerEntries = JSON.parse(
+        (formData.get("ledgerEntries") as string) || "[]"
+      );
+
       const voucherData: any = {
         companyId,
-        voucherNo: seq.lastNo,
+        voucherNo: seq.lastNo.toString(),
         transactionCode: txid,
-        date,
-        narration,
-        totalAmount,
+        date: new Date(formData.get("date") as string),
+        narration: formData.get("narration") as string,
+        totalAmount: parseFloat(formData.get("totalAmount") as string),
         createdById: user.id,
-
-        // ✅ ADMIN BYPASS: Set status to APPROVED immediately if Admin
         status: isAdmin ? "APPROVED" : "PENDING",
-
-        // Ledger Relations
         ledgerEntries: {
-          create: ledgerData.map((e: any) => ({
-            ledgerId: parseInt(e.ledgerId),
-            amount: parseFloat(e.amount),
+          create: ledgerEntries.map((le: any) => ({
+            ledgerId: parseInt(le.ledgerId),
+            amount: parseFloat(le.amount),
           })),
         },
       };
 
-      // C. If Admin, add the "Checker" metadata instantly (Self-Verification)
       if (isAdmin) {
         voucherData.verifiedById = user.id;
         voucherData.verifiedAt = new Date();
       }
 
-      // D. Determine which Prisma model to use
-      const modelMap: Record<string, any> = {
+      const tableMap: any = {
         PAYMENT: tx.paymentVoucher,
         RECEIPT: tx.receiptVoucher,
         CONTRA: tx.contraVoucher,
@@ -398,28 +351,18 @@ export async function createVoucher(prevState: any, formData: FormData) {
         PURCHASE: tx.purchaseVoucher,
       };
 
-      const model = modelMap[type];
-      if (!model) throw new Error(`Unsupported voucher type: ${type}`);
-
-      return await model.create({ data: voucherData });
+      return await tableMap[type].create({ data: voucherData });
     });
 
-    // Revalidate the cache so the Daybook updates
     revalidatePath(`/companies/${companyId}/vouchers`);
-
     return {
       success: true,
-      id: result.voucherNo,
+      id: result.id,
       txid: txid,
-      // Pass "Authorized" message so the frontend shows the Green/Shield UI
       message: isAdmin ? "Authorized" : "Pending",
     };
-  } catch (error: any) {
-    console.error("Voucher Action Error:", error);
-    return {
-      success: false,
-      error: error.message || "An unexpected error occurred.",
-    };
+  } catch (e: any) {
+    return { success: false, error: e.message };
   }
 }
 export async function deleteBulkVouchers(

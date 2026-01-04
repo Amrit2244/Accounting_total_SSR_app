@@ -5,24 +5,24 @@ import { createVoucher } from "@/app/actions/voucher";
 import {
   Plus,
   Save,
-  AlertCircle,
   CheckCircle,
-  Printer,
   Loader2,
   Search,
-  Paperclip,
   Trash2,
   ChevronDown,
   Percent,
   ShieldCheck,
   Clock,
+  Database,
+  XCircle,
+  Filter,
 } from "lucide-react";
 import Link from "next/link";
 import confetti from "canvas-confetti";
 
 // --- TYPES ---
 interface FormState {
-  success: boolean; // FIXED: Mandatory boolean to match server action return
+  success: boolean;
   error?: string;
   code?: string;
   txid?: string;
@@ -59,14 +59,8 @@ type Props = {
   isAdmin?: boolean;
 };
 
-// FIXED: Initial state now strictly follows FormState
 const initialState: FormState = {
   success: false,
-  error: undefined,
-  code: undefined,
-  txid: undefined,
-  id: undefined,
-  message: undefined,
 };
 
 const formatCurrency = (value: number) =>
@@ -75,103 +69,169 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 2,
   });
 
-// --- HELPER COMPONENT: SEARCHABLE SELECT ---
+// --- HELPER: SEARCHABLE SELECT ---
 const SearchableLedgerSelect = ({
   label,
   name,
-  options,
+  options = [],
   selectedId,
   setSelectedId,
   isRequired,
   placeholder,
+  filterActive,
 }: any) => {
-  const [searchTerm, setSearchTerm] = useState(
-    selectedId
-      ? options.find((o: any) => o.id.toString() === selectedId)?.name || ""
-      : ""
-  );
+  const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const filteredOptions = useMemo(() => {
-    if (!searchTerm) return options.slice(0, 20);
+  const displayName = useMemo(() => {
+    if (!options) return "";
+    const found = options.find((o: any) => o.id.toString() === selectedId);
+    return found ? found.name : "";
+  }, [selectedId, options]);
+
+  const filtered = useMemo(() => {
+    if (!options) return [];
+    if (!query) return options.slice(0, 100);
+
+    const lowercaseQuery = query.toLowerCase();
     return options
-      .filter((o: any) =>
-        o.name.toLowerCase().includes(searchTerm.toLowerCase())
+      .filter(
+        (o: any) =>
+          (o.name || "").toLowerCase().includes(lowercaseQuery) ||
+          (o.group?.name || "").toLowerCase().includes(lowercaseQuery)
       )
-      .slice(0, 20);
-  }, [searchTerm, options]);
+      .slice(0, 100);
+  }, [query, options]);
 
   useEffect(() => {
-    const clickOut = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node))
+    const handleClick = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
+        setQuery("");
+      }
     };
-    document.addEventListener("mousedown", clickOut);
-    return () => document.removeEventListener("mousedown", clickOut);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   return (
-    <div className="relative group" ref={searchRef}>
-      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1 mb-1.5 block">
-        {label} {isRequired && <span className="text-rose-500">*</span>}
+    <div
+      className="relative group"
+      ref={containerRef}
+      style={{ zIndex: isOpen ? 1000 : 10 }}
+    >
+      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1 mb-1.5 flex justify-between items-center">
+        <span>
+          {label} {isRequired && <span className="text-rose-500">*</span>}
+        </span>
+        <div className="flex gap-2">
+          {filterActive && options.length > 0 && (
+            <span className="text-indigo-500 flex items-center gap-1 text-[9px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+              <Filter size={8} /> Smart Filter
+            </span>
+          )}
+          {(!options || options.length === 0) && (
+            <span className="text-rose-500 flex items-center gap-1 animate-pulse text-[9px] font-bold">
+              <Database size={10} /> NO DATA
+            </span>
+          )}
+        </div>
       </label>
+
       <input
         type="hidden"
         name={name}
         value={selectedId}
         required={isRequired}
       />
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-          <Search
-            size={16}
-            className="text-slate-400 group-focus-within:text-blue-600 transition-colors"
-          />
-        </div>
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setIsOpen(true);
-            if (selectedId) setSelectedId("");
-          }}
-          onFocus={() => setIsOpen(true)}
-          placeholder={placeholder}
-          className="w-full h-11 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder:text-slate-400 shadow-sm"
-          autoComplete="off"
+
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`relative flex items-center w-full h-11 px-3.5 bg-white border rounded-xl transition-all cursor-pointer shadow-sm ${
+          isOpen
+            ? "ring-2 ring-indigo-600 border-transparent"
+            : "border-slate-200 hover:border-slate-300"
+        }`}
+      >
+        <Search
+          size={16}
+          className={`mr-2 ${isOpen ? "text-indigo-600" : "text-slate-400"}`}
         />
-        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-          <ChevronDown size={14} className="text-slate-400" />
-        </div>
+
+        {isOpen ? (
+          <input
+            autoFocus
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Type to search..."
+            className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400 uppercase"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div
+            className={`flex-1 text-sm font-semibold truncate uppercase ${
+              displayName ? "text-slate-900" : "text-slate-400"
+            }`}
+          >
+            {displayName || placeholder}
+          </div>
+        )}
+
+        <ChevronDown
+          size={14}
+          className={`transition-transform duration-200 ${
+            isOpen ? "rotate-180 text-indigo-600" : "text-slate-400"
+          }`}
+        />
       </div>
+
       {isOpen && (
-        <div className="absolute z-[100] w-full bg-white border border-slate-200 rounded-xl shadow-xl mt-1.5 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200">
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((l: any) => (
-              <div
-                key={l.id}
-                onClick={() => {
-                  setSelectedId(l.id.toString());
-                  setSearchTerm(l.name);
-                  setIsOpen(false);
-                }}
-                className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0 transition-colors group/item"
-              >
-                <span className="text-sm font-bold text-slate-700">
-                  {l.name}
-                </span>
-                <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200 uppercase font-black">
-                  {l.group.name}
-                </span>
+        <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="max-h-60 overflow-y-auto custom-scrollbar">
+            {filtered.length > 0 ? (
+              filtered.map((l: any) => (
+                <div
+                  key={l.id}
+                  onClick={() => {
+                    setSelectedId(l.id.toString());
+                    setIsOpen(false);
+                    setQuery("");
+                  }}
+                  className="px-4 py-3 flex items-center justify-between hover:bg-indigo-50 cursor-pointer transition-colors border-b border-slate-50 last:border-0"
+                >
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-sm font-bold text-slate-800 uppercase">
+                      {l.name}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase bg-slate-100 px-1.5 py-0.5 rounded mt-0.5">
+                      {l.group?.name || "General"}
+                    </span>
+                  </div>
+                  {selectedId === l.id.toString() && (
+                    <CheckCircle size={16} className="text-indigo-600" />
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center flex flex-col items-center">
+                <XCircle size={24} className="text-slate-300 mb-2" />
+                <p className="text-xs text-slate-500 font-medium">
+                  No matches found
+                </p>
+                <button
+                  type="button"
+                  className="text-[10px] text-indigo-600 font-bold mt-2 hover:underline"
+                >
+                  Create New Ledger
+                </button>
               </div>
-            ))
-          ) : (
-            <div className="p-4 text-xs text-slate-400 text-center italic">
-              No matching ledgers found.
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -182,17 +242,16 @@ const SearchableLedgerSelect = ({
 export default function SalesPurchaseForm({
   companyId,
   type,
-  ledgers,
-  items,
+  ledgers = [],
+  items = [],
   isAdmin,
 }: Props) {
-  // ✅ FIXED: Passed structured initialState and used 'as any' cast for hook compatibility
   const [state, action, isPending] = useActionState(
     createVoucher as any,
     initialState
   );
-
   const formRef = useRef<HTMLFormElement>(null);
+
   const [partyId, setPartyId] = useState("");
   const [accountId, setAccountId] = useState("");
   const [enableTax, setEnableTax] = useState(true);
@@ -201,34 +260,60 @@ export default function SalesPurchaseForm({
     { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
 
-  const partyLedgersImpl = useMemo(
-    () =>
-      ledgers.filter((l) =>
-        ["debtor", "creditor", "cash", "bank", "party"].some((k) =>
-          l.group.name.toLowerCase().includes(k)
-        )
-      ),
-    [ledgers]
-  );
-  const accountLedgersImpl = useMemo(
-    () =>
-      ledgers.filter(
-        (l) =>
-          l.group.name.toLowerCase().includes(type.toLowerCase()) ||
-          l.group.name.toLowerCase().includes("sales") ||
-          l.group.name.toLowerCase().includes("purchase")
-      ),
-    [ledgers, type]
-  );
-  const taxLedgersImpl = useMemo(
-    () =>
-      ledgers.filter((l) =>
-        ["tax", "gst", "duties"].some((k) =>
-          l.group.name.toLowerCase().includes(k)
-        )
-      ),
-    [ledgers]
-  );
+  // ✅ 1. PARTY LEDGER FILTER (Kept as is - Works Fine)
+  const partyLedgerOptions = useMemo(() => {
+    if (!ledgers || ledgers.length === 0) return [];
+
+    // Keywords for Party Accounts (Debtors, Creditors, Bank, Cash)
+    const validGroups = [
+      "debtor",
+      "creditor",
+      "cash",
+      "bank",
+      "party",
+      "customer",
+      "supplier",
+      "receivable",
+      "payable",
+    ];
+
+    const filtered = ledgers.filter((l) => {
+      const g = l.group?.name?.toLowerCase() || "";
+      return validGroups.some((k) => g.includes(k));
+    });
+
+    return filtered.length > 0 ? filtered : ledgers;
+  }, [ledgers]);
+
+  // ✅ 2. SALES/PURCHASE FILTER (STRICT MODE UPDATED)
+  const accountLedgerOptions = useMemo(() => {
+    if (!ledgers || ledgers.length === 0) return [];
+
+    const filtered = ledgers.filter((l) => {
+      const g = l.group?.name?.toLowerCase() || "";
+
+      // STRICT FILTER: Only groups containing 'sales' for SALES voucher
+      if (type === "SALES") {
+        return g.includes("sales");
+      }
+      // STRICT FILTER: Only groups containing 'purchase' for PURCHASE voucher
+      else if (type === "PURCHASE") {
+        return g.includes("purchase");
+      }
+      return true;
+    });
+
+    // Fallback only if the strict filter is completely empty (prevent blocking)
+    return filtered.length > 0 ? filtered : ledgers;
+  }, [ledgers, type]);
+
+  const taxLedgerOptions = useMemo(() => {
+    if (!ledgers) return [];
+    return ledgers.filter((l) => {
+      const g = l.group?.name?.toLowerCase() || "";
+      return g.includes("tax") || g.includes("gst") || g.includes("duties");
+    });
+  }, [ledgers]);
 
   const updateRow = (
     index: number,
@@ -252,7 +337,6 @@ export default function SalesPurchaseForm({
   const removeRow = (index: number) => {
     if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
   };
-
   const totalBaseAmount = rows.reduce((sum, r) => sum + r.amount, 0);
   const totalTaxAmount = rows.reduce((sum, r) => sum + r.taxAmount, 0);
   const grandTotal = totalBaseAmount + (enableTax ? totalTaxAmount : 0);
@@ -265,7 +349,7 @@ export default function SalesPurchaseForm({
         origin: { y: 0.6 },
         colors: isAdmin
           ? ["#6366f1", "#4f46e5", "#ffffff"]
-          : ["#10B981", "#3B82F6", "#FBBF24"],
+          : ["#10B981", "#3B82F6", "#F59E0B"],
       });
     }
   }, [state?.success, isAdmin]);
@@ -275,96 +359,58 @@ export default function SalesPurchaseForm({
       state.message?.toLowerCase().includes("approved") ||
       state.message?.toLowerCase().includes("authorized");
     return (
-      <div className="flex flex-col items-center justify-center min-h-[600px] text-center p-8 bg-white border border-slate-200 rounded-3xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center min-h-[600px] text-center p-8 bg-white border border-slate-200 rounded-3xl shadow-2xl relative overflow-hidden">
         <div
           className={`absolute top-0 inset-x-0 h-2 ${
             isAutoVerified ? "bg-indigo-600" : "bg-emerald-600"
           }`}
         />
-        <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
-          <div
-            className={`${
-              isAutoVerified
-                ? "bg-indigo-50 text-indigo-600 border-indigo-100"
-                : "bg-emerald-50 text-emerald-600 border-emerald-100"
-            } p-6 rounded-full mb-6 shadow-sm border`}
-          >
-            {isAutoVerified ? (
-              <ShieldCheck size={48} strokeWidth={1.5} />
-            ) : (
-              <CheckCircle size={48} strokeWidth={1.5} />
-            )}
+        <div
+          className={`${
+            isAutoVerified
+              ? "bg-indigo-50 text-indigo-600"
+              : "bg-emerald-50 text-emerald-600"
+          } p-6 rounded-full mb-6 border border-slate-100 shadow-sm`}
+        >
+          {isAutoVerified ? (
+            <ShieldCheck size={48} />
+          ) : (
+            <CheckCircle size={48} />
+          )}
+        </div>
+        <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tight">
+          {isAutoVerified ? "Authorized" : "Voucher Created"}
+        </h2>
+        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full max-w-xs shadow-inner mb-8 text-left">
+          <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
+            <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Voucher No
+            </span>
+            <span className="text-xl font-black text-slate-900">
+              #{state.code || state.id}
+            </span>
           </div>
-          <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tight">
-            {isAutoVerified ? "Voucher Authorized" : `${type} Created!`}
-          </h2>
-          <div
-            className={`border px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 mb-8 ${
-              isAutoVerified
-                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
-            }`}
-          >
-            {isAutoVerified ? (
-              <ShieldCheck size={12} />
-            ) : (
-              <Clock size={12} className="animate-pulse" />
-            )}
-            Status:{" "}
-            {isAutoVerified ? "Approved & Posted" : "Pending Verification"}
-          </div>
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full shadow-inner mb-8 text-left">
-            <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Voucher No
-              </span>
-              <span className="text-xl font-black text-slate-900">
-                #{state.code || state.id}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Secure TXID
-              </span>
-              <span className="text-sm font-mono font-bold text-indigo-600 tracking-tight bg-white px-2 py-1 rounded border border-slate-200">
-                {state.txid || "---"}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-4 w-full">
-            {state.id && (
-              <Link
-                href={`/companies/${companyId}/vouchers/${type.toLowerCase()}/${
-                  state.id
-                }/print`}
-                target="_blank"
-                className="flex-1 bg-white border border-slate-200 text-slate-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all text-xs uppercase shadow-sm"
-              >
-                <Printer size={16} /> Print
-              </Link>
-            )}
-            <button
-              onClick={() => window.location.reload()}
-              className={`flex-1 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg ${
-                isAutoVerified
-                  ? "bg-indigo-600 hover:bg-indigo-700"
-                  : "bg-slate-900 hover:bg-indigo-600"
-              }`}
-            >
-              Create New
-            </button>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Secure TXID
+            </span>
+            <span className="text-sm font-mono font-bold text-indigo-600 bg-white px-2 py-1 rounded border border-slate-200">
+              {state.txid || "---"}
+            </span>
           </div>
         </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-12 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all"
+        >
+          Create New
+        </button>
       </div>
     );
   }
 
   return (
-    <form
-      ref={formRef}
-      action={action}
-      className="w-full h-full flex flex-col font-sans p-1"
-    >
+    <form action={action} className="w-full h-full flex flex-col font-sans p-1">
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="type" value={type} />
       <input
@@ -381,17 +427,20 @@ export default function SalesPurchaseForm({
       <input type="hidden" name="totalVal" value={totalBaseAmount.toString()} />
       <input type="hidden" name="taxVal" value={totalTaxAmount.toString()} />
 
-      {state?.error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl mb-6 flex items-center gap-3 shadow-sm">
-          <AlertCircle size={20} />
-          <span className="font-bold text-xs uppercase tracking-wide">
-            {state.error}
-          </span>
-        </div>
-      )}
+      {/* DEBUG STRIP */}
+      <div className="flex justify-end mb-2">
+        <span
+          className={`text-[9px] font-bold px-2 py-1 rounded border ${
+            ledgers.length > 0
+              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+              : "bg-rose-50 text-rose-600 border-rose-200"
+          }`}
+        >
+          DB Status: {ledgers.length} Ledgers Loaded
+        </span>
+      </div>
 
-      {/* HEADER SECTION */}
-      <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm mb-8 grid grid-cols-1 md:grid-cols-12 gap-6 relative overflow-hidden">
+      <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm mb-8 grid grid-cols-1 md:grid-cols-12 gap-6 relative overflow-visible">
         <div
           className={`absolute left-0 top-0 bottom-0 w-1 ${
             isAdmin ? "bg-indigo-600" : "bg-blue-600"
@@ -405,7 +454,7 @@ export default function SalesPurchaseForm({
             name="date"
             type="date"
             defaultValue={new Date().toISOString().split("T")[0]}
-            className="w-full h-11 border border-slate-200 bg-white rounded-xl px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
+            className="w-full h-11 border border-slate-200 bg-white rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
             required
           />
         </div>
@@ -436,69 +485,33 @@ export default function SalesPurchaseForm({
             className="w-full h-11 border border-slate-200 bg-white rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-indigo-600 outline-none"
           />
         </div>
+
+        {/* PARTY ACCOUNT */}
         <div className="md:col-span-3">
           <SearchableLedgerSelect
             label="Party Account"
             name="partyLedgerId"
-            options={partyLedgersImpl}
+            options={partyLedgerOptions}
             selectedId={partyId}
             setSelectedId={setPartyId}
             isRequired
-            placeholder="Customer/Supplier..."
+            placeholder="Select Party..."
+            filterActive={partyLedgerOptions.length < ledgers.length}
           />
         </div>
+
+        {/* ACCOUNT LEDGER */}
         <div className="md:col-span-3">
           <SearchableLedgerSelect
             label={`${type} Ledger`}
             name="salesPurchaseLedgerId"
-            options={accountLedgersImpl}
+            options={accountLedgerOptions}
             selectedId={accountId}
             setSelectedId={setAccountId}
             isRequired
-            placeholder={`${type} A/c...`}
+            placeholder="Select Ledger..."
+            filterActive={accountLedgerOptions.length < ledgers.length}
           />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between mb-6 px-1">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setEnableTax(!enableTax)}
-            className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
-              enableTax
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm"
-                : "bg-white text-slate-400 border-slate-200"
-            }`}
-          >
-            <Percent size={14} /> {enableTax ? "Tax Applied" : "Add Tax"}
-          </button>
-          {enableTax && (
-            <div className="w-64 relative">
-              <ChevronDown
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none"
-              />
-              <select
-                value={taxLedgerId}
-                onChange={(e) => setTaxLedgerId(e.target.value)}
-                className="w-full h-10 border border-emerald-200 rounded-xl px-4 text-xs font-bold text-emerald-800 bg-white outline-none focus:ring-2 focus:ring-emerald-500 appearance-none shadow-sm"
-              >
-                <option value="">-- Tax Ledger --</option>
-                {taxLedgersImpl.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-        <div className="relative">
-          <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm transition-colors hover:text-indigo-600">
-            <Paperclip size={14} /> <span>Attachment</span>
-            <input type="file" name="attachment" className="hidden" />
-          </label>
         </div>
       </div>
 
@@ -519,7 +532,7 @@ export default function SalesPurchaseForm({
             >
               <div className="col-span-5">
                 <select
-                  className="w-full h-10 border border-slate-200 rounded-lg px-3 text-xs font-bold text-slate-700 bg-white outline-none focus:border-indigo-500 appearance-none cursor-pointer"
+                  className="w-full h-10 border border-slate-200 rounded-lg px-3 text-xs font-bold bg-white outline-none cursor-pointer"
                   value={row.itemId}
                   onChange={(e) => updateRow(idx, "itemId", e.target.value)}
                 >
@@ -534,7 +547,7 @@ export default function SalesPurchaseForm({
               <input
                 type="number"
                 step="any"
-                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold bg-white outline-none"
+                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold outline-none"
                 value={row.qty}
                 onChange={(e) => updateRow(idx, "qty", e.target.value)}
                 placeholder="0"
@@ -542,7 +555,7 @@ export default function SalesPurchaseForm({
               <input
                 type="number"
                 step="any"
-                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold bg-white outline-none"
+                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold outline-none"
                 value={row.rate}
                 onChange={(e) => updateRow(idx, "rate", e.target.value)}
                 placeholder="0.00"
@@ -575,21 +588,21 @@ export default function SalesPurchaseForm({
               },
             ])
           }
-          className="w-full py-3 text-[10px] font-black uppercase text-slate-500 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border-t border-slate-200 flex items-center justify-center gap-2"
+          className="w-full py-3 text-[10px] font-black uppercase text-slate-500 bg-slate-50 hover:bg-indigo-50 transition-colors border-t border-slate-200 flex items-center justify-center gap-2"
         >
           <Plus size={12} /> Add Line Item
         </button>
       </div>
 
-      <div className="mt-auto flex flex-col md:flex-row justify-between items-start gap-8 border-t border-slate-200 pt-8">
+      <div className="mt-auto flex flex-col md:flex-row justify-between items-start gap-8 border-t border-slate-200 pt-8 pb-12">
         <div className="w-full md:w-1/2 space-y-2">
           <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">
             Narration
           </label>
           <textarea
             name="narration"
-            placeholder="Notes..."
-            className="w-full h-32 border border-slate-200 rounded-xl p-4 text-sm font-medium bg-slate-50 focus:bg-white outline-none transition-all resize-none shadow-inner"
+            placeholder="Enter notes..."
+            className="w-full h-32 border border-slate-200 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-indigo-600 outline-none bg-slate-50 focus:bg-white transition-all"
           />
         </div>
         <div
@@ -599,20 +612,6 @@ export default function SalesPurchaseForm({
         >
           <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
           <div className="relative z-10 space-y-4">
-            <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <span>Taxable Value</span>
-              <span className="font-mono text-white">
-                {formatCurrency(totalBaseAmount)}
-              </span>
-            </div>
-            {enableTax && (
-              <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider pb-4 border-b border-white/10">
-                <span>GST Amount</span>
-                <span className="font-mono text-emerald-400">
-                  + {formatCurrency(totalTaxAmount)}
-                </span>
-              </div>
-            )}
             <div className="flex justify-between items-end pt-2">
               <span
                 className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
@@ -630,18 +629,15 @@ export default function SalesPurchaseForm({
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end pb-8">
+      <div className="flex justify-end pb-8">
         <button
           type="submit"
           disabled={isPending || grandTotal < 0.01 || !partyId || !accountId}
-          className={`px-12 py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl transition-all flex items-center gap-3 active:scale-95 group
-            ${
-              isAdmin
-                ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/40"
-                : "bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/40"
-            }
-            disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed
-          `}
+          className={`px-12 py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl transition-all flex items-center gap-3 active:scale-95 ${
+            isAdmin
+              ? "bg-indigo-600 hover:bg-indigo-700"
+              : "bg-slate-900 hover:bg-slate-800"
+          } text-white disabled:opacity-50`}
         >
           {isPending ? (
             <Loader2 className="animate-spin" size={20} />
@@ -650,7 +646,7 @@ export default function SalesPurchaseForm({
           ) : (
             <Save size={20} />
           )}
-          {isAdmin ? "Authorize & Post Instantly" : "Save for Approval"}
+          {isAdmin ? "Authorize & Post" : "Save Voucher"}
         </button>
       </div>
     </form>

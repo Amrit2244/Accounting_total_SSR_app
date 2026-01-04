@@ -4,6 +4,8 @@ import SalesPurchaseForm from "@/components/forms/SalesPurchaseForm";
 import StockJournalForm from "@/components/forms/StockJournalForm";
 import Link from "next/link";
 import clsx from "clsx";
+import { jwtVerify } from "jose";
+import { cookies } from "next/headers";
 import {
   FileText,
   ArrowLeftRight,
@@ -17,6 +19,23 @@ import {
   FilePlus,
 } from "lucide-react";
 
+// Helper to get user role for Admin Bypass logic
+async function getIsAdmin() {
+  try {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session")?.value;
+    if (!session) return false;
+
+    const { payload } = await jwtVerify(
+      session,
+      new TextEncoder().encode(process.env.SESSION_SECRET)
+    );
+    return payload.role === "ADMIN";
+  } catch {
+    return false;
+  }
+}
+
 export default async function CreateVoucherPage({
   params,
   searchParams,
@@ -28,6 +47,9 @@ export default async function CreateVoucherPage({
   const { type } = await searchParams;
   const companyId = parseInt(id);
   const voucherType = (type || "JOURNAL").toUpperCase();
+
+  // 1. Get Admin status for prop drilling
+  const isAdmin = await getIsAdmin();
 
   const voucherTypes = [
     {
@@ -82,20 +104,26 @@ export default async function CreateVoucherPage({
   ];
 
   const currentVoucher =
-    voucherTypes.find((v: any) => v.id === voucherType) || voucherTypes[3];
+    voucherTypes.find((v) => v.id === voucherType) || voucherTypes[3];
 
+  // 2. Fetch Ledgers with explicit group inclusion
+  // This ensures the Client Components can filter by group name (e.g., 'Sundry Debtors')
   const rawLedgers = await prisma.ledger.findMany({
     where: { companyId },
-    select: { id: true, name: true, group: { select: { name: true } } },
+    include: {
+      group: {
+        select: { name: true },
+      },
+    },
     orderBy: { name: "asc" },
   });
 
-  // ✅ FIXED: Explicitly typed callback parameter
   const ledgers = rawLedgers.map((l: any) => ({
     ...l,
-    group: l.group || { name: "Uncategorized" },
+    group: l.group || { name: "General" },
   }));
 
+  // 3. Fetch Stock Items for Sales/Purchase/Manufacturing
   const items = await prisma.stockItem.findMany({
     where: { companyId },
     select: { id: true, name: true, gstRate: true },
@@ -149,7 +177,6 @@ export default async function CreateVoucherPage({
           <Link
             href={`/companies/${companyId}/vouchers`}
             className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-            title="Back to Daybook"
           >
             <ArrowLeft size={20} />
           </Link>
@@ -157,7 +184,7 @@ export default async function CreateVoucherPage({
 
         {/* VOUCHER TYPE SELECTOR */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-          {voucherTypes.map((v: any) => {
+          {voucherTypes.map((v) => {
             const isActive = voucherType === v.id;
             return (
               <Link
@@ -187,24 +214,29 @@ export default async function CreateVoucherPage({
 
         {/* FORM CONTAINER */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-visible relative min-h-[500px]">
-          {/* Decorative top strip */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-t-2xl" />
 
           <div className="p-1">
             {isStockJournal ? (
-              <StockJournalForm companyId={companyId} stockItems={items} />
+              <StockJournalForm
+                companyId={companyId}
+                stockItems={items}
+                isAdmin={isAdmin}
+              />
             ) : isInventory ? (
               <SalesPurchaseForm
                 companyId={companyId}
                 type={voucherType}
                 ledgers={ledgers}
                 items={items}
+                isAdmin={isAdmin}
               />
             ) : (
               <VoucherForm
                 companyId={companyId}
                 ledgers={ledgers}
                 defaultType={voucherType}
+                isAdmin={isAdmin}
               />
             )}
           </div>
