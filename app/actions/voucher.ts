@@ -59,58 +59,68 @@ export async function updateVoucher(
   companyId: number,
   type: string,
   data: any
-) {
-  // ... (Your update logic works fine, keep it as is from previous code if needed) ...
-  // For brevity I'm focusing on the createVoucher fix below
-  return {
-    success: false,
-    error: "Update functionality pending re-implementation if needed",
-  };
-}
-
-// --- VERIFY VOUCHER ---
-export async function verifyVoucher(voucherId: number, type: string) {
+): Promise<State> {
+  // 👈 Explicit Return Type Fixed Here
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, error: "Unauthorized" };
 
     const t = type.toUpperCase();
-    const tableMap: any = {
-      SALES: prisma.salesVoucher,
-      PURCHASE: prisma.purchaseVoucher,
-      PAYMENT: prisma.paymentVoucher,
-      RECEIPT: prisma.receiptVoucher,
-      CONTRA: prisma.contraVoucher,
-      JOURNAL: prisma.journalVoucher,
+    const newTxid = await generateUniqueTXID();
+    const isAdmin = user.role === "ADMIN";
+
+    const commonData: any = {
+      date: new Date(data.date),
+      narration: data.narration,
+      totalAmount: parseFloat(data.totalAmount),
+      transactionCode: newTxid,
+      status: isAdmin ? "APPROVED" : "PENDING",
+      updatedAt: new Date(),
     };
 
-    const voucher = await tableMap[t].findUnique({
-      where: { id: voucherId },
-      select: { createdById: true },
-    });
-
-    if (voucher.createdById === user.id && user.role !== "ADMIN") {
-      return { success: false, error: "Maker and Checker must be different." };
+    if (isAdmin) {
+      commonData.verifiedById = user.id;
+      commonData.verifiedAt = new Date();
     }
 
-    await tableMap[t].update({
-      where: { id: voucherId },
-      data: {
-        status: "APPROVED",
-        verifiedById: user.id,
-        verifiedAt: new Date(),
-        updatedAt: new Date(),
-      },
+    await prisma.$transaction(async (tx) => {
+      const tableMap: any = {
+        SALES: tx.salesVoucher,
+        PURCHASE: tx.purchaseVoucher,
+        PAYMENT: tx.paymentVoucher,
+        RECEIPT: tx.receiptVoucher,
+        CONTRA: tx.contraVoucher,
+        JOURNAL: tx.journalVoucher,
+      };
+
+      await tableMap[t].update({
+        where: { id: voucherId },
+        data: {
+          ...commonData,
+          ledgerEntries: {
+            deleteMany: {},
+            create: data.ledgerEntries.map((le: any) => ({
+              ledgerId: parseInt(le.ledgerId),
+              amount: parseFloat(le.amount),
+            })),
+          },
+        },
+      });
     });
 
-    revalidatePath("/");
-    return { success: true, message: "Voucher Verified Successfully." };
+    revalidatePath(`/companies/${companyId}/vouchers`);
+
+    return {
+      success: true,
+      message: isAdmin
+        ? `Voucher updated and auto-verified (Admin).`
+        : `Voucher edited and sent for verification.`,
+      txid: newTxid,
+    };
   } catch (error: any) {
-    console.error(error);
-    return { success: false, error: "Verification failed: Database mismatch." };
+    return { success: false, error: error.message };
   }
 }
-
 // --- GET VOUCHERS ---
 export async function getVouchers(
   companyId: number,
@@ -224,7 +234,6 @@ export async function getVouchers(
     return [];
   }
 }
-
 // --- CREATE VOUCHER (CRASH PROOF FIX) ---
 export async function createVoucher(
   prevState: any,
@@ -445,5 +454,45 @@ export async function getVoucherByCode(txCode: string, companyId: number) {
     return { success: false, error: "Voucher not found" };
   } catch (error) {
     return { success: false, error: "Database search failed" };
+  }
+}
+export async function verifyVoucher(voucherId: number, type: string) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized" };
+
+    const t = type.toUpperCase();
+    const tableMap: any = {
+      SALES: prisma.salesVoucher,
+      PURCHASE: prisma.purchaseVoucher,
+      PAYMENT: prisma.paymentVoucher,
+      RECEIPT: prisma.receiptVoucher,
+      CONTRA: prisma.contraVoucher,
+      JOURNAL: prisma.journalVoucher,
+    };
+
+    const voucher = await tableMap[t].findUnique({
+      where: { id: voucherId },
+      select: { createdById: true },
+    });
+
+    if (voucher.createdById === user.id && user.role !== "ADMIN") {
+      return { success: false, error: "Maker and Checker must be different." };
+    }
+
+    await tableMap[t].update({
+      where: { id: voucherId },
+      data: {
+        status: "APPROVED",
+        verifiedById: user.id,
+        verifiedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    revalidatePath("/");
+    return { success: true, message: "Voucher Verified Successfully." };
+  } catch (error: any) {
+    return { success: false, error: "Verification failed." };
   }
 }
