@@ -121,7 +121,6 @@ export async function selectCompanyAction(formData: FormData) {
     maxAge: 60 * 60 * 24 * 7,
   };
 
-  // ✅ SYNCED: Using 'selected_company_id' to match Middleware requirements
   cookieStore.set("selected_company_id", cid.toString(), cookieOptions);
   cookieStore.set("active_fy_start", startDate.toISOString(), cookieOptions);
   cookieStore.set("active_fy_end", endDate.toISOString(), cookieOptions);
@@ -177,31 +176,50 @@ export async function updateCompany(prevState: any, formData: FormData) {
   redirect(`/companies/${id}`);
 }
 
-// --- 4. DELETE COMPANY ---
-export async function deleteCompany(id: number) {
+// --- 4. DELETE COMPANY (SINGLE, CORRECT DEFINITION) ---
+export async function deleteCompany(companyId: number) {
   try {
-    // ✅ Typed 'tx' as any to satisfy strict build workers
-    await prisma.$transaction(async (tx: any) => {
-      await tx.ledger.deleteMany({ where: { companyId: id } });
-      await tx.group.deleteMany({ where: { companyId: id } });
-      await tx.stockItem.deleteMany({ where: { companyId: id } });
-      await tx.stockGroup.deleteMany({ where: { companyId: id } });
-      await tx.unit.deleteMany({ where: { companyId: id } });
-      await tx.voucherSequence.deleteMany({ where: { companyId: id } });
-      await tx.salesVoucher.deleteMany({ where: { companyId: id } });
-      await tx.purchaseVoucher.deleteMany({ where: { companyId: id } });
-      await tx.paymentVoucher.deleteMany({ where: { companyId: id } });
-      await tx.receiptVoucher.deleteMany({ where: { companyId: id } });
-      await tx.contraVoucher.deleteMany({ where: { companyId: id } });
-      await tx.journalVoucher.deleteMany({ where: { companyId: id } });
-      await tx.stockJournal.deleteMany({ where: { companyId: id } });
-      await tx.company.delete({ where: { id } });
-    });
-  } catch (e) {
-    console.error("Delete Company Error:", e);
-    return { error: "Delete failed. Check server logs." };
+    // 1. Security Check: Ensure no vouchers exist
+    const counts = await prisma.$transaction([
+      prisma.salesVoucher.count({ where: { companyId } }),
+      prisma.purchaseVoucher.count({ where: { companyId } }),
+      prisma.paymentVoucher.count({ where: { companyId } }),
+      prisma.receiptVoucher.count({ where: { companyId } }),
+      prisma.contraVoucher.count({ where: { companyId } }),
+      prisma.journalVoucher.count({ where: { companyId } }),
+      prisma.stockJournal.count({ where: { companyId } }),
+    ]);
+
+    const totalVouchers = counts.reduce((a, b) => a + b, 0);
+
+    if (totalVouchers > 0) {
+      return {
+        success: false,
+        error: "Cannot delete: Company contains active transactions.",
+      };
+    }
+
+    // 2. Perform Clean Delete
+    await prisma.$transaction([
+      prisma.voucherSequence.deleteMany({ where: { companyId } }),
+      prisma.bOMItem.deleteMany({ where: { bom: { companyId } } }),
+      prisma.bOM.deleteMany({ where: { companyId } }),
+      prisma.stockItem.deleteMany({ where: { companyId } }),
+      prisma.stockGroup.deleteMany({ where: { companyId } }),
+      prisma.unit.deleteMany({ where: { companyId } }),
+      prisma.ledger.deleteMany({ where: { companyId } }),
+      prisma.group.deleteMany({ where: { companyId } }),
+      prisma.company.delete({ where: { id: companyId } }),
+    ]);
+  } catch (error: any) {
+    console.error("Delete Company Error:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to delete company",
+    };
   }
 
+  // 3. Redirect to Home/Dashboard after success
   revalidatePath("/");
   redirect("/");
 }

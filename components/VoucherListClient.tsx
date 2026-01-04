@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import {
@@ -11,24 +11,26 @@ import {
   Square,
   X,
   Eye,
+  Edit3,
+  ShieldCheck,
+  EyeOff,
   AlertCircle,
   CheckCircle2,
-  Edit3,
-  ShieldCheck, // New Icon for Admin status
+  Clock, // New icon for Pending status
 } from "lucide-react";
-import { deleteBulkVouchers } from "@/app/actions/voucher"; // Updated to match your path
+import { deleteBulkVouchers } from "@/app/actions/voucher";
 import { useRouter } from "next/navigation";
 
 export default function VoucherListClient({
   vouchers,
   companyId,
   baseUrl,
-  isAdmin, // Added isAdmin prop
+  isAdmin,
 }: {
   vouchers: any[];
   companyId: number;
   baseUrl: string;
-  isAdmin?: boolean; // Optional prop
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [selectedItems, setSelectedItems] = useState<
@@ -36,11 +38,23 @@ export default function VoucherListClient({
   >([]);
   const [isPending, startTransition] = useTransition();
 
+  // --- TALLY MODE STATE ---
+  const [hiddenIds, setHiddenIds] = useState<number[]>([]);
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+
+  const visibleVouchers = vouchers.filter((v) => !hiddenIds.includes(v.id));
+  const totalDebit = visibleVouchers.reduce(
+    (sum, v) => sum + (v.totalAmount || 0),
+    0
+  );
+
   const toggleSelectAll = () => {
-    if (selectedItems.length === vouchers.length) {
+    if (selectedItems.length === visibleVouchers.length) {
       setSelectedItems([]);
     } else {
-      setSelectedItems(vouchers.map((v) => ({ id: v.id, type: v.type })));
+      setSelectedItems(
+        visibleVouchers.map((v) => ({ id: v.id, type: v.type }))
+      );
     }
   };
 
@@ -55,15 +69,47 @@ export default function VoucherListClient({
     }
   };
 
-  const isSelected = (id: number, type: string) =>
+  const checkIsSelected = (id: number, type: string) =>
     selectedItems.some((i) => i.id === id && i.type === type);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.code === "KeyR" || e.key === "r")) {
+        e.preventDefault();
+        if (highlightedId && !hiddenIds.includes(highlightedId)) {
+          setHiddenIds((prev) => [...prev, highlightedId]);
+          const currentIndex = visibleVouchers.findIndex(
+            (v) => v.id === highlightedId
+          );
+          if (currentIndex < visibleVouchers.length - 1) {
+            setHighlightedId(visibleVouchers[currentIndex + 1].id);
+          } else if (currentIndex > 0) {
+            setHighlightedId(visibleVouchers[currentIndex - 1].id);
+          } else {
+            setHighlightedId(null);
+          }
+        }
+      }
+      if (e.altKey && (e.code === "KeyU" || e.key === "u")) {
+        e.preventDefault();
+        setHiddenIds((prev) => {
+          const newHidden = [...prev];
+          newHidden.pop();
+          return newHidden;
+        });
+      }
+      if (e.code === "Space" && highlightedId) {
+        e.preventDefault();
+        const v = visibleVouchers.find((v) => v.id === highlightedId);
+        if (v) toggleSelectOne(v.id, v.type);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [highlightedId, hiddenIds, visibleVouchers, selectedItems]);
+
   const handleBulkDelete = () => {
-    if (
-      !confirm(
-        `Are you sure you want to permanently delete ${selectedItems.length} vouchers? This action cannot be undone.`
-      )
-    )
+    if (!confirm(`Permanently delete ${selectedItems.length} vouchers?`))
       return;
     startTransition(async () => {
       const result = await deleteBulkVouchers(selectedItems, companyId);
@@ -77,262 +123,238 @@ export default function VoucherListClient({
   };
 
   return (
-    <div className="flex-1 min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col relative mt-2">
-      {/* BULK ACTION TOOLBAR */}
+    <div className="flex-1 min-h-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col relative mt-2">
+      {/* BULK ACTION BAR */}
       {selectedItems.length > 0 && (
-        <div className="absolute top-2 left-4 right-4 z-30 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2">
+        <div className="absolute top-2 left-4 right-4 z-30 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-3 text-white font-bold text-xs">
             <span className="bg-indigo-500 text-white px-2 py-0.5 rounded text-[10px] font-black">
               {selectedItems.length}
             </span>
-            <span className="tracking-tight">Vouchers Selected for Action</span>
+            <span>Vouchers Selected</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleBulkDelete}
               disabled={isPending}
-              className="bg-rose-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="bg-rose-600 text-white px-3 py-1 rounded text-[10px] font-bold uppercase hover:bg-rose-500 transition-colors flex items-center gap-1"
             >
               {isPending ? (
-                <Loader2 size={12} className="animate-spin" />
+                <Loader2 size={10} className="animate-spin" />
               ) : (
-                <Trash2 size={12} />
-              )}
-              <span>Delete Permanently</span>
+                <Trash2 size={10} />
+              )}{" "}
+              Delete
             </button>
             <button
               onClick={() => setSelectedItems([])}
-              className="p-1.5 text-slate-400 hover:text-white transition-colors"
+              className="p-1 text-slate-400 hover:text-white"
             >
-              <X size={16} />
+              <X size={14} />
             </button>
           </div>
         </div>
       )}
 
-      <div className="overflow-auto flex-1 custom-scrollbar">
-        <table className="w-full text-left border-collapse">
-          <thead className="sticky top-0 z-20 bg-slate-50/80 backdrop-blur-md shadow-sm">
-            <tr>
-              <th className="px-4 py-4 w-12 text-center border-b border-slate-200">
-                <button
-                  onClick={toggleSelectAll}
-                  className="text-slate-400 hover:text-indigo-600 transition-colors"
-                >
-                  {vouchers.length > 0 &&
-                  selectedItems.length === vouchers.length ? (
-                    <CheckSquare size={16} className="text-indigo-600" />
-                  ) : (
-                    <Square size={16} />
-                  )}
-                </button>
-              </th>
-              <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                Date
-              </th>
-              <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                Voucher ID
-              </th>
-              <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                Type
-              </th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
-                Particulars (Debit/Credit)
-              </th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-right">
-                Amount
-              </th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-center">
-                Status
-              </th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 text-right">
-                Actions
-              </th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100">
-            {vouchers.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="px-6 py-24 text-center text-slate-400 font-bold"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <FileText size={32} className="opacity-20" />
-                    <span className="text-sm tracking-tight">
-                      No Transactions Recorded
-                    </span>
-                  </div>
-                </td>
-              </tr>
+      {/* TABLE HEADER - 12 Columns Total */}
+      <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-300 py-1.5 px-2 text-[10px] font-bold text-slate-600 uppercase tracking-wider sticky top-0 z-20">
+        <div className="col-span-1 text-center">
+          <button onClick={toggleSelectAll}>
+            {selectedItems.length === visibleVouchers.length &&
+            visibleVouchers.length > 0 ? (
+              <CheckSquare size={14} className="text-indigo-600" />
             ) : (
-              vouchers.map((v) => {
-                const selected = isSelected(v.id, v.type);
-                const isApproved = v.status === "APPROVED";
-
-                return (
-                  <tr
-                    key={`${v.type}-${v.id}`}
-                    className={`group transition-all duration-200 ${
-                      selected ? "bg-indigo-50/40" : "hover:bg-slate-50/80"
-                    }`}
-                  >
-                    <td className="px-4 py-4 text-center">
-                      <button
-                        onClick={() => toggleSelectOne(v.id, v.type)}
-                        className="text-slate-300 hover:text-indigo-400 transition-colors"
-                      >
-                        {selected ? (
-                          <CheckSquare size={16} className="text-indigo-600" />
-                        ) : (
-                          <Square size={16} />
-                        )}
-                      </button>
-                    </td>
-
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-xs font-black text-slate-700">
-                        {format(new Date(v.date), "dd MMM yyyy")}
-                      </div>
-                      <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                        {format(new Date(v.date), "EEEE")}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-mono text-[10px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 w-fit">
-                          {v.transactionCode || "NO-ID"}
-                        </span>
-                        <span className="text-[9px] font-bold text-slate-400 ml-0.5 uppercase tracking-widest">
-                          #{v.voucherNo}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded font-black text-[9px] uppercase border shadow-sm ${
-                          v.type === "SALES"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            : v.type === "PURCHASE"
-                            ? "bg-blue-50 text-blue-700 border-blue-100"
-                            : v.type === "PAYMENT"
-                            ? "bg-rose-50 text-rose-700 border-rose-100"
-                            : v.type === "RECEIPT"
-                            ? "bg-amber-50 text-amber-700 border-amber-100"
-                            : "bg-slate-100 text-slate-600 border-slate-200"
-                        }`}
-                      >
-                        {v.type}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1 text-[11px] leading-tight">
-                        <div className="flex items-center gap-2 group/particulars">
-                          <span className="font-black text-slate-300 text-[8px] uppercase w-4">
-                            Dr
-                          </span>
-                          <span className="font-bold text-slate-800 truncate max-w-[240px]">
-                            {v.drLabel || "—"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-slate-300 text-[8px] uppercase w-4">
-                            Cr
-                          </span>
-                          <span className="font-bold text-slate-500 truncate max-w-[240px]">
-                            {v.crLabel || "—"}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 text-right font-mono font-black text-xs text-slate-900">
-                      ₹
-                      {(v.totalAmount || 0).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </td>
-
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase border shadow-sm ${
-                            isApproved
-                              ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                              : "bg-amber-50 text-amber-600 border-amber-100 animate-pulse"
-                          }`}
-                        >
-                          {isApproved ? (
-                            // Show Shield icon for Admin auto-verified, otherwise Checkmark
-                            isAdmin ? (
-                              <ShieldCheck
-                                size={8}
-                                className="text-indigo-600"
-                              />
-                            ) : (
-                              <CheckCircle2 size={8} />
-                            )
-                          ) : (
-                            <AlertCircle size={8} />
-                          )}
-                          {isApproved && isAdmin ? "Auto-Verified" : v.status}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* EDIT BUTTON */}
-                        <Link
-                          href={`${baseUrl}/${v.type.toLowerCase()}/${
-                            v.id
-                          }/edit`}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white transition-all shadow-sm border border-amber-100"
-                        >
-                          <Edit3 size={10} />
-                          Edit
-                        </Link>
-
-                        {/* DETAILS BUTTON */}
-                        <Link
-                          href={`${baseUrl}/${v.type.toLowerCase()}/${v.id}`}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase bg-slate-100 text-slate-600 hover:bg-slate-900 hover:text-white transition-all shadow-sm border border-slate-200"
-                        >
-                          <Eye size={10} />
-                          Details
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+              <Square size={14} />
             )}
-          </tbody>
-        </table>
+          </button>
+        </div>
+        <div className="col-span-1">Date</div>
+        <div className="col-span-1">Vch No</div>
+        <div className="col-span-1">TXID</div>
+        <div className="col-span-3 pl-2">Particulars</div>
+        <div className="col-span-1 text-center">Type</div>
+        <div className="col-span-1 text-center">Status</div>
+        <div className="col-span-2 text-right">Amount</div>
+        <div className="col-span-1 text-center">Action</div>
       </div>
 
-      <div className="shrink-0 bg-slate-50 border-t border-slate-200 px-6 py-3 flex justify-between items-center text-[9px] font-black uppercase text-slate-400 tracking-widest">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-            Vouchers Found: {vouchers.length}
+      {/* SCROLLABLE LIST */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+        {visibleVouchers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-slate-400">
+            <FileText size={32} className="opacity-20 mb-2" />
+            <span className="text-xs font-bold">No Transactions Found</span>
+          </div>
+        ) : (
+          visibleVouchers.map((v) => {
+            const selected = checkIsSelected(v.id, v.type);
+            const isHighlighted = highlightedId === v.id;
+            const isApproved = v.status === "APPROVED";
+
+            return (
+              <div
+                key={`${v.type}-${v.id}`}
+                onClick={() => setHighlightedId(v.id)}
+                onDoubleClick={() =>
+                  router.push(`${baseUrl}/${v.type.toLowerCase()}/${v.id}`)
+                }
+                className={`grid grid-cols-12 py-1 px-2 border-b border-slate-100 text-xs items-center cursor-pointer transition-colors select-none
+                  ${
+                    isHighlighted
+                      ? "bg-blue-100 text-blue-900 border-blue-200"
+                      : "hover:bg-slate-50 text-slate-800"
+                  }
+                  ${selected ? "bg-indigo-50/50" : ""}
+                `}
+              >
+                {/* Checkbox */}
+                <div
+                  className="col-span-1 text-center"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSelectOne(v.id, v.type);
+                  }}
+                >
+                  {selected ? (
+                    <CheckSquare
+                      size={14}
+                      className="text-indigo-600 mx-auto"
+                    />
+                  ) : (
+                    <Square
+                      size={14}
+                      className="text-slate-300 mx-auto hover:text-indigo-400"
+                    />
+                  )}
+                </div>
+
+                <div className="col-span-1 font-medium opacity-80 text-[10px]">
+                  {format(new Date(v.date), "dd-MM")}
+                </div>
+
+                <div className="col-span-1 font-mono text-[10px] opacity-70 font-bold">
+                  #{v.voucherNo}
+                </div>
+
+                {/* TXID Column */}
+                <div
+                  className="col-span-1 font-mono text-[9px] text-slate-400 truncate"
+                  title={v.transactionCode}
+                >
+                  {v.transactionCode || "-"}
+                </div>
+
+                <div className="col-span-3 pl-2 truncate font-bold uppercase flex flex-col justify-center">
+                  <span>{v.displayParticulars}</span>
+                  {isHighlighted && v.narration && (
+                    <span className="text-[9px] font-normal italic opacity-60 text-slate-500 normal-case truncate block leading-tight">
+                      ({v.narration})
+                    </span>
+                  )}
+                </div>
+
+                {/* Type Badge */}
+                <div className="col-span-1 text-center">
+                  <span
+                    className={`text-[9px] font-black px-1 rounded border uppercase tracking-wider
+                    ${
+                      v.type === "SALES"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        : v.type === "PURCHASE"
+                        ? "bg-amber-50 text-amber-700 border-amber-100"
+                        : "bg-slate-50 text-slate-500 border-slate-200"
+                    }`}
+                  >
+                    {v.type.substring(0, 3)}
+                  </span>
+                </div>
+
+                {/* Status Column */}
+                <div className="col-span-1 text-center">
+                  {isApproved ? (
+                    <div
+                      className="flex items-center justify-center gap-1 text-emerald-600"
+                      title="Approved"
+                    >
+                      <ShieldCheck size={12} />
+                    </div>
+                  ) : (
+                    <div
+                      className="flex items-center justify-center gap-1 text-amber-500 animate-pulse"
+                      title="Pending Verification"
+                    >
+                      <Clock size={12} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="col-span-2 text-right font-mono font-bold tracking-tight">
+                  {v.totalAmount.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                  })}
+                </div>
+
+                <div
+                  className="col-span-1 flex justify-center gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Link
+                    href={`${baseUrl}/${v.type.toLowerCase()}/${v.id}/edit`}
+                    className="text-amber-500 hover:text-amber-700"
+                  >
+                    <Edit3 size={12} />
+                  </Link>
+                  <Link
+                    href={`${baseUrl}/${v.type.toLowerCase()}/${v.id}`}
+                    className="text-slate-400 hover:text-slate-700"
+                  >
+                    <Eye size={12} />
+                  </Link>
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        {/* Fill Empty Space */}
+        {visibleVouchers.length < 15 &&
+          Array.from({ length: 15 - visibleVouchers.length }).map((_, i) => (
+            <div
+              key={`empty-${i}`}
+              className="grid grid-cols-12 py-2 border-b border-slate-50 opacity-0"
+            >
+              .
+            </div>
+          ))}
+      </div>
+
+      {/* FOOTER TOTALS */}
+      <div className="bg-slate-50 border-t-2 border-slate-300 py-1.5 px-4 grid grid-cols-12 items-center shrink-0 text-[10px] font-bold uppercase text-slate-500">
+        <div className="col-span-6 flex items-center gap-3">
+          <span className="text-slate-800">
+            Count: {visibleVouchers.length}
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            Selected: {selectedItems.length}
-          </span>
-          {isAdmin && (
-            <span className="flex items-center gap-1.5 text-indigo-500">
-              <ShieldCheck size={10} />
-              Admin Privilege Enabled
+          <span className="hidden md:inline text-slate-400">|</span>
+          {hiddenIds.length > 0 && (
+            <span className="text-amber-600 flex items-center gap-1 bg-amber-50 px-2 rounded border border-amber-100">
+              <EyeOff size={10} /> {hiddenIds.length} Hidden (Alt+U)
+            </span>
+          )}
+          {selectedItems.length > 0 && (
+            <span className="text-indigo-600 flex items-center gap-1">
+              <CheckCircle2 size={10} /> {selectedItems.length} Selected
             </span>
           )}
         </div>
-        <span>Accounting Cloud System • v1.2.0</span>
+
+        <div className="col-span-3 text-right text-slate-900 font-black pr-2">
+          Total Debit
+        </div>
+
+        <div className="col-span-2 text-right font-mono text-sm font-black text-slate-900">
+          ₹{totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+        </div>
+        <div className="col-span-1"></div>
       </div>
     </div>
   );

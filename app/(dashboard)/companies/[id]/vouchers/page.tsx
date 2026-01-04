@@ -1,15 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import {
-  Plus,
-  Calendar,
-  ArrowLeft,
-  ListFilter,
-  CreditCard,
-  ShieldCheck,
-} from "lucide-react";
+import { Plus, ArrowLeft, CreditCard, ListFilter } from "lucide-react";
 import { format } from "date-fns";
-import { getVouchers } from "@/app/actions/voucher"; // Fixed path to match your file name
+import { getVouchers } from "@/app/actions/voucher";
 import QuickVerify from "@/components/QuickVerify";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import VoucherSearch from "@/components/VoucherSearch";
@@ -57,61 +50,16 @@ export default async function VoucherListPage({
 
   let startDate: Date;
   let endDate: Date;
-  let isLatestData = false;
 
   // --- Date Logic ---
   if (p.from && p.to) {
     startDate = new Date(p.from);
     endDate = new Date(p.to);
   } else {
-    const [s, pu, pa, r, c, j] = await Promise.all([
-      prisma.salesVoucher.findFirst({
-        where: { companyId },
-        orderBy: { date: "desc" },
-        select: { date: true },
-      }),
-      prisma.purchaseVoucher.findFirst({
-        where: { companyId },
-        orderBy: { date: "desc" },
-        select: { date: true },
-      }),
-      prisma.paymentVoucher.findFirst({
-        where: { companyId },
-        orderBy: { date: "desc" },
-        select: { date: true },
-      }),
-      prisma.receiptVoucher.findFirst({
-        where: { companyId },
-        orderBy: { date: "desc" },
-        select: { date: true },
-      }),
-      prisma.contraVoucher.findFirst({
-        where: { companyId },
-        orderBy: { date: "desc" },
-        select: { date: true },
-      }),
-      prisma.journalVoucher.findFirst({
-        where: { companyId },
-        orderBy: { date: "desc" },
-        select: { date: true },
-      }),
-    ]);
-
-    const allDates = [s?.date, pu?.date, pa?.date, r?.date, c?.date, j?.date]
-      .filter((d): d is Date => !!d)
-      .map((d) => d.getTime());
-
-    if (allDates.length > 0) {
-      const maxTimestamp = Math.max(...allDates);
-      const maxDateStr = new Date(maxTimestamp).toISOString().split("T")[0];
-      startDate = new Date(maxDateStr);
-      endDate = new Date(maxDateStr);
-      isLatestData = true;
-    } else {
-      const todayStr = new Date().toISOString().split("T")[0];
-      startDate = new Date(todayStr);
-      endDate = new Date(todayStr);
-    }
+    // Default to today if no date selected
+    const todayStr = new Date().toISOString().split("T")[0];
+    startDate = new Date(todayStr);
+    endDate = new Date(todayStr);
   }
 
   endDate.setHours(23, 59, 59, 999);
@@ -126,10 +74,16 @@ export default async function VoucherListPage({
   }
 
   const baseUrl = `/companies/${id}/vouchers`;
-  const isFiltered = !!(p.from && p.to);
+
+  // Calculate Daybook Total (Debit Side Only)
+  const totalDebit = vouchers.reduce(
+    (sum: number, v: any) => sum + (v.totalAmount || 0),
+    0
+  );
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700 flex flex-col">
+    <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
+      {/* Background Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -138,116 +92,81 @@ export default async function VoucherListPage({
         }}
       />
 
-      {/* HEADER SECTION */}
-      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
-        <div className="max-w-[1920px] mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
+      {/* COMPACT HEADER */}
+      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl shadow-sm">
+        <div className="max-w-[1920px] mx-auto px-4 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Left Side: Title & Date Info */}
+          <div className="flex items-center gap-3">
             <Link
               href={`/companies/${id}`}
-              className="mt-1 p-2 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all"
             >
-              <ArrowLeft size={20} />
+              <ArrowLeft size={18} />
             </Link>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2 uppercase tracking-tight">
-                <CreditCard size={20} className="text-indigo-600" />
-                Daybook Transactions
+              <h1 className="text-sm font-black text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                <CreditCard size={16} className="text-indigo-600" />
+                Daybook
               </h1>
-
-              <div className="flex items-center gap-3 mt-1.5">
-                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-slate-50 border border-slate-200 rounded-md shadow-sm">
-                  <Calendar size={12} className="text-indigo-500" />
-                  <span className="text-xs font-bold text-slate-700">
-                    {format(startDate, "dd MMM yyyy")}
-                    {startDate.toDateString() !== endDate.toDateString() &&
-                      ` — ${format(endDate, "dd MMM yyyy")}`}
-                  </span>
-                </div>
-
-                {isAdmin && (
-                  <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-indigo-50 border border-indigo-100 rounded-md">
-                    <ShieldCheck size={12} className="text-indigo-600" />
-                    <span className="text-[10px] font-black text-indigo-700 uppercase">
-                      Admin Access
-                    </span>
-                  </div>
-                )}
-
-                {!isFiltered && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {isLatestData ? "Showing Latest" : "Current Date"}
-                  </span>
-                )}
-
-                <span className="text-slate-300">|</span>
-                <span className="text-xs font-bold text-slate-500">
-                  {vouchers.length} Total Records
-                </span>
+              <div className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
+                <span>{format(startDate, "dd MMM yyyy")}</span>
+                <span>•</span>
+                <span>{vouchers.length} Entries</span>
               </div>
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR: CONTROLS */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl shadow-sm">
+          {/* Right Side: Controls (Search, Filter, Verify, New) */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Date & Type Filters */}
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
               <DateRangeFilter />
-              <div className="w-px h-5 bg-slate-200 mx-1" />
+              <div className="w-px h-4 bg-slate-200 mx-1" />
               <VoucherTypeFilter />
-              <div className="w-px h-5 bg-slate-200 mx-1" />
-              <VoucherSearch />
             </div>
 
-            <div className="flex items-center gap-3 pl-2">
-              <QuickVerify companyId={companyId} />
+            {/* 2. TXID / Voucher Search */}
+            <VoucherSearch />
 
-              <Link
-                href={`/companies/${companyId}/vouchers/create`}
-                className="group flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-slate-900/10 hover:bg-indigo-600 hover:shadow-indigo-600/20 transition-all hover:-translate-y-0.5"
-              >
-                <Plus
-                  size={16}
-                  className="group-hover:rotate-90 transition-transform duration-300"
-                />
-                <span>New Entry</span>
-              </Link>
-            </div>
+            {/* 3. Quick Verify Button (Restored) */}
+            <QuickVerify companyId={companyId} />
+
+            {/* 4. New Entry Button */}
+            <Link
+              href={`/companies/${companyId}/vouchers/create`}
+              className="flex items-center gap-1 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase hover:bg-indigo-600 transition-all shadow-sm active:scale-95"
+            >
+              <Plus size={12} /> New
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* MAIN LIST SECTION */}
-      <div className="flex-1 relative z-10 p-6 overflow-hidden">
-        <div className="h-full max-w-[1920px] mx-auto flex flex-col">
-          <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
-            {vouchers.length === 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20 bg-white/50 backdrop-blur-sm">
-                <div className="w-16 h-16 bg-white border-2 border-dashed border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                  <ListFilter className="text-slate-300" size={24} />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  No Transactions Found
-                </h3>
-                <p className="text-sm text-slate-500 mt-1 max-w-xs">
-                  We couldn't find any vouchers for this date or filter.
-                </p>
-                {(isFiltered || filterType !== "ALL") && (
-                  <Link
-                    href={baseUrl}
-                    className="text-xs font-bold text-indigo-600 mt-2 uppercase tracking-wide hover:underline"
-                  >
-                    Reset All Filters
-                  </Link>
-                )}
+      {/* LIST SECTION */}
+      <div className="flex-1 relative z-10 p-2 overflow-hidden flex flex-col">
+        <div className="flex-1 bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col relative overflow-hidden">
+          {vouchers.length === 0 ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20">
+              <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-2">
+                <ListFilter className="text-slate-300" size={20} />
               </div>
-            )}
-
+              <h3 className="text-sm font-bold text-slate-700">
+                No Vouchers Found
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Try changing the date range or search query.
+              </p>
+            </div>
+          ) : (
             <VoucherListClient
               vouchers={vouchers}
               companyId={companyId}
               baseUrl={baseUrl}
               isAdmin={isAdmin}
+              // @ts-ignore - Assuming you added this prop to Client Component
+              dayTotal={totalDebit}
             />
-          </div>
+          )}
         </div>
       </div>
     </div>

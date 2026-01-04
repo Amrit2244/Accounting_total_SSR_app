@@ -9,7 +9,8 @@ import {
   FileText,
   BookOpen,
   ChevronRight,
-  ShieldCheck, // Added for Audit branding
+  ShieldCheck,
+  Wallet, // ✅ Added Wallet Icon for Cash Book
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -57,6 +58,13 @@ export default async function ReportsPage({
   if (isNaN(companyId)) notFound();
 
   const reports: Report[] = [
+    {
+      name: "Cash Book", // ✅ NEW REPORT
+      desc: "Daily record of all cash receipts and payments.",
+      href: `/companies/${companyId}/reports/cash-book`,
+      icon: Wallet,
+      colorClass: "bg-green-600 shadow-green-200",
+    },
     {
       name: "Ledger Explorer",
       desc: "Detailed transaction history & running balance for all accounts.",

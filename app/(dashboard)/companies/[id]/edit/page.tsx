@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { updateCompany } from "@/app/actions/company";
 import { notFound } from "next/navigation";
 import EditCompanyForm from "@/components/forms/EditCompanyForm";
+import DeleteCompanyButton from "@/components/DeleteCompanyButton"; // ✅ Import this
 import Link from "next/link";
 import { Building2, ArrowLeft, ChevronRight, Settings } from "lucide-react";
 
@@ -22,7 +23,20 @@ export default async function EditCompanyPage({
     return notFound();
   }
 
-  // 2. Prepare initial data for the form
+  // 2. CHECK FOR EXISTING VOUCHERS (To lock/unlock deletion)
+  const counts = await prisma.$transaction([
+    prisma.salesVoucher.count({ where: { companyId } }),
+    prisma.purchaseVoucher.count({ where: { companyId } }),
+    prisma.paymentVoucher.count({ where: { companyId } }),
+    prisma.receiptVoucher.count({ where: { companyId } }),
+    prisma.contraVoucher.count({ where: { companyId } }),
+    prisma.journalVoucher.count({ where: { companyId } }),
+    prisma.stockJournal.count({ where: { companyId } }),
+  ]);
+
+  const hasVouchers = counts.reduce((a, b) => a + b, 0) > 0;
+
+  // 3. Prepare initial data
   const initialCompanyData = {
     id: company.id,
     name: company.name,
@@ -31,7 +45,6 @@ export default async function EditCompanyPage({
     pincode: company.pincode || "",
     email: company.email || "",
     gstin: company.gstin || "",
-    // Format dates to YYYY-MM-DD for HTML input[type="date"]
     financialYearFrom: company.financialYearFrom.toISOString().split("T")[0],
     booksBeginFrom: company.booksBeginFrom.toISOString().split("T")[0],
   };
@@ -47,7 +60,8 @@ export default async function EditCompanyPage({
         }}
       />
 
-      <div className="relative z-10 max-w-2xl mx-auto p-6 md:p-8 space-y-6">
+      {/* ✅ Added pb-32 to ensure bottom button is visible on small screens */}
+      <div className="relative z-10 max-w-2xl mx-auto p-6 md:p-8 space-y-6 pb-32">
         {/* HEADER */}
         <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-20">
           <div className="flex items-center gap-4">
@@ -64,7 +78,6 @@ export default async function EditCompanyPage({
                 Company Settings
               </h1>
 
-              {/* Breadcrumbs */}
               <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 <span>Dashboard</span>
                 <ChevronRight size={10} />
@@ -76,9 +89,7 @@ export default async function EditCompanyPage({
 
         {/* FORM CONTAINER */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden relative">
-          {/* Decorative top strip */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-cyan-500" />
-
           <div className="p-1">
             <EditCompanyForm
               initialCompany={initialCompanyData}
@@ -86,6 +97,9 @@ export default async function EditCompanyPage({
             />
           </div>
         </div>
+
+        {/* ✅ DELETE SECTION (New) */}
+        <DeleteCompanyButton companyId={companyId} hasVouchers={hasVouchers} />
       </div>
     </div>
   );
