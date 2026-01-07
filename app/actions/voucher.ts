@@ -18,7 +18,6 @@ export type State = {
   code?: string;
 };
 
-// --- HELPER: GENERATE UNIQUE TXID ---
 // --- HELPER: GENERATE TRULY UNIQUE TXID ---
 async function generateUniqueTXID(): Promise<string> {
   let digits = 5;
@@ -31,8 +30,6 @@ async function generateUniqueTXID(): Promise<string> {
     ).toString();
 
     // 2. Check ALL tables in parallel to see if this ID exists anywhere
-    // If any query returns a result, 'exists' will be that result (truthy)
-    // If all are null, 'exists' will be undefined (falsy)
     const results = await Promise.all([
       prisma.salesVoucher.findUnique({
         where: { transactionCode: candidate },
@@ -108,7 +105,11 @@ export async function updateVoucher(
     if (!user) return { success: false, error: "Unauthorized" };
 
     const t = type.toUpperCase();
+
+    // NOTE: Usually we don't regenerate TXID on update, but keeping your logic as is.
+    // Ideally, keep the old TXID unless explicitly required to change.
     const newTxid = await generateUniqueTXID();
+
     const isAdmin = user.role === "ADMIN";
 
     const commonData: any = {
@@ -157,6 +158,7 @@ export async function updateVoucher(
       txid: newTxid,
     };
   } catch (error: any) {
+    console.error("Update Voucher Error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -317,7 +319,7 @@ export async function getVouchers(
   }
 }
 
-// --- CREATE VOUCHER (FIXED TYPE ERROR) ---
+// --- CREATE VOUCHER ---
 export async function createVoucher(
   prevState: any,
   formData: FormData
@@ -434,10 +436,10 @@ export async function createVoucher(
         createdById: user.id,
         status: isAdmin ? "APPROVED" : "PENDING",
 
-        // ✅ CRITICAL FIX: Force Parse Int for Ledger ID
+        // ✅ FORCE PARSE INT to fix Cloud DB issues
         ledgerEntries: {
           create: ledgerData.map((e) => ({
-            ledgerId: parseInt(e.ledgerId.toString()), // Fixes "Expected Int, provided String"
+            ledgerId: parseInt(e.ledgerId.toString()),
             amount: parseFloat(e.amount.toString()),
           })),
         },
@@ -475,7 +477,13 @@ export async function createVoucher(
       message: isAdmin ? "Authorized" : "Pending",
     };
   } catch (error: any) {
-    console.error("Create Voucher Error:", error);
+    // ✅ IMPROVED ERROR LOGGING FOR CLOUD DEBUGGING
+    console.error("❌ CLOUD CREATE VOUCHER ERROR:", {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
+
     return {
       success: false,
       error: error.message || "Failed to create voucher",

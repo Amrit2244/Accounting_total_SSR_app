@@ -11,10 +11,11 @@ import {
   Loader2,
   Paperclip,
   Clock,
-  AlertTriangle,
+  AlertTriangle, // Used for error display
   ChevronDown,
   ShieldCheck,
   Database,
+  X, // Used for closing error
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -48,7 +49,6 @@ const SearchableRowLedgerSelect = ({
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Filter based on search query or show first 50
   const filteredOptions = useMemo(() => {
     if (!query) return ledgers.slice(0, 50);
     return ledgers
@@ -209,7 +209,6 @@ export default function VoucherForm({
     .reduce((s, r: any) => s + (parseFloat(r.amount) || 0), 0);
   const isBalanced = Math.abs(totalDr - totalCr) < 0.01 && totalDr > 0;
 
-  // FIXED: Consolidated dependency array to prevent useEffect size error
   useEffect(() => {
     if (state?.success) {
       confetti({
@@ -322,6 +321,23 @@ export default function VoucherForm({
         )}
       />
 
+      {/* ✅ NEW: ERROR DISPLAY BLOCK */}
+      {state?.error && (
+        <div className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="p-2 bg-rose-100 rounded-full text-rose-600 mt-0.5 shrink-0">
+            <AlertTriangle size={18} />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-black text-rose-900 uppercase tracking-wide">
+              Submission Failed
+            </h4>
+            <p className="text-[11px] font-medium text-rose-700 mt-1 leading-relaxed">
+              {state.error}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* HEADER SECTION */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div className="space-y-1.5">
@@ -413,7 +429,12 @@ export default function VoucherForm({
           onClick={() =>
             setRows([
               ...rows,
-              { ledgerId: "", type: "Dr", amount: "", ledgerSearchTerm: "" },
+              {
+                ledgerId: "",
+                type: "Dr",
+                amount: "",
+                ledgerSearchTerm: "",
+              },
             ])
           }
           className="w-full py-3 bg-white text-[10px] font-black text-slate-500 border-t border-slate-200 flex justify-center items-center gap-2 hover:text-indigo-600 hover:bg-indigo-50 transition-all uppercase tracking-widest"
