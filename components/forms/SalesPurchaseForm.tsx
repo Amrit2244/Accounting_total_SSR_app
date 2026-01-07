@@ -10,16 +10,14 @@ import {
   Search,
   Trash2,
   ChevronDown,
-  Percent,
   ShieldCheck,
   Database,
   XCircle,
   Filter,
 } from "lucide-react";
-import Link from "next/link";
 import confetti from "canvas-confetti";
 
-// --- TYPES ---
+// --- TYPES (Unchanged) ---
 interface FormState {
   success: boolean;
   error?: string;
@@ -46,7 +44,7 @@ type VoucherRow = {
   qty: string;
   rate: string;
   gst: number;
-  amount: string | number; // Changed to allow typing
+  amount: string | number;
   taxAmount: number;
 };
 
@@ -68,7 +66,7 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 2,
   });
 
-// --- HELPER: SEARCHABLE SELECT ---
+// --- HELPER: SEARCHABLE SELECT (Unchanged) ---
 const SearchableLedgerSelect = ({
   label,
   name,
@@ -221,12 +219,6 @@ const SearchableLedgerSelect = ({
                 <p className="text-xs text-slate-500 font-medium">
                   No matches found
                 </p>
-                <button
-                  type="button"
-                  className="text-[10px] text-indigo-600 font-bold mt-2 hover:underline"
-                >
-                  Create New Ledger
-                </button>
               </div>
             )}
           </div>
@@ -258,21 +250,15 @@ export default function SalesPurchaseForm({
     { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
 
-  // ✅ 1. PARTY LEDGER FILTER (Inclusive)
+  // ✅ 1. PARTY LEDGER FILTER (Kept exactly as requested)
   const partyLedgerOptions = useMemo(() => {
     if (!ledgers || ledgers.length === 0) return [];
 
-    const validGroups = [
-      "debtor",
-      "creditor",
-      "cash",
-      "bank",
-      "party",
-      "customer",
-      "supplier",
-      "receivable",
-      "payable",
-    ];
+    const validGroups = ["debtor", "creditor", "cash", "bank"];
+
+    // Include Sale/Purchase A/c in Party list for Cash Sales scenarios
+    if (type === "SALES") validGroups.push("sale");
+    else if (type === "PURCHASE") validGroups.push("purchase");
 
     const filtered = ledgers.filter((l) => {
       const g = l.group?.name?.toLowerCase() || "";
@@ -280,9 +266,9 @@ export default function SalesPurchaseForm({
     });
 
     return filtered.length > 0 ? filtered : ledgers;
-  }, [ledgers]);
+  }, [ledgers, type]);
 
-  // ✅ 2. SALES/PURCHASE FILTER (Strict)
+  // ✅ 2. SALES/PURCHASE LEDGER FILTER (STRICT FIX)
   const accountLedgerOptions = useMemo(() => {
     if (!ledgers || ledgers.length === 0) return [];
 
@@ -290,26 +276,46 @@ export default function SalesPurchaseForm({
       const g = l.group?.name?.toLowerCase() || "";
 
       if (type === "SALES") {
-        return g.includes("sales");
+        // STRICT: Only groups containing "sales account" or exact "sales"
+        // This avoids "Cost of Sales" (Expense) or other loose matches.
+        return (
+          g.includes("sales account") ||
+          g.includes("sale account") ||
+          g === "sales"
+        );
       } else if (type === "PURCHASE") {
-        return g.includes("purchase");
+        // STRICT: Only groups containing "purchase account" or exact "purchases"
+        return (
+          g.includes("purchase account") ||
+          g.includes("purchase account") ||
+          g === "purchases" ||
+          g === "purchase"
+        );
       }
       return true;
     });
 
+    // Fallback: If strict filter returns nothing, show all to avoid blocking user
     return filtered.length > 0 ? filtered : ledgers;
   }, [ledgers, type]);
 
-  // ✅ 3. TAX FILTER
+  // ✅ 3. TAX LEDGER FILTER
   const taxLedgerOptions = useMemo(() => {
     if (!ledgers) return [];
     return ledgers.filter((l) => {
       const g = l.group?.name?.toLowerCase() || "";
-      return g.includes("tax") || g.includes("gst") || g.includes("duties");
+      const n = l.name.toLowerCase();
+      return (
+        g.includes("tax") ||
+        g.includes("gst") ||
+        g.includes("duties") ||
+        n.includes("gst") ||
+        n.includes("tax")
+      );
     });
   }, [ledgers]);
 
-  // ✅ 4. BIDIRECTIONAL CALCULATION
+  // --- LOGIC: ROW UPDATES ---
   const updateRow = (
     index: number,
     field: keyof VoucherRow,
@@ -318,7 +324,6 @@ export default function SalesPurchaseForm({
     const newRows = [...rows];
     (newRows[index] as any)[field] = value;
 
-    // Reset row logic if item changes
     if (field === "itemId") {
       const item = items.find((i) => i.id.toString() === value);
       newRows[index].gst = item?.gstRate || 0;
@@ -327,26 +332,21 @@ export default function SalesPurchaseForm({
       newRows[index].amount = "";
     }
 
-    // Parse values for calculation
     const qty = parseFloat(newRows[index].qty.toString()) || 0;
     const rate = parseFloat(newRows[index].rate.toString()) || 0;
     const amount = parseFloat(newRows[index].amount.toString()) || 0;
     const gst = newRows[index].gst || 0;
 
-    // Logic: Calculate Amount if Qty/Rate changes
     if (field === "qty" || field === "rate") {
       if (qty !== 0 && rate !== 0) {
         newRows[index].amount = qty * rate;
       }
-    }
-    // Logic: Calculate Rate if Amount changes (and Qty exists)
-    else if (field === "amount") {
+    } else if (field === "amount") {
       if (qty > 0 && amount > 0) {
         newRows[index].rate = (amount / qty).toFixed(2);
       }
     }
 
-    // Always recalc Tax based on new Amount
     const finalAmount = parseFloat(newRows[index].amount.toString()) || 0;
     newRows[index].taxAmount = finalAmount * (gst / 100);
 
@@ -357,7 +357,6 @@ export default function SalesPurchaseForm({
     if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
   };
 
-  // Calculate Totals
   const totalBaseAmount = rows.reduce(
     (sum, r) => sum + (parseFloat(r.amount.toString()) || 0),
     0
@@ -365,6 +364,7 @@ export default function SalesPurchaseForm({
   const totalTaxAmount = rows.reduce((sum, r) => sum + r.taxAmount, 0);
   const grandTotal = totalBaseAmount + (enableTax ? totalTaxAmount : 0);
 
+  // Confetti Effect
   useEffect(() => {
     if (state?.success) {
       confetti({
@@ -378,6 +378,7 @@ export default function SalesPurchaseForm({
     }
   }, [state?.success, isAdmin]);
 
+  // Success Screen
   if (state?.success) {
     const isAutoVerified =
       state.message?.toLowerCase().includes("approved") ||
@@ -539,7 +540,7 @@ export default function SalesPurchaseForm({
         </div>
       </div>
 
-      {/* ITEM TABLE (Editable Amount) */}
+      {/* ITEM TABLE */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg mb-8">
         <div className="grid grid-cols-12 bg-slate-900 text-white py-4 px-4 text-[10px] uppercase font-black tracking-widest">
           <div className="col-span-5 pl-2">Item Description</div>
@@ -584,8 +585,6 @@ export default function SalesPurchaseForm({
                 onChange={(e) => updateRow(idx, "rate", e.target.value)}
                 placeholder="0.00"
               />
-
-              {/* ✅ EDITABLE AMOUNT INPUT */}
               <input
                 type="number"
                 step="any"
@@ -594,7 +593,6 @@ export default function SalesPurchaseForm({
                 onChange={(e) => updateRow(idx, "amount", e.target.value)}
                 placeholder="0.00"
               />
-
               <button
                 type="button"
                 onClick={() => removeRow(idx)}

@@ -50,18 +50,70 @@ export default async function VoucherListPage({
 
   let startDate: Date;
   let endDate: Date;
+  let isLatestData = false;
 
   // --- Date Logic ---
   if (p.from && p.to) {
+    // A. User selected a specific range
     startDate = new Date(p.from);
     endDate = new Date(p.to);
   } else {
-    // Default to today if no date selected
-    const todayStr = new Date().toISOString().split("T")[0];
-    startDate = new Date(todayStr);
-    endDate = new Date(todayStr);
+    // B. No filter: Find the LATEST transaction date in the DB
+    // We check all 6 tables to find the most recent date
+    const [s, pu, pa, r, c, j] = await Promise.all([
+      prisma.salesVoucher.findFirst({
+        where: { companyId },
+        orderBy: { date: "desc" },
+        select: { date: true },
+      }),
+      prisma.purchaseVoucher.findFirst({
+        where: { companyId },
+        orderBy: { date: "desc" },
+        select: { date: true },
+      }),
+      prisma.paymentVoucher.findFirst({
+        where: { companyId },
+        orderBy: { date: "desc" },
+        select: { date: true },
+      }),
+      prisma.receiptVoucher.findFirst({
+        where: { companyId },
+        orderBy: { date: "desc" },
+        select: { date: true },
+      }),
+      prisma.contraVoucher.findFirst({
+        where: { companyId },
+        orderBy: { date: "desc" },
+        select: { date: true },
+      }),
+      prisma.journalVoucher.findFirst({
+        where: { companyId },
+        orderBy: { date: "desc" },
+        select: { date: true },
+      }),
+    ]);
+
+    // Collect valid dates
+    const allDates = [s?.date, pu?.date, pa?.date, r?.date, c?.date, j?.date]
+      .filter((d): d is Date => !!d)
+      .map((d) => d.getTime());
+
+    if (allDates.length > 0) {
+      // Found data: Use the maximum (latest) date
+      const maxTimestamp = Math.max(...allDates);
+      const maxDateStr = new Date(maxTimestamp).toISOString().split("T")[0];
+      startDate = new Date(maxDateStr);
+      endDate = new Date(maxDateStr);
+      isLatestData = true; // Flag to show "Latest" badge
+    } else {
+      // Database empty: Default to Today
+      const todayStr = new Date().toISOString().split("T")[0];
+      startDate = new Date(todayStr);
+      endDate = new Date(todayStr);
+    }
   }
 
+  // Ensure end date covers the full day
   endDate.setHours(23, 59, 59, 999);
 
   let vouchers = await getVouchers(companyId, startDate, endDate, p.q);
@@ -83,7 +135,6 @@ export default async function VoucherListPage({
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
-      {/* Background Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -92,10 +143,8 @@ export default async function VoucherListPage({
         }}
       />
 
-      {/* COMPACT HEADER */}
       <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl shadow-sm">
         <div className="max-w-[1920px] mx-auto px-4 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Left Side: Title & Date Info */}
           <div className="flex items-center gap-3">
             <Link
               href={`/companies/${id}`}
@@ -110,28 +159,30 @@ export default async function VoucherListPage({
               </h1>
               <div className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
                 <span>{format(startDate, "dd MMM yyyy")}</span>
+
+                {/* Show "Latest" badge if auto-selected */}
+                {isLatestData && (
+                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold text-[9px] uppercase tracking-wider">
+                    Latest
+                  </span>
+                )}
+
                 <span>•</span>
                 <span>{vouchers.length} Entries</span>
               </div>
             </div>
           </div>
 
-          {/* Right Side: Controls (Search, Filter, Verify, New) */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* 1. Date & Type Filters */}
             <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
               <DateRangeFilter />
               <div className="w-px h-4 bg-slate-200 mx-1" />
               <VoucherTypeFilter />
             </div>
 
-            {/* 2. TXID / Voucher Search */}
             <VoucherSearch />
-
-            {/* 3. Quick Verify Button (Restored) */}
             <QuickVerify companyId={companyId} />
 
-            {/* 4. New Entry Button */}
             <Link
               href={`/companies/${companyId}/vouchers/create`}
               className="flex items-center gap-1 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase hover:bg-indigo-600 transition-all shadow-sm active:scale-95"
@@ -142,7 +193,6 @@ export default async function VoucherListPage({
         </div>
       </div>
 
-      {/* LIST SECTION */}
       <div className="flex-1 relative z-10 p-2 overflow-hidden flex flex-col">
         <div className="flex-1 bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col relative overflow-hidden">
           {vouchers.length === 0 ? (
@@ -163,7 +213,7 @@ export default async function VoucherListPage({
               companyId={companyId}
               baseUrl={baseUrl}
               isAdmin={isAdmin}
-              // @ts-ignore - Assuming you added this prop to Client Component
+              // @ts-ignore
               dayTotal={totalDebit}
             />
           )}

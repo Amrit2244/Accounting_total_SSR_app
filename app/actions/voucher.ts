@@ -19,17 +19,59 @@ export type State = {
 };
 
 // --- HELPER: GENERATE UNIQUE TXID ---
+// --- HELPER: GENERATE TRULY UNIQUE TXID ---
 async function generateUniqueTXID(): Promise<string> {
   let digits = 5;
   let attempts = 0;
+
   while (true) {
+    // 1. Generate a candidate (e.g., "48291")
     const candidate = Math.floor(
       Math.pow(10, digits - 1) + Math.random() * 90000
     ).toString();
-    const exists = await prisma.paymentVoucher.findUnique({
-      where: { transactionCode: candidate },
-    });
-    if (!exists) return candidate;
+
+    // 2. Check ALL tables in parallel to see if this ID exists anywhere
+    // If any query returns a result, 'exists' will be that result (truthy)
+    // If all are null, 'exists' will be undefined (falsy)
+    const results = await Promise.all([
+      prisma.salesVoucher.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+      prisma.purchaseVoucher.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+      prisma.paymentVoucher.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+      prisma.receiptVoucher.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+      prisma.contraVoucher.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+      prisma.journalVoucher.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+      prisma.stockJournal.findUnique({
+        where: { transactionCode: candidate },
+        select: { id: true },
+      }),
+    ]);
+
+    // If ANY result is not null, the ID is taken. Retry.
+    const isTaken = results.some((r) => r !== null);
+
+    if (!isTaken) {
+      return candidate; // Found a unique ID!
+    }
+
+    // 3. Complexity Scaling: If we fail too many times, make the ID longer
     attempts++;
     if (attempts > 10) digits++;
   }
