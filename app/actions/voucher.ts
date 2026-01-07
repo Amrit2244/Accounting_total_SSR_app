@@ -24,12 +24,10 @@ async function generateUniqueTXID(): Promise<string> {
   let attempts = 0;
 
   while (true) {
-    // 1. Generate a candidate (e.g., "48291")
     const candidate = Math.floor(
       Math.pow(10, digits - 1) + Math.random() * 90000
     ).toString();
 
-    // 2. Check ALL tables in parallel to see if this ID exists anywhere
     const results = await Promise.all([
       prisma.salesVoucher.findUnique({
         where: { transactionCode: candidate },
@@ -61,14 +59,12 @@ async function generateUniqueTXID(): Promise<string> {
       }),
     ]);
 
-    // If ANY result is not null, the ID is taken. Retry.
     const isTaken = results.some((r) => r !== null);
 
     if (!isTaken) {
-      return candidate; // Found a unique ID!
+      return candidate;
     }
 
-    // 3. Complexity Scaling: If we fail too many times, make the ID longer
     attempts++;
     if (attempts > 10) digits++;
   }
@@ -105,11 +101,7 @@ export async function updateVoucher(
     if (!user) return { success: false, error: "Unauthorized" };
 
     const t = type.toUpperCase();
-
-    // NOTE: Usually we don't regenerate TXID on update, but keeping your logic as is.
-    // Ideally, keep the old TXID unless explicitly required to change.
     const newTxid = await generateUniqueTXID();
-
     const isAdmin = user.role === "ADMIN";
 
     const commonData: any = {
@@ -158,7 +150,6 @@ export async function updateVoucher(
       txid: newTxid,
     };
   } catch (error: any) {
-    console.error("Update Voucher Error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -319,7 +310,7 @@ export async function getVouchers(
   }
 }
 
-// --- CREATE VOUCHER ---
+// --- CREATE VOUCHER (WITH AUTO-HEALING SEQUENCE) ---
 export async function createVoucher(
   prevState: any,
   formData: FormData
@@ -367,7 +358,7 @@ export async function createVoucher(
           ledgerData.push({ ledgerId: taxId, amount: -Math.abs(taxVal) });
       }
     }
-    // CASE B: OTHER VOUCHERS (Payment, Receipt, etc.)
+    // CASE B: OTHER VOUCHERS
     else {
       const rawLedgers = formData.get("ledgerEntries") as string;
       ledgerData = JSON.parse(rawLedgers || "[]");
@@ -380,7 +371,7 @@ export async function createVoucher(
       };
     }
 
-    // 2. TRANSACTION WITH SELF-HEALING SEQUENCE
+    // --- TRANSACTION WITH SMART SEQUENCE RECOVERY ---
     const result = await prisma.$transaction(async (tx) => {
       const tableMap: any = {
         PAYMENT: tx.paymentVoucher,
@@ -395,12 +386,13 @@ export async function createVoucher(
       const model = tableMap[type];
       if (!model) throw new Error(`Invalid Voucher Type: ${type}`);
 
-      // Self-Healing Voucher Number
       let nextNo = 0;
       let isUnique = false;
       let attempts = 0;
 
-      while (!isUnique && attempts < 50) {
+      // Retries up to 15 times, but with "Smart Jump" it should fix in 2 tries
+      while (!isUnique && attempts < 15) {
+        // 1. Get next number from Sequence
         const seq = await tx.voucherSequence.upsert({
           where: { companyId_voucherType: { companyId, voucherType: type } },
           update: { lastNo: { increment: 1 } },
@@ -408,6 +400,7 @@ export async function createVoucher(
         });
         nextNo = seq.lastNo;
 
+        // 2. Check if this number is already used in the Table
         const existing = await model.findFirst({
           where: {
             companyId,
@@ -418,11 +411,42 @@ export async function createVoucher(
           },
         });
 
-        if (!existing) isUnique = true;
-        else attempts++;
+        if (!existing) {
+          isUnique = true;
+        } else {
+          // 3. COLLISION DETECTED: Sequence is lagging behind actual data.
+          // Auto-fix: Find the REAL highest ID in the database and jump sequence there.
+          console.warn(
+            `[Voucher Fix] Collision on #${nextNo}. Attempting auto-heal...`
+          );
+
+          const lastRecord = await model.findFirst({
+            where: { companyId },
+            orderBy: { id: "desc" }, // Find latest entry
+            select: { voucherNo: true },
+          });
+
+          if (lastRecord) {
+            const realMax = parseInt(lastRecord.voucherNo.toString());
+            if (!isNaN(realMax) && realMax >= nextNo) {
+              // Force update Sequence to the Real Max
+              // The NEXT loop iteration will increment this +1, landing on a free spot
+              await tx.voucherSequence.update({
+                where: {
+                  companyId_voucherType: { companyId, voucherType: type },
+                },
+                data: { lastNo: realMax },
+              });
+            }
+          }
+          attempts++;
+        }
       }
 
-      if (!isUnique) throw new Error("Failed to generate voucher number.");
+      if (!isUnique)
+        throw new Error(
+          `Failed to generate unique voucher number after ${attempts} attempts. Please contact support.`
+        );
 
       // Create Object
       const voucherData: any = {
@@ -435,8 +459,6 @@ export async function createVoucher(
         totalAmount,
         createdById: user.id,
         status: isAdmin ? "APPROVED" : "PENDING",
-
-        // ✅ FORCE PARSE INT to fix Cloud DB issues
         ledgerEntries: {
           create: ledgerData.map((e) => ({
             ledgerId: parseInt(e.ledgerId.toString()),
@@ -477,16 +499,14 @@ export async function createVoucher(
       message: isAdmin ? "Authorized" : "Pending",
     };
   } catch (error: any) {
-    // ✅ IMPROVED ERROR LOGGING FOR CLOUD DEBUGGING
-    console.error("❌ CLOUD CREATE VOUCHER ERROR:", {
-      message: error.message,
+    console.error("Cloud Create Voucher Error:", {
+      msg: error.message,
       stack: error.stack,
       code: error.code,
     });
-
     return {
       success: false,
-      error: error.message || "Failed to create voucher",
+      error: `System Error: ${error.message || "Failed to create voucher"}`,
     };
   }
 }
