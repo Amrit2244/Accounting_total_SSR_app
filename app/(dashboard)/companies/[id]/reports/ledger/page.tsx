@@ -133,10 +133,11 @@ export default async function LedgerReportPage({
       [vKey]: {
         include: {
           ledgerEntries: { include: { ledger: { select: { name: true } } } },
+          // ✅ FIX: Ensure inventoryEntries are included to calculate Qty
           inventoryEntries: {
             include: { stockItem: { select: { name: true } } },
           },
-          verifiedBy: { select: { name: true, role: true } }, // NEW: Include verifier info
+          verifiedBy: { select: { name: true, role: true } },
         },
       },
     });
@@ -192,6 +193,19 @@ export default async function LedgerReportPage({
         voucher.verifiedBy?.role === "ADMIN" &&
         voucher.createdById === voucher.verifiedById;
 
+      // ✅ FIX: Calculate Total Quantity for this Transaction
+      const qty =
+        voucher.inventoryEntries?.reduce(
+          (sum: number, item: any) => sum + (item.quantity || 0),
+          0
+        ) || 0;
+
+      // Optional: Get first item name for display if needed (e.g. "PLANT + 2 others")
+      const firstItem = voucher.inventoryEntries?.[0]?.stockItem?.name;
+      const itemCount = voucher.inventoryEntries?.length || 0;
+      const itemDisplay =
+        itemCount > 1 ? `${firstItem} (+${itemCount - 1})` : firstItem || "";
+
       return {
         id: entry.id,
         date: voucher.date,
@@ -205,6 +219,8 @@ export default async function LedgerReportPage({
         credit: entry.amount > 0 ? entry.amount : 0,
         amount: entry.amount,
         voucherId: voucher.id,
+        quantity: qty, // ✅ Passed to Table
+        itemName: itemDisplay, // ✅ Passed to Table
       };
     };
 
@@ -227,7 +243,7 @@ export default async function LedgerReportPage({
       running += t.amount;
       periodDebit += t.debit;
       periodCredit += t.credit;
-      periodQty += t.quantity || 0;
+      periodQty += t.quantity || 0; // ✅ Summing up for stats
       return { ...t, balance: running };
     });
     closingBalance = running;
@@ -377,7 +393,7 @@ export default async function LedgerReportPage({
   );
 }
 
-// ... StatCard component remains identical to your provided code ...
+// ... StatCard component (unchanged) ...
 function StatCard({
   label,
   amount,
