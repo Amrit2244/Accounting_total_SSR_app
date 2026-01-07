@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef, useMemo } from "react";
 import {
   Calendar,
   Search,
@@ -69,13 +69,21 @@ export default function LedgerFilters({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [selectedId, ledgers, searchQuery]);
 
-  // Filter Ledgers Logic
-  const filteredLedgers =
-    searchQuery === ""
-      ? ledgers
-      : ledgers.filter((ledger) =>
-          ledger.name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+  // ✅ UPDATED: Filter Ledgers Logic (Space-Insensitive)
+  const filteredLedgers = useMemo(() => {
+    if (!searchQuery) return ledgers;
+
+    // 1. Normalize Query: Lowercase + Remove all spaces
+    const normalizedQuery = searchQuery.toLowerCase().replace(/\s+/g, "");
+
+    return ledgers.filter((ledger) => {
+      // 2. Normalize Data: Lowercase + Remove all spaces
+      const normalizedName = ledger.name.toLowerCase().replace(/\s+/g, "");
+
+      // 3. Check for inclusion
+      return normalizedName.includes(normalizedQuery);
+    });
+  }, [ledgers, searchQuery]);
 
   // Apply Filters to URL
   const applyFilters = (newLedgerId?: number | null) => {

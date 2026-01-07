@@ -11,11 +11,10 @@ import {
   Loader2,
   Paperclip,
   Clock,
-  AlertTriangle, // Used for error display
+  AlertTriangle,
   ChevronDown,
   ShieldCheck,
   Database,
-  X, // Used for closing error
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -49,10 +48,20 @@ const SearchableRowLedgerSelect = ({
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // ✅ UPDATED: SPACE-INSENSITIVE FILTER LOGIC
   const filteredOptions = useMemo(() => {
     if (!query) return ledgers.slice(0, 50);
+
+    // 1. Remove all spaces from the search query and make it lowercase
+    const normalizedQuery = query.toLowerCase().replace(/\s+/g, "");
+
     return ledgers
-      .filter((l: any) => l.name.toLowerCase().includes(query.toLowerCase()))
+      .filter((l: any) => {
+        // 2. Remove all spaces from the Ledger Name and make it lowercase
+        const normalizedName = l.name.toLowerCase().replace(/\s+/g, "");
+        // 3. Compare cleaned strings
+        return normalizedName.includes(normalizedQuery);
+      })
       .slice(0, 50);
   }, [ledgers, query]);
 
@@ -113,7 +122,7 @@ const SearchableRowLedgerSelect = ({
           <div className="max-h-60 overflow-y-auto custom-scrollbar">
             {ledgers.length === 0 ? (
               <div className="p-4 text-center text-slate-400 text-[10px] italic flex items-center justify-center gap-2">
-                <Database size={14} /> Loading database...
+                <Database size={14} /> No applicable ledgers
               </div>
             ) : filteredOptions.length > 0 ? (
               filteredOptions.map((l: any) => (
@@ -160,18 +169,51 @@ export default function VoucherForm({
     initialState
   );
 
+  // --- FILTER LOGIC ---
+  const { cashBankLedgers, otherLedgers } = useMemo(() => {
+    const cashBank: any[] = [];
+    const others: any[] = [];
+
+    ledgers.forEach((l: any) => {
+      const g = l.group?.name?.toLowerCase() || "";
+      if (g.includes("cash") || g.includes("bank")) {
+        cashBank.push(l);
+      } else {
+        others.push(l);
+      }
+    });
+
+    return { cashBankLedgers: cashBank, otherLedgers: others };
+  }, [ledgers]);
+
+  const getLedgerOptionsForRow = (rowType: "Dr" | "Cr") => {
+    switch (defaultType?.toUpperCase()) {
+      case "CONTRA":
+        return cashBankLedgers;
+      case "JOURNAL":
+        return otherLedgers;
+      case "PAYMENT":
+        return rowType === "Dr" ? otherLedgers : cashBankLedgers;
+      case "RECEIPT":
+        return rowType === "Dr" ? cashBankLedgers : otherLedgers;
+      default:
+        return ledgers;
+    }
+  };
+
+  // --- INITIAL STATE LOGIC ---
   const [rows, setRows] = useState(
-    defaultType === "RECEIPT"
+    defaultType?.toUpperCase() === "RECEIPT"
       ? [
           {
             ledgerId: "",
-            type: "Cr" as const,
+            type: "Cr" as const, // Receipt: Cr (Giver) first
             amount: "",
             ledgerSearchTerm: "",
           },
           {
             ledgerId: "",
-            type: "Dr" as const,
+            type: "Dr" as const, // Receipt: Dr (Receiver) second
             amount: "",
             ledgerSearchTerm: "",
           },
@@ -179,13 +221,13 @@ export default function VoucherForm({
       : [
           {
             ledgerId: "",
-            type: "Dr" as const,
+            type: "Dr" as const, // Others: Dr first
             amount: "",
             ledgerSearchTerm: "",
           },
           {
             ledgerId: "",
-            type: "Cr" as const,
+            type: "Cr" as const, // Others: Cr second
             amount: "",
             ledgerSearchTerm: "",
           },
@@ -195,7 +237,6 @@ export default function VoucherForm({
   const updateRow = (idx: number, field: string, value: string) => {
     const n: any = [...rows];
     n[idx][field] = value;
-    // Auto-balance if only two rows exist
     if (field === "amount" && idx === 0 && rows.length === 2)
       n[1].amount = value;
     setRows(n);
@@ -321,7 +362,6 @@ export default function VoucherForm({
         )}
       />
 
-      {/* ✅ NEW: ERROR DISPLAY BLOCK */}
       {state?.error && (
         <div className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
           <div className="p-2 bg-rose-100 rounded-full text-rose-600 mt-0.5 shrink-0">
@@ -400,7 +440,7 @@ export default function VoucherForm({
                 <SearchableRowLedgerSelect
                   rowIndex={idx}
                   row={row}
-                  ledgers={ledgers}
+                  ledgers={getLedgerOptionsForRow(row.type)}
                   updateRow={updateRow}
                 />
               </div>

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
-// --- TYPES (Unchanged) ---
+// --- TYPES ---
 interface FormState {
   success: boolean;
   error?: string;
@@ -66,7 +66,7 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 2,
   });
 
-// --- HELPER: SEARCHABLE SELECT (Unchanged) ---
+// --- HELPER: SEARCHABLE SELECT ---
 const SearchableLedgerSelect = ({
   label,
   name,
@@ -87,16 +87,25 @@ const SearchableLedgerSelect = ({
     return found ? found.name : "";
   }, [selectedId, options]);
 
+  // ✅ UPDATED: SPACE-INSENSITIVE FILTER LOGIC
   const filtered = useMemo(() => {
     if (!options) return [];
     if (!query) return options.slice(0, 100);
-    const lowercaseQuery = query.toLowerCase();
+
+    // 1. Normalize Query: Lowercase + Remove all spaces
+    const normalizedQuery = query.toLowerCase().replace(/\s+/g, "");
+
     return options
-      .filter(
-        (o: any) =>
-          (o.name || "").toLowerCase().includes(lowercaseQuery) ||
-          (o.group?.name || "").toLowerCase().includes(lowercaseQuery)
-      )
+      .filter((o: any) => {
+        // 2. Normalize Data: Lowercase + Remove all spaces
+        const name = (o.name || "").toLowerCase().replace(/\s+/g, "");
+        const group = (o.group?.name || "").toLowerCase().replace(/\s+/g, "");
+
+        // 3. Match
+        return (
+          name.includes(normalizedQuery) || group.includes(normalizedQuery)
+        );
+      })
       .slice(0, 100);
   }, [query, options]);
 
@@ -250,13 +259,12 @@ export default function SalesPurchaseForm({
     { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
 
-  // ✅ 1. PARTY LEDGER FILTER (Kept exactly as requested)
+  // ✅ 1. PARTY LEDGER FILTER
   const partyLedgerOptions = useMemo(() => {
     if (!ledgers || ledgers.length === 0) return [];
 
     const validGroups = ["debtor", "creditor", "cash", "bank"];
 
-    // Include Sale/Purchase A/c in Party list for Cash Sales scenarios
     if (type === "SALES") validGroups.push("sale");
     else if (type === "PURCHASE") validGroups.push("purchase");
 
@@ -268,7 +276,7 @@ export default function SalesPurchaseForm({
     return filtered.length > 0 ? filtered : ledgers;
   }, [ledgers, type]);
 
-  // ✅ 2. SALES/PURCHASE LEDGER FILTER (STRICT FIX)
+  // ✅ 2. SALES/PURCHASE LEDGER FILTER (STRICT)
   const accountLedgerOptions = useMemo(() => {
     if (!ledgers || ledgers.length === 0) return [];
 
@@ -276,15 +284,12 @@ export default function SalesPurchaseForm({
       const g = l.group?.name?.toLowerCase() || "";
 
       if (type === "SALES") {
-        // STRICT: Only groups containing "sales account" or exact "sales"
-        // This avoids "Cost of Sales" (Expense) or other loose matches.
         return (
           g.includes("sales account") ||
           g.includes("sale account") ||
           g === "sales"
         );
       } else if (type === "PURCHASE") {
-        // STRICT: Only groups containing "purchase account" or exact "purchases"
         return (
           g.includes("purchase account") ||
           g.includes("purchase account") ||
@@ -295,7 +300,6 @@ export default function SalesPurchaseForm({
       return true;
     });
 
-    // Fallback: If strict filter returns nothing, show all to avoid blocking user
     return filtered.length > 0 ? filtered : ledgers;
   }, [ledgers, type]);
 
@@ -357,6 +361,7 @@ export default function SalesPurchaseForm({
     if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
   };
 
+  // Totals
   const totalBaseAmount = rows.reduce(
     (sum, r) => sum + (parseFloat(r.amount.toString()) || 0),
     0
