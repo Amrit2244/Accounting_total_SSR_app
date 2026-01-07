@@ -4,7 +4,8 @@ import { Plus, ArrowLeft, CreditCard, ListFilter } from "lucide-react";
 import { format } from "date-fns";
 import { getVouchers } from "@/app/actions/voucher";
 import QuickVerify from "@/components/QuickVerify";
-import DateRangeFilter from "@/components/DateRangeFilter";
+// ✅ IMPORT THE NEW COMPONENT
+import TallyDateRangeFilter from "@/components/TallyDateRangeFilter";
 import VoucherSearch from "@/components/VoucherSearch";
 import VoucherListClient from "@/components/VoucherListClient";
 import VoucherTypeFilter from "@/components/VoucherTypeFilter";
@@ -59,7 +60,6 @@ export default async function VoucherListPage({
     endDate = new Date(p.to);
   } else {
     // B. No filter: Find the LATEST transaction date in the DB
-    // We check all 6 tables to find the most recent date
     const [s, pu, pa, r, c, j] = await Promise.all([
       prisma.salesVoucher.findFirst({
         where: { companyId },
@@ -93,27 +93,23 @@ export default async function VoucherListPage({
       }),
     ]);
 
-    // Collect valid dates
     const allDates = [s?.date, pu?.date, pa?.date, r?.date, c?.date, j?.date]
       .filter((d): d is Date => !!d)
       .map((d) => d.getTime());
 
     if (allDates.length > 0) {
-      // Found data: Use the maximum (latest) date
       const maxTimestamp = Math.max(...allDates);
       const maxDateStr = new Date(maxTimestamp).toISOString().split("T")[0];
       startDate = new Date(maxDateStr);
       endDate = new Date(maxDateStr);
-      isLatestData = true; // Flag to show "Latest" badge
+      isLatestData = true;
     } else {
-      // Database empty: Default to Today
       const todayStr = new Date().toISOString().split("T")[0];
       startDate = new Date(todayStr);
       endDate = new Date(todayStr);
     }
   }
 
-  // Ensure end date covers the full day
   endDate.setHours(23, 59, 59, 999);
 
   let vouchers = await getVouchers(companyId, startDate, endDate, p.q);
@@ -126,8 +122,6 @@ export default async function VoucherListPage({
   }
 
   const baseUrl = `/companies/${id}/vouchers`;
-
-  // Calculate Daybook Total (Debit Side Only)
   const totalDebit = vouchers.reduce(
     (sum: number, v: any) => sum + (v.totalAmount || 0),
     0
@@ -159,14 +153,11 @@ export default async function VoucherListPage({
               </h1>
               <div className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
                 <span>{format(startDate, "dd MMM yyyy")}</span>
-
-                {/* Show "Latest" badge if auto-selected */}
                 {isLatestData && (
                   <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold text-[9px] uppercase tracking-wider">
                     Latest
                   </span>
                 )}
-
                 <span>•</span>
                 <span>{vouchers.length} Entries</span>
               </div>
@@ -175,7 +166,8 @@ export default async function VoucherListPage({
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
-              <DateRangeFilter />
+              {/* ✅ UPDATED FILTER COMPONENT */}
+              <TallyDateRangeFilter />
               <div className="w-px h-4 bg-slate-200 mx-1" />
               <VoucherTypeFilter />
             </div>
