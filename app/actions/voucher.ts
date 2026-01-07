@@ -310,7 +310,7 @@ export async function getVouchers(
   }
 }
 
-// --- CREATE VOUCHER (WITH AUTO-HEALING SEQUENCE) ---
+// --- CREATE VOUCHER (BRUTE FORCE RECOVERY) ---
 export async function createVoucher(
   prevState: any,
   formData: FormData
@@ -371,7 +371,7 @@ export async function createVoucher(
       };
     }
 
-    // --- TRANSACTION WITH SMART SEQUENCE RECOVERY ---
+    // --- TRANSACTION WITH BRUTE FORCE RECOVERY ---
     const result = await prisma.$transaction(async (tx) => {
       const tableMap: any = {
         PAYMENT: tx.paymentVoucher,
@@ -390,8 +390,8 @@ export async function createVoucher(
       let isUnique = false;
       let attempts = 0;
 
-      // Retries up to 15 times, but with "Smart Jump" it should fix in 2 tries
-      while (!isUnique && attempts < 15) {
+      // Retries up to 10 times
+      while (!isUnique && attempts < 10) {
         // 1. Get next number from Sequence
         const seq = await tx.voucherSequence.upsert({
           where: { companyId_voucherType: { companyId, voucherType: type } },
@@ -414,30 +414,38 @@ export async function createVoucher(
         if (!existing) {
           isUnique = true;
         } else {
-          // 3. COLLISION DETECTED: Sequence is lagging behind actual data.
-          // Auto-fix: Find the REAL highest ID in the database and jump sequence there.
+          // 3. COLLISION DETECTED: BRUTE FORCE SCAN
+          // We fetch ALL voucher numbers to find the TRUE max, ignoring text sorting issues.
           console.warn(
-            `[Voucher Fix] Collision on #${nextNo}. Attempting auto-heal...`
+            `[Voucher Fix] Collision on #${nextNo}. Scanning all vouchers...`
           );
 
-          const lastRecord = await model.findFirst({
+          // Lightweight query: only fetch voucherNo
+          const allVouchers = await model.findMany({
             where: { companyId },
-            orderBy: { id: "desc" }, // Find latest entry
             select: { voucherNo: true },
           });
 
-          if (lastRecord) {
-            const realMax = parseInt(lastRecord.voucherNo.toString());
-            if (!isNaN(realMax) && realMax >= nextNo) {
-              // Force update Sequence to the Real Max
-              // The NEXT loop iteration will increment this +1, landing on a free spot
-              await tx.voucherSequence.update({
-                where: {
-                  companyId_voucherType: { companyId, voucherType: type },
-                },
-                data: { lastNo: realMax },
-              });
+          // Calculate Max Integer safely in JS
+          let maxVal = 0;
+          for (const v of allVouchers) {
+            const num = parseInt(String(v.voucherNo).replace(/\D/g, "")); // Strip non-digits
+            if (!isNaN(num) && num > maxVal) {
+              maxVal = num;
             }
+          }
+
+          // If the Sequence table is behind the real data, jump it forward
+          if (maxVal >= nextNo) {
+            console.warn(
+              `[Voucher Fix] Jumping sequence from ${nextNo} to ${maxVal}`
+            );
+            await tx.voucherSequence.update({
+              where: {
+                companyId_voucherType: { companyId, voucherType: type },
+              },
+              data: { lastNo: maxVal }, // Next loop iteration will do +1, so it becomes maxVal + 1
+            });
           }
           attempts++;
         }
@@ -445,7 +453,7 @@ export async function createVoucher(
 
       if (!isUnique)
         throw new Error(
-          `Failed to generate unique voucher number after ${attempts} attempts. Please contact support.`
+          `Failed to generate unique voucher number after ${attempts} attempts. System is congested.`
         );
 
       // Create Object
