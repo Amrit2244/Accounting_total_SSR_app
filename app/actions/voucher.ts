@@ -61,9 +61,7 @@ async function generateUniqueTXID(): Promise<string> {
 
     const isTaken = results.some((r) => r !== null);
 
-    if (!isTaken) {
-      return candidate;
-    }
+    if (!isTaken) return candidate;
 
     attempts++;
     if (attempts > 10) digits++;
@@ -100,22 +98,34 @@ export async function updateVoucher(
     const user = await getCurrentUser();
     if (!user) return { success: false, error: "Unauthorized" };
 
+    // ✅ CHECK USERNAME STRICTLY
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { username: true },
+    });
+
+    // Auto-approve ONLY if username is exactly "admin"
+    const isSystemAdmin = dbUser?.username === "admin";
+
     const t = type.toUpperCase();
     const newTxid = await generateUniqueTXID();
-    const isAdmin = user.role === "ADMIN";
 
     const commonData: any = {
       date: new Date(data.date),
       narration: data.narration,
       totalAmount: parseFloat(data.totalAmount),
       transactionCode: newTxid,
-      status: isAdmin ? "APPROVED" : "PENDING",
+      status: isSystemAdmin ? "APPROVED" : "PENDING", // ✅ Changed Logic
       updatedAt: new Date(),
     };
 
-    if (isAdmin) {
+    if (isSystemAdmin) {
       commonData.verifiedById = user.id;
       commonData.verifiedAt = new Date();
+    } else {
+      // Reset verification if edited by non-admin user
+      commonData.verifiedById = null;
+      commonData.verifiedAt = null;
     }
 
     await prisma.$transaction(async (tx) => {
@@ -146,7 +156,7 @@ export async function updateVoucher(
     revalidatePath(`/companies/${companyId}/vouchers`);
     return {
       success: true,
-      message: isAdmin ? "Updated and Authorized" : "Updated and Pending",
+      message: isSystemAdmin ? "Updated and Authorized" : "Updated and Pending",
       txid: newTxid,
     };
   } catch (error: any) {
@@ -254,8 +264,8 @@ export async function getVouchers(
       const joinNames = (arr: any[]) =>
         arr.map((e) => e.ledger?.name || "Unknown").join(" & ");
 
-      let drLabel = "—";
-      let crLabel = "—";
+      let drLabel = "—",
+        crLabel = "—";
 
       if (type === "SALES") {
         drLabel = joinNames(drEntries) || v.partyName;
@@ -310,7 +320,7 @@ export async function getVouchers(
   }
 }
 
-// --- CREATE VOUCHER (BRUTE FORCE RECOVERY) ---
+// --- CREATE VOUCHER (Username Auto-Approve + Brute Force Recovery) ---
 export async function createVoucher(
   prevState: any,
   formData: FormData
@@ -318,6 +328,15 @@ export async function createVoucher(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, error: "Unauthorized access." };
+
+    // ✅ 1. CHECK USERNAME STRICTLY FOR AUTO-APPROVAL
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { username: true },
+    });
+
+    // Auto-approve ONLY if username is exactly "admin"
+    const isSystemAdmin = dbUser?.username === "admin";
 
     const isAdmin = user.role === "ADMIN";
     const companyId = parseInt(formData.get("companyId") as string);
@@ -331,7 +350,7 @@ export async function createVoucher(
     let ledgerData: any[] = [];
     let inventoryData: any[] = [];
 
-    // CASE A: SALES / PURCHASE
+    // Parse Form Data
     if (type === "SALES" || type === "PURCHASE") {
       const partyId = parseInt(formData.get("partyLedgerId") as string);
       const accountId = parseInt(
@@ -342,9 +361,9 @@ export async function createVoucher(
         : null;
       const totalVal = parseFloat(formData.get("totalVal") as string) || 0;
       const taxVal = parseFloat(formData.get("taxVal") as string) || 0;
-
-      const rawInventory = formData.get("inventoryRows") as string;
-      inventoryData = JSON.parse(rawInventory || "[]");
+      inventoryData = JSON.parse(
+        (formData.get("inventoryRows") as string) || "[]"
+      );
 
       if (type === "SALES") {
         ledgerData.push({ ledgerId: partyId, amount: -Math.abs(totalAmount) });
@@ -357,11 +376,10 @@ export async function createVoucher(
         if (taxId && taxVal > 0)
           ledgerData.push({ ledgerId: taxId, amount: -Math.abs(taxVal) });
       }
-    }
-    // CASE B: OTHER VOUCHERS
-    else {
-      const rawLedgers = formData.get("ledgerEntries") as string;
-      ledgerData = JSON.parse(rawLedgers || "[]");
+    } else {
+      ledgerData = JSON.parse(
+        (formData.get("ledgerEntries") as string) || "[]"
+      );
     }
 
     if (ledgerData.length < 2) {
@@ -371,7 +389,7 @@ export async function createVoucher(
       };
     }
 
-    // --- TRANSACTION WITH BRUTE FORCE RECOVERY ---
+    // --- SMART TRANSACTION (Brute Force Recovery) ---
     const result = await prisma.$transaction(async (tx) => {
       const tableMap: any = {
         PAYMENT: tx.paymentVoucher,
@@ -390,9 +408,8 @@ export async function createVoucher(
       let isUnique = false;
       let attempts = 0;
 
-      // Retries up to 10 times
       while (!isUnique && attempts < 10) {
-        // 1. Get next number from Sequence
+        // Get next sequence
         const seq = await tx.voucherSequence.upsert({
           where: { companyId_voucherType: { companyId, voucherType: type } },
           update: { lastNo: { increment: 1 } },
@@ -400,7 +417,7 @@ export async function createVoucher(
         });
         nextNo = seq.lastNo;
 
-        // 2. Check if this number is already used in the Table
+        // Check collision
         const existing = await model.findFirst({
           where: {
             companyId,
@@ -414,37 +431,25 @@ export async function createVoucher(
         if (!existing) {
           isUnique = true;
         } else {
-          // 3. COLLISION DETECTED: BRUTE FORCE SCAN
-          // We fetch ALL voucher numbers to find the TRUE max, ignoring text sorting issues.
-          console.warn(
-            `[Voucher Fix] Collision on #${nextNo}. Scanning all vouchers...`
-          );
-
-          // Lightweight query: only fetch voucherNo
+          // Collision Recovery: Scan for true max
+          console.warn(`[Voucher Fix] Collision on #${nextNo}. Scanning...`);
           const allVouchers = await model.findMany({
             where: { companyId },
             select: { voucherNo: true },
           });
 
-          // Calculate Max Integer safely in JS
           let maxVal = 0;
           for (const v of allVouchers) {
-            const num = parseInt(String(v.voucherNo).replace(/\D/g, "")); // Strip non-digits
-            if (!isNaN(num) && num > maxVal) {
-              maxVal = num;
-            }
+            const num = parseInt(String(v.voucherNo).replace(/\D/g, ""));
+            if (!isNaN(num) && num > maxVal) maxVal = num;
           }
 
-          // If the Sequence table is behind the real data, jump it forward
           if (maxVal >= nextNo) {
-            console.warn(
-              `[Voucher Fix] Jumping sequence from ${nextNo} to ${maxVal}`
-            );
             await tx.voucherSequence.update({
               where: {
                 companyId_voucherType: { companyId, voucherType: type },
               },
-              data: { lastNo: maxVal }, // Next loop iteration will do +1, so it becomes maxVal + 1
+              data: { lastNo: maxVal },
             });
           }
           attempts++;
@@ -453,10 +458,10 @@ export async function createVoucher(
 
       if (!isUnique)
         throw new Error(
-          `Failed to generate unique voucher number after ${attempts} attempts. System is congested.`
+          `Failed to generate unique voucher number after ${attempts} attempts.`
         );
 
-      // Create Object
+      // ✅ 2. APPLY STATUS BASED ON USERNAME
       const voucherData: any = {
         companyId,
         voucherNo:
@@ -466,7 +471,7 @@ export async function createVoucher(
         narration,
         totalAmount,
         createdById: user.id,
-        status: isAdmin ? "APPROVED" : "PENDING",
+        status: isSystemAdmin ? "APPROVED" : "PENDING", // Status Logic
         ledgerEntries: {
           create: ledgerData.map((e) => ({
             ledgerId: parseInt(e.ledgerId.toString()),
@@ -489,7 +494,8 @@ export async function createVoucher(
         };
       }
 
-      if (isAdmin) {
+      // ✅ 3. AUTO-VERIFY ONLY FOR ADMIN USER
+      if (isSystemAdmin) {
         voucherData.verifiedById = user.id;
         voucherData.verifiedAt = new Date();
       }
@@ -504,14 +510,10 @@ export async function createVoucher(
       id: result.id,
       code: result.voucherNo.toString(),
       txid: txid,
-      message: isAdmin ? "Authorized" : "Pending",
+      message: isSystemAdmin ? "Authorized" : "Pending",
     };
   } catch (error: any) {
-    console.error("Cloud Create Voucher Error:", {
-      msg: error.message,
-      stack: error.stack,
-      code: error.code,
-    });
+    console.error("Cloud Error:", error);
     return {
       success: false,
       error: `System Error: ${error.message || "Failed to create voucher"}`,
@@ -519,11 +521,10 @@ export async function createVoucher(
   }
 }
 
-// ... delete and getByCode (unchanged) ...
+// ... delete and getByCode (INCLUDED THIS TIME) ...
 export async function deleteBulkVouchers(
-  items: { id: number; type: string }[],
-  companyId?: number
-): Promise<State> {
+  items: { id: number; type: string }[]
+) {
   try {
     for (const item of items) {
       const tableMap: any = {
@@ -539,9 +540,9 @@ export async function deleteBulkVouchers(
       });
     }
     revalidatePath("/");
-    return { success: true, message: "Vouchers deleted" };
+    return { success: true, message: "Deleted" };
   } catch (e) {
-    return { success: false, error: "Failed to delete" };
+    return { success: false, error: "Failed" };
   }
 }
 

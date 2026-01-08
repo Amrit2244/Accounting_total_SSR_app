@@ -69,12 +69,14 @@ export default function VoucherTable({
     });
 
     startTransition(async () => {
-      const res = await deleteBulkVouchers(itemsToDelete, companyId);
+      // ✅ FIX: Removed 'companyId' argument. The action only takes the items array.
+      const res = await deleteBulkVouchers(itemsToDelete);
+
       if (res.success) {
         setSelectedIds([]);
         router.refresh();
       } else {
-        alert("Error: " + (res.message || "Could not delete"));
+        alert("Error: " + (res.error || "Could not delete"));
       }
     });
   };

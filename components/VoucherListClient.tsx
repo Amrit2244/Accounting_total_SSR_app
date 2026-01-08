@@ -112,7 +112,8 @@ export default function VoucherListClient({
     if (!confirm(`Permanently delete ${selectedItems.length} vouchers?`))
       return;
     startTransition(async () => {
-      const result = await deleteBulkVouchers(selectedItems, companyId);
+      // ✅ FIX: Removed second argument (companyId) as per server action definition
+      const result = await deleteBulkVouchers(selectedItems);
       if (result.success) {
         setSelectedItems([]);
         router.refresh();
