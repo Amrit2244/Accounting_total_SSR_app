@@ -19,6 +19,67 @@ const secretKey =
   process.env.SESSION_SECRET || "your-super-secret-key-change-this";
 const encodedKey = new TextEncoder().encode(secretKey);
 
+/**
+ * HELPER: Deep Serialize
+ * Converts Dates to Strings and BigInt/Decimals to Numbers
+ * to prevent Next.js "Plain Object" errors.
+ */
+const serialize = (data: any): any => {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) => {
+      // Handle Decimals
+      if (typeof value === "object" && value !== null) {
+        if (value.constructor?.name === "Decimal") {
+          return parseFloat(value.toString());
+        }
+      }
+      return value;
+    })
+  );
+};
+
+/**
+ * CRITICAL FIX: Data Transformer
+ * 1. Renames 'ledgerEntries' -> 'entries' (for useFieldArray).
+ * 2. Converts ALL IDs to Strings (for Select/Dropdown matching).
+ * 3. Formats Date for input fields.
+ */
+const transformVoucherForForm = (rawVoucher: any) => {
+  if (!rawVoucher) return null;
+  const serialized = serialize(rawVoucher);
+
+  // Fix Date (YYYY-MM-DD)
+  const dateStr = new Date(serialized.date).toISOString().split("T")[0];
+
+  // Map Entries: Ensure ledgerId is STRING and Dr/Cr are separate fields
+  const formattedEntries = (serialized.ledgerEntries || []).map(
+    (entry: any) => ({
+      ...entry,
+      ledgerId: entry.ledgerId.toString(), // <--- CRITICAL: Must be string to match options
+      debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
+      credit: entry.amount > 0 ? entry.amount : 0,
+    })
+  );
+
+  return {
+    ...serialized,
+    date: dateStr,
+    entries: formattedEntries, // The form looks for 'entries'
+    ledgerEntries: formattedEntries, // Keep fallback
+  };
+};
+
+/**
+ * CRITICAL FIX: Options Transformer
+ * Converts the list of Ledgers so their IDs are also Strings.
+ */
+const transformOptions = (items: any[]) => {
+  return items.map((item) => ({
+    ...item,
+    id: item.id.toString(), // <--- CRITICAL: Options must also be strings
+  }));
+};
+
 async function getUserRole(): Promise<string> {
   try {
     const cookieStore = await cookies();
@@ -31,16 +92,15 @@ async function getUserRole(): Promise<string> {
   }
 }
 
-/**
- * SERVER ACTION: Fetches voucher with all sub-tables
- */
 async function getFullVoucherData(companyId: number, type: string, id: number) {
   const t = type.toUpperCase();
   const where = { id, companyId };
 
+  // Include standard relations
   const standardInclude = {
     ledgerEntries: { include: { ledger: { include: { group: true } } } },
     createdBy: { select: { name: true } },
+    verifiedBy: { select: { name: true } },
   };
 
   const inventoryInclude = {
@@ -98,13 +158,17 @@ export default async function EditVoucherPage({
   const vId = parseInt(voucherId);
   const vType = type.toUpperCase();
 
-  const voucher: any = await getFullVoucherData(companyId, vType, vId);
-  if (!voucher) return notFound();
+  // 1. Fetch Raw Data
+  const rawVoucher = await getFullVoucherData(companyId, vType, vId);
+  if (!rawVoucher) return notFound();
+
+  // 2. Transform Voucher Data (Entries -> String IDs)
+  const voucherFormValues = transformVoucherForForm(rawVoucher);
 
   const userRole = await getUserRole();
   const isAdmin = userRole === "ADMIN";
 
-  const [rawLedgers, items] = await Promise.all([
+  const [rawLedgers, rawItems] = await Promise.all([
     prisma.ledger.findMany({
       where: { companyId },
       include: { group: true },
@@ -116,10 +180,18 @@ export default async function EditVoucherPage({
     }),
   ]);
 
-  const ledgers = rawLedgers.map((ledger) => ({
-    ...ledger,
-    group: ledger.group || { name: "Uncategorized" },
-  }));
+  // 3. Transform Options Lists (IDs -> String)
+  // We use serialize() first to handle dates/decimals, then transformOptions for IDs
+  const ledgers = transformOptions(
+    serialize(
+      rawLedgers.map((l) => ({
+        ...l,
+        group: l.group || { name: "Uncategorized" },
+      }))
+    )
+  );
+
+  const items = transformOptions(serialize(rawItems));
 
   return (
     <div className="min-h-screen bg-slate-50/50 font-sans text-slate-900">
@@ -132,7 +204,7 @@ export default async function EditVoucherPage({
       />
 
       <div className="relative z-10 max-w-7xl mx-auto p-6 space-y-6">
-        {/* TOP NAVIGATION BAR */}
+        {/* HEADER */}
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-30">
           <div className="flex items-center gap-4">
             <Link
@@ -155,7 +227,7 @@ export default async function EditVoucherPage({
                 </Link>
                 <ChevronRight size={10} />
                 <span className="text-slate-900">
-                  Modify Transaction #{voucher.voucherNo}
+                  Modify Transaction #{voucherFormValues.voucherNo}
                 </span>
               </div>
             </div>
@@ -185,9 +257,8 @@ export default async function EditVoucherPage({
           </div>
         </div>
 
-        {/* MAIN FORM CONTAINER */}
+        {/* MAIN FORM */}
         <div className="bg-white border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden relative">
-          {/* DYNAMIC WARNING BANNER BASED ON ROLE */}
           {isAdmin ? (
             <div className="bg-emerald-50 border-b border-emerald-100 p-4 flex items-start gap-3">
               <div className="mt-0.5 p-1 bg-emerald-100 rounded-lg">
@@ -198,9 +269,7 @@ export default async function EditVoucherPage({
                   Instant Audit Update
                 </p>
                 <p className="text-[11px] text-emerald-700 font-medium leading-relaxed">
-                  As an Admin, your modifications will be{" "}
-                  <strong>auto-verified</strong>. Ledgers and reports will
-                  update immediately upon saving.
+                  As an Admin, your modifications will be auto-verified.
                 </p>
               </div>
             </div>
@@ -214,8 +283,7 @@ export default async function EditVoucherPage({
                   Approval Reset Required
                 </p>
                 <p className="text-[11px] text-red-700 font-medium leading-relaxed">
-                  Modifying this voucher will revoke its "Verified" status. It
-                  will return to the pending queue for re-approval by a checker.
+                  Modifying this voucher will revoke its "Verified" status.
                 </p>
               </div>
             </div>
@@ -224,33 +292,36 @@ export default async function EditVoucherPage({
           <div className="p-4">
             {["SALES", "PURCHASE"].includes(vType) ? (
               <SalesPurchaseEditForm
-                voucher={voucher}
+                voucher={voucherFormValues}
                 companyId={companyId}
                 type={vType}
-                ledgers={ledgers as any}
+                ledgers={ledgers}
                 items={items}
               />
             ) : (
               <VoucherEditForm
-                key={voucher.id}
-                voucher={{ ...voucher, type: vType }}
+                // The KEY ensures the form resets when the voucher changes
+                key={voucherFormValues.id}
+                voucher={{ ...voucherFormValues, type: vType }}
                 companyId={companyId}
-                ledgers={ledgers as any}
+                ledgers={ledgers}
               />
             )}
           </div>
         </div>
 
-        {/* FOOTER AUDIT INFO */}
+        {/* FOOTER */}
         <div className="flex justify-between items-center px-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
           <div className="flex gap-6">
-            <p>Original Creator: {voucher.createdBy?.name || "System"}</p>
+            <p>
+              Original Creator: {voucherFormValues.createdBy?.name || "System"}
+            </p>
             <p>
               Current Verifier:{" "}
-              {voucher.verifiedBy?.name ||
+              {voucherFormValues.verifiedBy?.name ||
                 (isAdmin ? "Auto-Verify" : "Pending")}
             </p>
-            <p>TXID: {voucher.transactionCode}</p>
+            <p>TXID: {voucherFormValues.transactionCode}</p>
           </div>
           <p>Secure-Kernel v1.2</p>
         </div>

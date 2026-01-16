@@ -25,9 +25,9 @@ export default function LedgerPrintTemplate({
   let runningBalance = openingBalance;
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-12 print:p-0 print:bg-white font-sans text-slate-900 overflow-visible">
-      {/* FLOATING ACTION TOOLBAR */}
-      <div className="fixed top-24 right-10 flex flex-col gap-5 no-print z-[999999]">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-12 print:p-0 print:bg-white font-sans text-slate-900 print:overflow-visible print:h-auto">
+      {/* FLOATING ACTION TOOLBAR - HIDDEN IN PRINT */}
+      <div className="fixed top-24 right-10 flex flex-col gap-5 print:hidden z-[999999]">
         <button
           onClick={() => window.print()}
           className="bg-indigo-600 hover:bg-indigo-700 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
@@ -64,13 +64,13 @@ export default function LedgerPrintTemplate({
       </div>
 
       {/* THE STATEMENT PAGE */}
-      <div className="max-w-[210mm] mx-auto bg-white border border-slate-200 shadow-2xl print:shadow-none print:border-none p-10 print:p-8 min-h-[297mm] flex flex-col overflow-visible relative">
+      <div className="max-w-[210mm] mx-auto bg-white border border-slate-200 shadow-2xl print:shadow-none print:border-none p-10 print:p-0 min-h-[297mm] print:min-h-0 print:h-auto flex flex-col print:block overflow-visible relative">
         {/* HEADER SECTION */}
         {showCompanyDetails ? (
           <div className="flex justify-between items-start border-b-4 border-slate-900 pb-8 mb-8">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-slate-900 text-white rounded-lg">
+                <div className="p-2 bg-slate-900 text-white rounded-lg print:border print:border-slate-900 print:text-slate-900 print:bg-white">
                   <Building2 size={28} />
                 </div>
                 <div>
@@ -90,7 +90,7 @@ export default function LedgerPrintTemplate({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-4xl font-black text-slate-100 uppercase tracking-tighter mb-4">
+              <div className="text-4xl font-black text-slate-100 print:text-slate-400 uppercase tracking-tighter mb-4">
                 Statement
               </div>
               <div className="text-sm font-black text-slate-900">
@@ -117,20 +117,20 @@ export default function LedgerPrintTemplate({
         )}
 
         {/* ACCOUNT INFO CARD */}
-        <div className="mb-10 p-6 rounded-2xl bg-slate-900 text-white flex justify-between items-center shadow-lg relative">
+        <div className="mb-10 p-6 rounded-2xl bg-slate-900 text-white print:bg-white print:text-slate-900 print:border-2 print:border-slate-900 flex justify-between items-center shadow-lg print:shadow-none relative">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
+            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 print:text-slate-500 mb-1">
               Statement Of Account
             </p>
             <h3 className="text-2xl font-black tracking-tight">
               {ledger.name}
             </h3>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/10 px-2 py-0.5 rounded mt-2 inline-block">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white/10 print:bg-slate-200 px-2 py-0.5 rounded mt-2 inline-block">
               Group: {ledger.group?.name}
             </span>
           </div>
-          <div className="text-right border-l border-white/10 pl-8">
-            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
+          <div className="text-right border-l border-white/10 print:border-slate-300 pl-8">
+            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 print:text-slate-500 mb-1">
               Generated On
             </p>
             <p className="text-xs font-bold font-mono">
@@ -145,7 +145,7 @@ export default function LedgerPrintTemplate({
         {/* DATA TABLE */}
         <div className="flex-1">
           <table className="w-full text-left border-collapse">
-            <thead>
+            <thead className="print:table-header-group">
               <tr className="border-b-2 border-slate-900 bg-slate-50">
                 <th className="py-4 px-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   Date
@@ -193,7 +193,8 @@ export default function LedgerPrintTemplate({
                 return (
                   <tr
                     key={t.id}
-                    className="hover:bg-slate-50 transition-colors"
+                    className="hover:bg-slate-50 transition-colors break-inside-avoid print:break-inside-avoid"
+                    style={{ breakInside: "avoid" }} // Ensure row doesn't split across pages
                   >
                     <td className="py-3 px-2 whitespace-nowrap font-medium text-slate-500">
                       {new Date(t.date).toLocaleDateString("en-IN", {
@@ -209,11 +210,9 @@ export default function LedgerPrintTemplate({
                       </span>
                     </td>
                     <td className="py-3 px-2">
-                      {/* FIX: Showing Account Name prominently */}
                       <div className="font-bold text-slate-800 uppercase tracking-tight">
                         {t.particulars}
                       </div>
-                      {/* FIX: Narration styling */}
                       {t.narration && (
                         <div className="text-[9px] text-slate-400 italic mt-0.5 leading-tight">
                           {t.narration}
@@ -237,7 +236,7 @@ export default function LedgerPrintTemplate({
         </div>
 
         {/* FOOTER SECTION */}
-        <div className="mt-12 pt-10 border-t-2 border-slate-100 flex justify-between items-end">
+        <div className="mt-12 pt-10 border-t-2 border-slate-100 flex justify-between items-end break-inside-avoid">
           <div className="text-[9px] font-black uppercase tracking-widest text-slate-300">
             <p>Report Generated By FinCore System</p>
             <p className="mt-1 font-mono">{new Date().getFullYear()}</p>

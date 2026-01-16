@@ -8,11 +8,14 @@ import {
   AlertCircle,
   ShieldCheck,
   CheckCircle2,
+  Plus,
+  Trash2,
+  Calendar,
 } from "lucide-react";
 import { updateVoucher } from "@/app/actions/voucher";
 
 interface LedgerEntry {
-  ledgerId: number;
+  ledgerId: string; // Changed to string to match Select inputs
   type: string;
   amount: number | string;
   tempId: number;
@@ -21,7 +24,7 @@ interface LedgerEntry {
 export default function VoucherEditForm({
   companyId,
   voucher,
-  ledgers,
+  ledgers, // Assumes [{id: "1", name: "Cash", ...}]
   isAdmin,
 }: any) {
   const router = useRouter();
@@ -32,36 +35,67 @@ export default function VoucherEditForm({
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // 1. Initialize Date (Handle ISO format for input type="date")
   const [date, setDate] = useState(
     voucher.date ? new Date(voucher.date).toISOString().split("T")[0] : ""
   );
+
   const [narration, setNarration] = useState(voucher.narration || "");
 
+  // 2. Initialize Entries (CRITICAL FIX for Dropdowns)
   const [entries, setEntries] = useState<LedgerEntry[]>(() => {
-    if (voucher.ledgerEntries && voucher.ledgerEntries.length > 0) {
-      return voucher.ledgerEntries.map((e: any) => ({
-        ledgerId: e.ledgerId,
+    // Prefer the 'entries' prop if my previous server fix is applied, else fallback
+    const sourceData = voucher.entries || voucher.ledgerEntries || [];
+
+    if (sourceData.length > 0) {
+      return sourceData.map((e: any) => ({
+        ledgerId: e.ledgerId.toString(), // FORCE STRING to match <select> options
         type: e.amount < 0 ? "Dr" : "Cr",
         amount: Math.abs(e.amount),
         tempId: Math.random(),
       }));
     }
-    return [];
+    // Default empty rows if no data
+    return [
+      { ledgerId: "", type: "Dr", amount: "", tempId: Math.random() },
+      { ledgerId: "", type: "Cr", amount: "", tempId: Math.random() },
+    ];
   });
 
-  const totalDr = entries
-    .filter((e: LedgerEntry) => e.type === "Dr")
-    .reduce(
-      (s: number, e: LedgerEntry) => s + (parseFloat(e.amount.toString()) || 0),
-      0
+  // Helper: Add new row
+  const addRow = () => {
+    setEntries([
+      ...entries,
+      { ledgerId: "", type: "Dr", amount: "", tempId: Math.random() },
+    ]);
+  };
+
+  // Helper: Remove row
+  const removeRow = (tempId: number) => {
+    if (entries.length > 2) {
+      setEntries(entries.filter((e) => e.tempId !== tempId));
+    }
+  };
+
+  // Helper: Update specific field in a row
+  const updateEntry = (
+    tempId: number,
+    field: keyof LedgerEntry,
+    value: any
+  ) => {
+    setEntries(
+      entries.map((e) => (e.tempId === tempId ? { ...e, [field]: value } : e))
     );
+  };
+
+  // Calculation Logic
+  const totalDr = entries
+    .filter((e) => e.type === "Dr")
+    .reduce((sum, e) => sum + (parseFloat(e.amount.toString()) || 0), 0);
 
   const totalCr = entries
-    .filter((e: LedgerEntry) => e.type === "Cr")
-    .reduce(
-      (s: number, e: LedgerEntry) => s + (parseFloat(e.amount.toString()) || 0),
-      0
-    );
+    .filter((e) => e.type === "Cr")
+    .reduce((sum, e) => sum + (parseFloat(e.amount.toString()) || 0), 0);
 
   const difference = Math.abs(totalDr - totalCr);
   const isBalanced = difference < 0.01 && totalDr > 0;
@@ -71,12 +105,19 @@ export default function VoucherEditForm({
     setErrorMsg("");
     setLoading(true);
 
+    // Validation: Check for empty fields
+    if (entries.some((e) => !e.ledgerId || !e.amount)) {
+      setErrorMsg("Please fill in all ledger and amount fields.");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
       date,
       narration,
       totalAmount: totalDr,
       ledgerEntries: entries.map((e) => ({
-        ledgerId: parseInt(e.ledgerId.toString()),
+        ledgerId: parseInt(e.ledgerId),
         amount:
           e.type === "Dr"
             ? -Math.abs(parseFloat(e.amount.toString()))
@@ -96,7 +137,6 @@ export default function VoucherEditForm({
         message: isAdmin
           ? "Modifications saved and auto-verified (Admin privilege)."
           : "Changes submitted for Checker verification.",
-        // ✅ FIX: Use 'as any' casting if type inference fails during build, or rely on correct State type
         txid: res.txid || "N/A",
       });
 
@@ -109,8 +149,6 @@ export default function VoucherEditForm({
       setLoading(false);
     }
   };
-
-  // ... (Render UI same as before) ...
 
   if (successData) {
     return (
@@ -148,15 +186,132 @@ export default function VoucherEditForm({
         </div>
       )}
 
-      {/* Main Grid UI */}
-      {/* ... (Keep your existing table rendering logic) ... */}
+      {/* --- DATE SELECTION --- */}
+      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center gap-4">
+        <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400">
+          <Calendar size={20} />
+        </div>
+        <div className="flex-1">
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+            Voucher Date
+          </label>
+          <input
+            type="date"
+            required
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full bg-transparent font-bold text-slate-900 outline-none text-lg"
+          />
+        </div>
+      </div>
+
+      {/* --- MAIN GRID UI (THE MISSING PART) --- */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="grid grid-cols-12 gap-0 border-b border-slate-100 bg-slate-50/50">
+          <div className="col-span-2 p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center border-r border-slate-100">
+            Type
+          </div>
+          <div className="col-span-6 p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-100">
+            Particulars (Ledger)
+          </div>
+          <div className="col-span-3 p-3 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right pr-6">
+            Amount
+          </div>
+          <div className="col-span-1"></div>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {entries.map((entry, index) => (
+            <div
+              key={entry.tempId}
+              className="grid grid-cols-12 gap-0 group hover:bg-slate-50 transition-colors"
+            >
+              {/* Dr/Cr Selector */}
+              <div className="col-span-2 border-r border-slate-100 p-2">
+                <select
+                  value={entry.type}
+                  onChange={(e) =>
+                    updateEntry(entry.tempId, "type", e.target.value)
+                  }
+                  className={`w-full h-full text-center font-bold outline-none bg-transparent rounded-lg cursor-pointer ${
+                    entry.type === "Dr" ? "text-indigo-600" : "text-emerald-600"
+                  }`}
+                >
+                  <option value="Dr">Dr</option>
+                  <option value="Cr">Cr</option>
+                </select>
+              </div>
+
+              {/* Ledger Selector */}
+              <div className="col-span-6 border-r border-slate-100 p-2 relative">
+                <select
+                  value={entry.ledgerId}
+                  onChange={(e) =>
+                    updateEntry(entry.tempId, "ledgerId", e.target.value)
+                  }
+                  className="w-full h-full font-medium text-slate-700 outline-none bg-transparent appearance-none px-2 cursor-pointer"
+                >
+                  <option value="" disabled>
+                    Select Account...
+                  </option>
+                  {ledgers.map((l: any) => (
+                    <option key={l.id} value={l.id.toString()}>
+                      {l.name} ({l.group?.name})
+                    </option>
+                  ))}
+                </select>
+                {/* Custom arrow for select */}
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-20">
+                  <Plus size={14} className="rotate-45" />
+                </div>
+              </div>
+
+              {/* Amount Input */}
+              <div className="col-span-3 p-2">
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={entry.amount}
+                  onChange={(e) =>
+                    updateEntry(entry.tempId, "amount", e.target.value)
+                  }
+                  className="w-full h-full text-right font-mono font-bold text-slate-900 outline-none bg-transparent placeholder:text-slate-300"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+
+              {/* Delete Action */}
+              <div className="col-span-1 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => removeRow(entry.tempId)}
+                  className="text-slate-300 hover:text-rose-500 transition-colors p-2"
+                  tabIndex={-1}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add Row Button */}
+        <button
+          type="button"
+          onClick={addRow}
+          className="w-full py-3 text-xs font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all border-t border-dashed border-slate-200 flex items-center justify-center gap-2"
+        >
+          <Plus size={14} /> Add Line Item
+        </button>
+      </div>
 
       {/* Footer Totals */}
       <div className="flex flex-col md:flex-row gap-6">
         <textarea
           value={narration}
           onChange={(e) => setNarration(e.target.value)}
-          className="flex-1 h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+          className="flex-1 h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
           placeholder="Edit narration..."
         />
         <div
@@ -198,6 +353,7 @@ export default function VoucherEditForm({
               ? "bg-indigo-600 hover:bg-indigo-700 text-white"
               : "bg-slate-900 hover:bg-slate-800 text-white"
           }
+          ${!isBalanced || loading ? "opacity-50 cursor-not-allowed" : ""}
         `}
       >
         {loading ? (

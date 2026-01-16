@@ -66,7 +66,7 @@ export default async function LedgerPrintPage({
   );
   const openingBalanceAtDate = ledger.openingBalance + totalPrevMovement;
 
-  // --- 2. Fetch Transactions with Full Sub-Entries ---
+  // --- 2. Fetch Transactions ---
   const currentFilter = {
     date: { gte: fromDate, lte: toDateEnd },
     status: "APPROVED",
@@ -110,13 +110,10 @@ export default async function LedgerPrintPage({
       }),
     ]);
 
-  // --- 3. Format Transactions with Opposite Ledger Detection ---
+  // --- 3. Format Transactions ---
   const formatTx = (entry: any, type: string, vKey: string) => {
     const voucher = entry[vKey];
     const allEntries = voucher.ledgerEntries || [];
-
-    // Find the account name that is NOT the account we are currently printing
-    // This is what puts "Cash" or "Bank" in the Particulars column
     const oppositeEntry = allEntries.find((le: any) => le.ledgerId !== lid);
     const particularsName =
       oppositeEntry?.ledger?.name || voucher.partyName || type;
@@ -126,7 +123,7 @@ export default async function LedgerPrintPage({
       date: voucher.date,
       voucherNo: voucher.voucherNo.toString(),
       type: type,
-      particulars: particularsName, // This is the fix!
+      particulars: particularsName,
       narration: voucher.narration,
       amount: entry.amount,
       debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
@@ -149,24 +146,54 @@ export default async function LedgerPrintPage({
         dangerouslySetInnerHTML={{
           __html: `
         @media print {
-          body * { visibility: hidden !important; }
-          #print-zone, #print-zone * { visibility: visible !important; }
-          #print-zone { 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 100% !important; 
+          /* 1. NUCLEAR RESET: Force unlock all scrollable parents */
+          html, body, #__next, #root, main, div, section {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            overflow-y: visible !important;
+            position: static !important; /* Removes relative/fixed positioning that clips content */
+            display: block !important;
+          }
+
+          /* 2. Hide everything by default */
+          body * {
+            visibility: hidden;
+          }
+
+          /* 3. Show ONLY the print zone */
+          #print-zone, #print-zone * {
+            visibility: visible !important;
+          }
+
+          /* 4. Position the print zone absolute to the Page (not the parent) */
+          #print-zone {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: auto !important;
             margin: 0 !important;
             padding: 0 !important;
+            overflow: visible !important;
+            z-index: 99999;
           }
-          nav, aside, footer, .no-print { display: none !important; }
-          @page { size: portrait; margin: 10mm; }
+
+          /* 5. Hide User Interface elements */
+          nav, aside, footer, header, .no-print {
+            display: none !important;
+          }
+
+          @page {
+            size: auto;
+            margin: 10mm;
+          }
         }
       `,
         }}
       />
 
-      <div id="print-zone" className="p-4">
+      <div id="print-zone">
         <LedgerPrintTemplate
           company={company}
           ledger={ledger}
