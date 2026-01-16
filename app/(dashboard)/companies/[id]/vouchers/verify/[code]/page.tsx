@@ -13,6 +13,8 @@ import {
   Layers,
   ShieldCheck,
   CheckCircle,
+  ScanBarcode,
+  Receipt,
 } from "lucide-react";
 
 async function getCurrentUser() {
@@ -47,7 +49,6 @@ export default async function VerifyPage({
   const result = await getVoucherByCode(code, companyId);
   const currentUser = await getCurrentUser();
 
-  // ✅ TYPE GUARD: Ensure we have a successful result before proceeding
   if (!result || !result.success) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
@@ -72,19 +73,18 @@ export default async function VerifyPage({
     );
   }
 
-  // ✅ FIX: Cast to 'any' to resolve the "Property does not exist on type" Build Error
   const voucher = result as any;
 
   const isAdmin = currentUser?.role === "ADMIN";
   const isMaker = voucher.createdById === currentUser?.id;
   const isApproved = voucher.status === "APPROVED";
-
-  // Logic: Block Maker ONLY if they are NOT an Admin. Admins can self-verify.
   const isRestricted = isMaker && !isAdmin;
+
+  // Check if it is a Trade Voucher (Sales/Purchase)
+  const isTradeVoucher = ["SALES", "PURCHASE"].includes(voucher.type);
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-700">
-      {/* Background Pattern */}
       <div
         className="fixed inset-0 z-0 opacity-[0.4] pointer-events-none"
         style={{
@@ -124,9 +124,10 @@ export default async function VerifyPage({
               </h1>
             </div>
 
-            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm min-w-[200px]">
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">
-                Transaction ID
+            {/* HEADER TXID DISPLAY */}
+            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm min-w-[200px] text-right">
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1 flex items-center justify-end gap-2">
+                <ScanBarcode size={12} /> TXID Code
               </p>
               <p className="text-2xl font-mono font-black text-blue-400 tracking-tight leading-none break-all">
                 {voucher.transactionCode}
@@ -134,23 +135,42 @@ export default async function VerifyPage({
             </div>
           </div>
 
-          {/* METADATA GRID */}
+          {/* METADATA GRID - UPDATED */}
           <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-8 bg-slate-50 border-b border-slate-100">
             <InfoItem
               icon={<Calendar size={16} />}
               label="Posting Date"
               value={new Date(voucher.date).toLocaleDateString("en-IN")}
             />
-            <InfoItem
-              icon={<User size={16} />}
-              label="Maker"
-              value={voucher.createdBy?.name || "Unknown"}
-            />
+
+            {/* CONDITIONAL: Show Reference No for Sales/Purchase */}
+            {isTradeVoucher ? (
+              <InfoItem
+                icon={<Receipt size={16} />}
+                label="Reference / Inv #"
+                // Fallback to 'N/A' if the field is empty or missing
+                value={
+                  voucher.refNo ||
+                  voucher.referenceNumber ||
+                  voucher.invoiceNo ||
+                  "N/A"
+                }
+                isHighlight={true}
+              />
+            ) : (
+              <InfoItem
+                icon={<User size={16} />}
+                label="Maker"
+                value={voucher.createdBy?.name || "Unknown"}
+              />
+            )}
+
             <InfoItem
               icon={<Hash size={16} />}
               label="Workflow Status"
               value={voucher.status}
             />
+
             <InfoItem
               icon={<FileText size={16} />}
               label="Net Amount"
@@ -161,12 +181,21 @@ export default async function VerifyPage({
 
           {/* TABLE AREA */}
           <div className="p-8">
-            <div className="flex items-center gap-2 mb-4 text-slate-400">
-              <Layers size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">
-                Ledger Postings
-              </span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-slate-400">
+                <Layers size={14} />
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  Ledger Postings
+                </span>
+              </div>
+              {/* Optional: Show Party Name if available for Trade Vouchers */}
+              {isTradeVoucher && voucher.partyName && (
+                <div className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                  Party: {voucher.partyName}
+                </div>
+              )}
             </div>
+
             <div className="space-y-2">
               {voucher.ledgerEntries?.map((entry: any, i: number) => (
                 <div
@@ -249,7 +278,7 @@ function InfoItem({ icon, label, value, isHighlight }: any) {
       </div>
       <div
         className={`text-base font-bold truncate ${
-          isHighlight ? "text-indigo-600 font-mono text-xl" : "text-slate-900"
+          isHighlight ? "text-indigo-600 font-mono text-lg" : "text-slate-900"
         }`}
       >
         {value}
