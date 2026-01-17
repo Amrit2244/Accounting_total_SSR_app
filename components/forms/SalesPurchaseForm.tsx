@@ -3,7 +3,8 @@
 import { useState, useActionState, useMemo, useRef, useEffect } from "react";
 import { createVoucher } from "@/app/actions/voucher";
 import {
-  Plus,
+  Plus, // ✅ Added Missing Import
+  Paperclip, // ✅ Added Missing Import
   Save,
   CheckCircle,
   Loader2,
@@ -14,8 +15,10 @@ import {
   Database,
   XCircle,
   Filter,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import { format, isValid } from "date-fns";
 
 // --- TYPES ---
 interface FormState {
@@ -66,6 +69,38 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 2,
   });
 
+// --- SMART DATE PARSER (Tally Logic) ---
+const parseTallyDate = (input: string): Date | null => {
+  if (!input) return null;
+  const today = new Date();
+
+  // Clean input: replace dots/slashes/spaces with hyphens
+  const clean = input.trim().replace(/[./\s]/g, "-");
+  const parts = clean.split("-");
+
+  let d = today.getDate();
+  let m = today.getMonth(); // 0-indexed
+  let y = today.getFullYear();
+
+  if (parts.length === 1) {
+    // Case: "5" -> 5th of current month
+    d = parseInt(parts[0]);
+  } else if (parts.length === 2) {
+    // Case: "5-4" -> 5th of April, current year
+    d = parseInt(parts[0]);
+    m = parseInt(parts[1]) - 1;
+  } else if (parts.length === 3) {
+    // Case: "5-4-24" -> 5th April 2024
+    d = parseInt(parts[0]);
+    m = parseInt(parts[1]) - 1;
+    let yPart = parseInt(parts[2]);
+    y = yPart < 100 ? 2000 + yPart : yPart;
+  }
+
+  const result = new Date(y, m, d);
+  return isValid(result) ? result : null;
+};
+
 // --- HELPER: SEARCHABLE SELECT ---
 const SearchableLedgerSelect = ({
   label,
@@ -87,21 +122,15 @@ const SearchableLedgerSelect = ({
     return found ? found.name : "";
   }, [selectedId, options]);
 
-  // ✅ UPDATED: SPACE-INSENSITIVE FILTER LOGIC
+  // SPACE-INSENSITIVE FILTER LOGIC
   const filtered = useMemo(() => {
     if (!options) return [];
     if (!query) return options.slice(0, 100);
-
-    // 1. Normalize Query: Lowercase + Remove all spaces
     const normalizedQuery = query.toLowerCase().replace(/\s+/g, "");
-
     return options
       .filter((o: any) => {
-        // 2. Normalize Data: Lowercase + Remove all spaces
         const name = (o.name || "").toLowerCase().replace(/\s+/g, "");
         const group = (o.group?.name || "").toLowerCase().replace(/\s+/g, "");
-
-        // 3. Match
         return (
           name.includes(normalizedQuery) || group.includes(normalizedQuery)
         );
@@ -258,6 +287,29 @@ export default function SalesPurchaseForm({
   const [rows, setRows] = useState<VoucherRow[]>([
     { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
+
+  // --- TALLY DATE STATE ---
+  const [dateDisplay, setDateDisplay] = useState(
+    format(new Date(), "dd-MM-yyyy")
+  );
+  const [dateValue, setDateValue] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  const handleDateBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const parsed = parseTallyDate(e.target.value);
+    if (parsed) {
+      setDateDisplay(format(parsed, "dd-MM-yyyy"));
+      setDateValue(format(parsed, "yyyy-MM-dd"));
+    } else {
+      setDateDisplay(format(new Date(dateValue), "dd-MM-yyyy"));
+    }
+  };
+
+  const handleDateKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  };
 
   // ✅ 1. PARTY LEDGER FILTER
   const partyLedgerOptions = useMemo(() => {
@@ -443,6 +495,8 @@ export default function SalesPurchaseForm({
     <form action={action} className="w-full h-full flex flex-col font-sans p-1">
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="type" value={type} />
+      {/* ✅ HIDDEN INPUT FOR ISO DATE */}
+      <input type="hidden" name="date" value={dateValue} />
       <input
         type="hidden"
         name="inventoryRows"
@@ -476,18 +530,29 @@ export default function SalesPurchaseForm({
             isAdmin ? "bg-indigo-600" : "bg-blue-600"
           }`}
         />
+
+        {/* ✅ TALLY STYLE DATE INPUT */}
         <div className="md:col-span-2 space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Date
+            Date (DD-MM)
           </label>
-          <input
-            name="date"
-            type="date"
-            defaultValue={new Date().toISOString().split("T")[0]}
-            className="w-full h-11 border border-slate-200 bg-white rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-            required
-          />
+          <div className="relative">
+            <CalendarIcon
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={dateDisplay}
+              onChange={(e) => setDateDisplay(e.target.value)}
+              onBlur={handleDateBlur}
+              onKeyDown={handleDateKeyDown}
+              className="w-full h-11 border border-slate-200 bg-white rounded-xl pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all placeholder:text-slate-300 uppercase"
+              placeholder="DD-MM"
+            />
+          </div>
         </div>
+
         <div className="md:col-span-2 space-y-1.5">
           <label
             className={`text-[10px] font-black uppercase tracking-widest ml-1 ${
