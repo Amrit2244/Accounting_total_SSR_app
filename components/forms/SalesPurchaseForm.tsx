@@ -1,46 +1,66 @@
 "use client";
 
-import { useState, useActionState, useRef, useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useState, useActionState, useMemo, useRef, useEffect } from "react";
 import { createVoucher } from "@/app/actions/voucher";
 import {
-  Plus,
-  Trash2,
+  Plus, // ✅ Added Missing Import
+  Paperclip, // ✅ Added Missing Import
   Save,
   CheckCircle,
-  Search,
   Loader2,
-  Paperclip,
+  Search,
+  Trash2,
   ChevronDown,
   ShieldCheck,
   Database,
-  User,
-  ShoppingBag,
-  ExternalLink,
-  PlusCircle,
-  AlertTriangle,
+  XCircle,
+  Filter,
   Calendar as CalendarIcon,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { format, isValid } from "date-fns";
 
-// --- TYPES (Restored Original Interface) ---
-interface VoucherActionState {
+// --- TYPES ---
+interface FormState {
   success: boolean;
-  message?: string;
+  error?: string;
   code?: string;
   txid?: string;
   id?: number;
-  error?: string;
+  message?: string;
 }
 
-const initialState: VoucherActionState = {
+type Ledger = {
+  id: number;
+  name: string;
+  group: { name: string };
+};
+
+type Item = {
+  id: number;
+  name: string;
+  gstRate: number;
+};
+
+type VoucherRow = {
+  itemId: string;
+  qty: string;
+  rate: string;
+  gst: number;
+  amount: string | number;
+  taxAmount: number;
+};
+
+type Props = {
+  companyId: number;
+  type: string;
+  ledgers: Ledger[];
+  items: Item[];
+  isAdmin?: boolean;
+};
+
+const initialState: FormState = {
   success: false,
-  message: undefined,
-  code: undefined,
-  txid: undefined,
-  id: undefined,
-  error: undefined,
 };
 
 const formatCurrency = (value: number) =>
@@ -53,19 +73,24 @@ const formatCurrency = (value: number) =>
 const parseTallyDate = (input: string): Date | null => {
   if (!input) return null;
   const today = new Date();
+
+  // Clean input: replace dots/slashes/spaces with hyphens
   const clean = input.trim().replace(/[./\s]/g, "-");
   const parts = clean.split("-");
 
   let d = today.getDate();
-  let m = today.getMonth();
+  let m = today.getMonth(); // 0-indexed
   let y = today.getFullYear();
 
   if (parts.length === 1) {
+    // Case: "5" -> 5th of current month
     d = parseInt(parts[0]);
   } else if (parts.length === 2) {
+    // Case: "5-4" -> 5th of April, current year
     d = parseInt(parts[0]);
     m = parseInt(parts[1]) - 1;
   } else if (parts.length === 3) {
+    // Case: "5-4-24" -> 5th April 2024
     d = parseInt(parts[0]);
     m = parseInt(parts[1]) - 1;
     let yPart = parseInt(parts[2]);
@@ -76,138 +101,191 @@ const parseTallyDate = (input: string): Date | null => {
   return isValid(result) ? result : null;
 };
 
-// --- REUSABLE DROPDOWN WITH CREATE LINK ---
+// --- HELPER: SEARCHABLE SELECT ---
 const SearchableLedgerSelect = ({
-  value,
-  onChange,
+  label,
+  name,
   options = [],
-  placeholder = "Select Account",
-  companyId,
-  icon: Icon,
+  selectedId,
+  setSelectedId,
+  isRequired,
+  placeholder,
+  filterActive,
 }: any) => {
-  const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const searchRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const selectedItem = options.find((o: any) => o.id.toString() === value);
+  const displayName = useMemo(() => {
+    if (!options) return "";
+    const found = options.find((o: any) => o.id.toString() === selectedId);
+    return found ? found.name : "";
+  }, [selectedId, options]);
 
-  const filteredOptions = useMemo(() => {
-    if (!query) return options.slice(0, 50);
+  // SPACE-INSENSITIVE FILTER LOGIC
+  const filtered = useMemo(() => {
+    if (!options) return [];
+    if (!query) return options.slice(0, 100);
     const normalizedQuery = query.toLowerCase().replace(/\s+/g, "");
     return options
-      .filter((o: any) =>
-        o.name.toLowerCase().replace(/\s+/g, "").includes(normalizedQuery),
-      )
-      .slice(0, 50);
-  }, [options, query]);
+      .filter((o: any) => {
+        const name = (o.name || "").toLowerCase().replace(/\s+/g, "");
+        const group = (o.group?.name || "").toLowerCase().replace(/\s+/g, "");
+        return (
+          name.includes(normalizedQuery) || group.includes(normalizedQuery)
+        );
+      })
+      .slice(0, 100);
+  }, [query, options]);
 
   useEffect(() => {
-    const clickOut = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+    const handleClick = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
         setQuery("");
       }
     };
-    document.addEventListener("mousedown", clickOut);
-    return () => document.removeEventListener("mousedown", clickOut);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   return (
-    <div className="relative w-full" ref={searchRef}>
+    <div
+      className="relative group"
+      ref={containerRef}
+      style={{ zIndex: isOpen ? 1000 : 10 }}
+    >
+      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1 mb-1.5 flex justify-between items-center">
+        <span>
+          {label} {isRequired && <span className="text-rose-500">*</span>}
+        </span>
+        <div className="flex gap-2">
+          {filterActive && options.length > 0 && (
+            <span className="text-indigo-500 flex items-center gap-1 text-[9px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+              <Filter size={8} /> Smart Filter
+            </span>
+          )}
+          {(!options || options.length === 0) && (
+            <span className="text-rose-500 flex items-center gap-1 animate-pulse text-[9px] font-bold">
+              <Database size={10} /> NO DATA
+            </span>
+          )}
+        </div>
+      </label>
+
+      <input
+        type="hidden"
+        name={name}
+        value={selectedId}
+        required={isRequired}
+      />
+
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center h-10 px-3 border rounded-lg cursor-pointer bg-white transition-all shadow-sm ${
+        className={`relative flex items-center w-full h-11 px-3.5 bg-white border rounded-xl transition-all cursor-pointer shadow-sm ${
           isOpen
-            ? "ring-2 ring-indigo-500 border-transparent"
-            : "border-slate-200 hover:border-indigo-300"
+            ? "ring-2 ring-indigo-600 border-transparent"
+            : "border-slate-200 hover:border-slate-300"
         }`}
       >
-        {Icon && <Icon size={14} className="text-slate-400 mr-2" />}
+        <Search
+          size={16}
+          className={`mr-2 ${isOpen ? "text-indigo-600" : "text-slate-400"}`}
+        />
 
         {isOpen ? (
           <input
             autoFocus
             type="text"
-            className="flex-1 bg-transparent outline-none text-xs font-bold text-slate-800 uppercase placeholder:normal-case"
-            placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            placeholder="Type to search..."
+            className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400 uppercase"
+            onClick={(e) => e.stopPropagation()}
           />
         ) : (
           <div
-            className={`flex-1 text-xs font-bold uppercase truncate ${
-              selectedItem ? "text-slate-900" : "text-slate-400"
+            className={`flex-1 text-sm font-semibold truncate uppercase ${
+              displayName ? "text-slate-900" : "text-slate-400"
             }`}
           >
-            {selectedItem ? selectedItem.name : placeholder}
+            {displayName || placeholder}
           </div>
         )}
-        <ChevronDown size={14} className="text-slate-400 ml-2" />
+
+        <ChevronDown
+          size={14}
+          className={`transition-transform duration-200 ${
+            isOpen ? "rotate-180 text-indigo-600" : "text-slate-400"
+          }`}
+        />
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="max-h-60 overflow-y-auto custom-scrollbar">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt: any) => (
+            {filtered.length > 0 ? (
+              filtered.map((l: any) => (
                 <div
-                  key={opt.id}
+                  key={l.id}
                   onClick={() => {
-                    onChange(opt.id.toString());
+                    setSelectedId(l.id.toString());
                     setIsOpen(false);
                     setQuery("");
                   }}
-                  className="px-3 py-2.5 hover:bg-indigo-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                  className="px-4 py-3 flex items-center justify-between hover:bg-indigo-50 cursor-pointer transition-colors border-b border-slate-50 last:border-0"
                 >
-                  <span className="text-xs font-bold text-slate-700 uppercase">
-                    {opt.name}
-                  </span>
-                  <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                    {opt.group?.name}
-                  </span>
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-sm font-bold text-slate-800 uppercase">
+                      {l.name}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase bg-slate-100 px-1.5 py-0.5 rounded mt-0.5">
+                      {l.group?.name || "General"}
+                    </span>
+                  </div>
+                  {selectedId === l.id.toString() && (
+                    <CheckCircle size={16} className="text-indigo-600" />
+                  )}
                 </div>
               ))
             ) : (
-              <div className="p-4 text-center text-slate-400 text-[10px] italic flex items-center justify-center gap-2">
-                <Database size={14} /> No matches
+              <div className="p-8 text-center flex flex-col items-center">
+                <XCircle size={24} className="text-slate-300 mb-2" />
+                <p className="text-xs text-slate-500 font-medium">
+                  No matches found
+                </p>
               </div>
             )}
           </div>
-
-          {/* ✅ CREATE NEW LEDGER LINK */}
-          <Link
-            href={`/companies/${companyId}/ledgers/create`}
-            target="_blank"
-            className="p-3 bg-slate-50 border-t border-slate-200 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest cursor-pointer"
-          >
-            <PlusCircle size={14} /> Create New Ledger
-            <ExternalLink size={10} className="opacity-50" />
-          </Link>
         </div>
       )}
     </div>
   );
 };
 
-// --- MAIN SALES/PURCHASE FORM ---
+// --- MAIN COMPONENT ---
 export default function SalesPurchaseForm({
   companyId,
   type,
   ledgers = [],
   items = [],
   isAdmin,
-}: any) {
-  const formRef = useRef<HTMLFormElement>(null);
+}: Props) {
   const [state, action, isPending] = useActionState(
     createVoucher as any,
     initialState,
   );
+  const formRef = useRef<HTMLFormElement>(null);
 
-  // Form State
-  const [partyLedgerId, setPartyLedgerId] = useState("");
-  const [salesLedgerId, setSalesLedgerId] = useState("");
-  const [rows, setRows] = useState([
-    { itemId: "", quantity: "", rate: "", amount: 0 },
+  const [partyId, setPartyId] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [enableTax, setEnableTax] = useState(true);
+  const [taxLedgerId, setTaxLedgerId] = useState("");
+  const [rows, setRows] = useState<VoucherRow[]>([
+    { itemId: "", qty: "", rate: "", gst: 0, amount: 0, taxAmount: 0 },
   ]);
 
   // --- TALLY DATE STATE ---
@@ -233,57 +311,148 @@ export default function SalesPurchaseForm({
     }
   };
 
-  // Calculate Totals
-  const totalAmount = rows.reduce(
-    (sum, row) => sum + (Number(row.amount) || 0),
-    0,
-  );
+  // ✅ 1. PARTY LEDGER FILTER
+  const partyLedgerOptions = useMemo(() => {
+    if (!ledgers || ledgers.length === 0) return [];
 
-  // Filter Ledgers
-  const partyLedgers = ledgers;
-  const accountLedgers = ledgers.filter(
-    (l: any) =>
-      l.group?.name
-        .toUpperCase()
-        .includes(type === "SALES" ? "SALES" : "PURCHASE") ||
-      l.group?.name.toUpperCase().includes("ACCOUNT"),
-  );
+    const validGroups = ["debtor", "creditor", "cash", "bank"];
 
-  // Row Helpers
-  const updateRow = (idx: number, field: string, value: any) => {
-    const newRows: any = [...rows];
-    newRows[idx][field] = value;
+    if (type === "SALES") validGroups.push("sale");
+    else if (type === "PURCHASE") validGroups.push("purchase");
 
-    if (field === "quantity" || field === "rate") {
-      const q = parseFloat(newRows[idx].quantity) || 0;
-      const r = parseFloat(newRows[idx].rate) || 0;
-      newRows[idx].amount = q * r;
+    const filtered = ledgers.filter((l) => {
+      const g = l.group?.name?.toLowerCase() || "";
+      return validGroups.some((k) => g.includes(k));
+    });
+
+    return filtered.length > 0 ? filtered : ledgers;
+  }, [ledgers, type]);
+
+  // ✅ 2. SALES/PURCHASE LEDGER FILTER (STRICT)
+  const accountLedgerOptions = useMemo(() => {
+    if (!ledgers || ledgers.length === 0) return [];
+
+    const filtered = ledgers.filter((l) => {
+      const g = l.group?.name?.toLowerCase() || "";
+
+      if (type === "SALES") {
+        return (
+          g.includes("sales account") ||
+          g.includes("sale account") ||
+          g === "sales"
+        );
+      } else if (type === "PURCHASE") {
+        return (
+          g.includes("purchase account") ||
+          g.includes("purchase account") ||
+          g === "purchases" ||
+          g === "purchase"
+        );
+      }
+      return true;
+    });
+
+    return filtered.length > 0 ? filtered : ledgers;
+  }, [ledgers, type]);
+
+  // ✅ 3. TAX LEDGER FILTER
+  const taxLedgerOptions = useMemo(() => {
+    if (!ledgers) return [];
+    return ledgers.filter((l) => {
+      const g = l.group?.name?.toLowerCase() || "";
+      const n = l.name.toLowerCase();
+      return (
+        g.includes("tax") ||
+        g.includes("gst") ||
+        g.includes("duties") ||
+        n.includes("gst") ||
+        n.includes("tax")
+      );
+    });
+  }, [ledgers]);
+
+  // --- LOGIC: ROW UPDATES ---
+  const updateRow = (
+    index: number,
+    field: keyof VoucherRow,
+    value: string | number,
+  ) => {
+    const newRows = [...rows];
+    (newRows[index] as any)[field] = value;
+
+    if (field === "itemId") {
+      const item = items.find((i) => i.id.toString() === value);
+      newRows[index].gst = item?.gstRate || 0;
+      newRows[index].qty = "";
+      newRows[index].rate = "";
+      newRows[index].amount = "";
     }
+
+    const qty = parseFloat(newRows[index].qty.toString()) || 0;
+    const rate = parseFloat(newRows[index].rate.toString()) || 0;
+    const amount = parseFloat(newRows[index].amount.toString()) || 0;
+    const gst = newRows[index].gst || 0;
+
+    if (field === "qty" || field === "rate") {
+      if (qty !== 0 && rate !== 0) {
+        newRows[index].amount = qty * rate;
+      }
+    } else if (field === "amount") {
+      if (qty > 0 && amount > 0) {
+        newRows[index].rate = (amount / qty).toFixed(2);
+      }
+    }
+
+    const finalAmount = parseFloat(newRows[index].amount.toString()) || 0;
+    newRows[index].taxAmount = finalAmount * (gst / 100);
+
     setRows(newRows);
   };
 
+  const removeRow = (index: number) => {
+    if (rows.length > 1) setRows(rows.filter((_, i) => i !== index));
+  };
+
+  // Totals
+  const totalBaseAmount = rows.reduce(
+    (sum, r) => sum + (parseFloat(r.amount.toString()) || 0),
+    0,
+  );
+  const totalTaxAmount = rows.reduce((sum, r) => sum + r.taxAmount, 0);
+  const grandTotal = totalBaseAmount + (enableTax ? totalTaxAmount : 0);
+
+  // Confetti Effect
   useEffect(() => {
     if (state?.success) {
       confetti({
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
-        colors: isAdmin ? ["#6366f1", "#4f46e5"] : ["#10B981", "#3B82F6"],
+        colors: isAdmin
+          ? ["#6366f1", "#4f46e5", "#ffffff"]
+          : ["#10B981", "#3B82F6", "#F59E0B"],
       });
     }
   }, [state?.success, isAdmin]);
 
-  // --- RESTORED SUCCESS VIEW (With TXID) ---
+  // Success Screen
   if (state?.success) {
-    const isAutoVerified = state.message === "Authorized";
+    const isAutoVerified =
+      state.message?.toLowerCase().includes("approved") ||
+      state.message?.toLowerCase().includes("authorized");
     return (
-      <div className="flex flex-col items-center justify-center min-h-[500px] text-center p-8 bg-white rounded-3xl animate-in zoom-in-95">
+      <div className="flex flex-col items-center justify-center min-h-[600px] text-center p-8 bg-white border border-slate-200 rounded-3xl shadow-2xl relative overflow-hidden">
         <div
-          className={`p-6 rounded-full mb-6 ${
+          className={`absolute top-0 inset-x-0 h-2 ${
+            isAutoVerified ? "bg-indigo-600" : "bg-emerald-600"
+          }`}
+        />
+        <div
+          className={`${
             isAutoVerified
               ? "bg-indigo-50 text-indigo-600"
               : "bg-emerald-50 text-emerald-600"
-          }`}
+          } p-6 rounded-full mb-6 border border-slate-100 shadow-sm`}
         >
           {isAutoVerified ? (
             <ShieldCheck size={48} />
@@ -291,76 +460,85 @@ export default function SalesPurchaseForm({
             <CheckCircle size={48} />
           )}
         </div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase">
-          Voucher Created
+        <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tight">
+          {isAutoVerified ? "Authorized" : "Voucher Created"}
         </h2>
-
-        {/* ✅ THIS IS THE BOX WITH THE TXID YOU WANTED BACK */}
-        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full max-w-sm mb-6">
-          <div className="flex justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase">
-              Voucher #
+        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full max-w-xs shadow-inner mb-8 text-left">
+          <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
+            <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Voucher No
             </span>
-            <span className="font-black text-slate-900">
-              {state.id || state.code}
+            <span className="text-xl font-black text-slate-900">
+              #{state.code || state.id}
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase">
-              TXID
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Secure TXID
             </span>
-            <span className="font-mono font-bold text-indigo-600">
+            <span className="text-sm font-mono font-bold text-indigo-600 bg-white px-2 py-1 rounded border border-slate-200">
               {state.txid || "---"}
             </span>
           </div>
         </div>
-
         <button
           onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase hover:bg-indigo-600 transition-colors"
+          className="px-12 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all"
         >
-          Create Another
+          Create New
         </button>
       </div>
     );
   }
 
   return (
-    <form
-      ref={formRef}
-      action={action}
-      className="flex flex-col h-full space-y-6 font-sans p-1"
-    >
+    <form action={action} className="w-full h-full flex flex-col font-sans p-1">
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="type" value={type} />
-      <input type="hidden" name="totalAmount" value={totalAmount} />
-      {/* ✅ ISO DATE HIDDEN INPUT */}
+      {/* ✅ HIDDEN INPUT FOR ISO DATE */}
       <input type="hidden" name="date" value={dateValue} />
-
-      <input type="hidden" name="partyLedgerId" value={partyLedgerId} />
-      <input type="hidden" name="salesPurchaseLedgerId" value={salesLedgerId} />
       <input
         type="hidden"
-        name="inventoryEntries"
-        value={JSON.stringify(rows)}
+        name="inventoryRows"
+        value={JSON.stringify(rows.filter((r) => r.itemId))}
       />
+      <input
+        type="hidden"
+        name="taxLedgerId"
+        value={enableTax ? taxLedgerId : ""}
+      />
+      <input type="hidden" name="totalAmount" value={grandTotal.toString()} />
+      <input type="hidden" name="totalVal" value={totalBaseAmount.toString()} />
+      <input type="hidden" name="taxVal" value={totalTaxAmount.toString()} />
 
-      {state?.error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-xs font-bold flex items-center gap-2">
-          <AlertTriangle size={16} /> {state.error}
-        </div>
-      )}
+      {/* DEBUG STRIP */}
+      <div className="flex justify-end mb-2">
+        <span
+          className={`text-[9px] font-bold px-2 py-1 rounded border ${
+            ledgers.length > 0
+              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+              : "bg-rose-50 text-rose-600 border-rose-200"
+          }`}
+        >
+          DB Status: {ledgers.length} Ledgers Loaded
+        </span>
+      </div>
 
-      {/* TOP SECTION: META DATA */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-        {/* ✅ TALLY DATE INPUT */}
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
-            Posting Date (DD-MM)
+      <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm mb-8 grid grid-cols-1 md:grid-cols-12 gap-6 relative overflow-visible">
+        <div
+          className={`absolute left-0 top-0 bottom-0 w-1 ${
+            isAdmin ? "bg-indigo-600" : "bg-blue-600"
+          }`}
+        />
+
+        {/* ✅ TALLY STYLE DATE INPUT */}
+        <div className="md:col-span-2 space-y-1.5">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            Date (DD-MM)
           </label>
           <div className="relative">
             <CalendarIcon
-              size={14}
+              size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
             />
             <input
@@ -369,80 +547,92 @@ export default function SalesPurchaseForm({
               onChange={(e) => setDateDisplay(e.target.value)}
               onBlur={handleDateBlur}
               onKeyDown={handleDateKeyDown}
-              className="w-full h-10 pl-9 pr-3 border border-slate-200 bg-slate-50 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600 outline-none transition-all placeholder:text-slate-300"
-              placeholder="e.g. 5 or 5-4"
+              className="w-full h-11 border border-slate-200 bg-white rounded-xl pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all placeholder:text-slate-300 uppercase"
+              placeholder="DD-MM"
             />
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
-            Invoice / Ref No
+        <div className="md:col-span-2 space-y-1.5">
+          <label
+            className={`text-[10px] font-black uppercase tracking-widest ml-1 ${
+              isAdmin ? "text-indigo-600" : "text-blue-600"
+            }`}
+          >
+            Voucher No
+          </label>
+          <input
+            name="voucherNo"
+            type="text"
+            placeholder="No."
+            className="w-full h-11 border-2 border-indigo-50 bg-white rounded-xl px-4 font-black text-slate-800 outline-none focus:border-indigo-500 text-sm"
+            required
+          />
+        </div>
+        <div className="md:col-span-2 space-y-1.5">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+            Reference
           </label>
           <input
             name="reference"
             type="text"
-            placeholder="e.g. INV-001"
-            className="w-full h-10 px-3 border border-slate-200 rounded-lg text-xs font-bold outline-none"
+            placeholder="Ref No."
+            className="w-full h-11 border border-slate-200 bg-white rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-indigo-600 outline-none"
           />
         </div>
-        <div className="space-y-1.5 md:col-span-2">
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
-            Party A/c Name (Dr/Cr)
-          </label>
-          {/* ✅ WITH LINK */}
+
+        {/* PARTY ACCOUNT */}
+        <div className="md:col-span-3">
           <SearchableLedgerSelect
-            value={partyLedgerId}
-            onChange={setPartyLedgerId}
-            options={partyLedgers}
-            companyId={companyId}
-            placeholder="Select Party Ledger..."
-            icon={User}
+            label="Party Account"
+            name="partyLedgerId"
+            options={partyLedgerOptions}
+            selectedId={partyId}
+            setSelectedId={setPartyId}
+            isRequired
+            placeholder="Select Party..."
+            filterActive={partyLedgerOptions.length < ledgers.length}
+          />
+        </div>
+
+        {/* ACCOUNT LEDGER */}
+        <div className="md:col-span-3">
+          <SearchableLedgerSelect
+            label={`${type} Ledger`}
+            name="salesPurchaseLedgerId"
+            options={accountLedgerOptions}
+            selectedId={accountId}
+            setSelectedId={setAccountId}
+            isRequired
+            placeholder="Select Ledger..."
+            filterActive={accountLedgerOptions.length < ledgers.length}
           />
         </div>
       </div>
 
-      {/* MIDDLE SECTION: ACCOUNT DETAILS */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
-            {type === "SALES" ? "Sales" : "Purchase"} Account
-          </label>
-          {/* ✅ WITH LINK */}
-          <SearchableLedgerSelect
-            value={salesLedgerId}
-            onChange={setSalesLedgerId}
-            options={accountLedgers}
-            companyId={companyId}
-            placeholder={`Select ${type.toLowerCase()} ledger...`}
-            icon={ShoppingBag}
-          />
-        </div>
-      </div>
-
-      {/* ITEM GRID */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col flex-1">
-        <div className="grid grid-cols-12 bg-slate-900 text-white p-3 text-[10px] font-black uppercase tracking-widest">
-          <div className="col-span-5">Item Name</div>
-          <div className="col-span-2 text-right">Qty</div>
+      {/* ITEM TABLE */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-lg mb-8">
+        <div className="grid grid-cols-12 bg-slate-900 text-white py-4 px-4 text-[10px] uppercase font-black tracking-widest">
+          <div className="col-span-5 pl-2">Item Description</div>
+          <div className="col-span-2 text-right">Quantity</div>
           <div className="col-span-2 text-right">Rate</div>
-          <div className="col-span-2 text-right pr-4">Amount</div>
+          <div className="col-span-2 text-right pr-4">Total</div>
           <div className="col-span-1"></div>
         </div>
-        <div className="flex-1 p-2 space-y-1 bg-slate-50 min-h-[200px]">
+        <div className="divide-y divide-slate-100 max-h-[350px] overflow-y-auto bg-slate-50/30">
           {rows.map((row, idx) => (
             <div
               key={idx}
-              className="grid grid-cols-12 gap-2 items-center px-2 py-1 bg-white border border-slate-100 rounded-lg shadow-sm"
+              className="grid grid-cols-12 px-4 py-3 items-center gap-4 hover:bg-white group transition-colors"
             >
               <div className="col-span-5">
                 <select
+                  className="w-full h-10 border border-slate-200 rounded-lg px-3 text-xs font-bold bg-white outline-none cursor-pointer"
                   value={row.itemId}
                   onChange={(e) => updateRow(idx, "itemId", e.target.value)}
-                  className="w-full h-9 bg-transparent text-xs font-bold outline-none cursor-pointer"
                 >
                   <option value="">Select Item...</option>
-                  {items.map((i: any) => (
+                  {items.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.name}
                     </option>
@@ -451,32 +641,35 @@ export default function SalesPurchaseForm({
               </div>
               <input
                 type="number"
+                step="any"
+                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold outline-none"
+                value={row.qty}
+                onChange={(e) => updateRow(idx, "qty", e.target.value)}
                 placeholder="0"
-                className="col-span-2 h-9 text-right text-xs font-mono font-bold outline-none bg-slate-50 px-2 rounded"
-                value={row.quantity}
-                onChange={(e) => updateRow(idx, "quantity", e.target.value)}
               />
               <input
                 type="number"
-                placeholder="0.00"
-                className="col-span-2 h-9 text-right text-xs font-mono font-bold outline-none bg-slate-50 px-2 rounded"
+                step="any"
+                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold outline-none"
                 value={row.rate}
                 onChange={(e) => updateRow(idx, "rate", e.target.value)}
+                placeholder="0.00"
               />
-              <div className="col-span-2 text-right font-mono font-bold text-slate-700 pr-2">
-                {Number(row.amount).toFixed(2)}
-              </div>
-              <div className="col-span-1 flex justify-center">
-                {rows.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setRows(rows.filter((_, i) => i !== idx))}
-                    className="text-rose-400 hover:text-rose-600"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
+              <input
+                type="number"
+                step="any"
+                className="col-span-2 h-10 border border-slate-200 rounded-lg px-3 text-right text-xs font-bold outline-none bg-white focus:ring-2 focus:ring-indigo-500"
+                value={row.amount}
+                onChange={(e) => updateRow(idx, "amount", e.target.value)}
+                placeholder="0.00"
+              />
+              <button
+                type="button"
+                onClick={() => removeRow(idx)}
+                className="col-span-1 p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
           ))}
         </div>
@@ -485,48 +678,76 @@ export default function SalesPurchaseForm({
           onClick={() =>
             setRows([
               ...rows,
-              { itemId: "", quantity: "", rate: "", amount: 0 },
+              {
+                itemId: "",
+                qty: "",
+                rate: "",
+                gst: 0,
+                amount: 0,
+                taxAmount: 0,
+              },
             ])
           }
-          className="w-full py-3 bg-white text-[10px] font-black text-slate-500 border-t border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-colors uppercase tracking-widest flex items-center justify-center gap-2"
+          className="w-full py-3 text-[10px] font-black uppercase text-slate-500 bg-slate-50 hover:bg-indigo-50 transition-colors border-t border-slate-200 flex items-center justify-center gap-2"
         >
-          <Plus size={12} /> Add Item Line
+          <Plus size={12} /> Add Line Item
         </button>
       </div>
 
-      {/* FOOTER */}
-      <div className="flex flex-col md:flex-row gap-6 items-start">
-        <textarea
-          name="narration"
-          rows={3}
-          placeholder="Narration..."
-          className="w-full md:flex-1 p-4 border border-slate-200 rounded-2xl text-xs font-medium resize-none outline-none focus:ring-2 focus:ring-indigo-600"
-        />
+      <div className="mt-auto flex flex-col md:flex-row justify-between items-start gap-8 border-t border-slate-200 pt-8 pb-12">
+        <div className="w-full md:w-1/2 space-y-2">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">
+            Narration
+          </label>
+          <textarea
+            name="narration"
+            placeholder="Enter notes..."
+            className="w-full h-32 border border-slate-200 rounded-xl p-4 text-sm font-medium focus:ring-2 focus:ring-indigo-600 outline-none bg-slate-50 focus:bg-white transition-all"
+          />
+        </div>
         <div
-          className={`w-full md:w-72 p-6 rounded-2xl text-white shadow-xl flex flex-col justify-between h-36 relative overflow-hidden ${
+          className={`p-8 rounded-3xl w-full md:w-[400px] shadow-2xl relative overflow-hidden text-white ${
             isAdmin ? "bg-indigo-900" : "bg-slate-900"
           }`}
         >
-          <div className="relative z-10">
-            <div className="text-[10px] font-black uppercase opacity-60">
-              Total Amount
-            </div>
-            <div className="text-3xl font-mono font-bold tracking-tight mt-1">
-              ₹{totalAmount.toFixed(2)}
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+          <div className="relative z-10 space-y-4">
+            <div className="flex justify-between items-end pt-2">
+              <span
+                className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                  isAdmin ? "text-indigo-400" : "text-blue-400"
+                }`}
+              >
+                Grand Total
+              </span>
+              <span className="text-3xl font-mono font-bold leading-none flex items-baseline">
+                <span className="text-lg text-slate-500 mr-1">₹</span>
+                {formatCurrency(grandTotal)}
+              </span>
             </div>
           </div>
-          <button
-            disabled={isPending || !partyLedgerId || totalAmount <= 0}
-            className="relative z-10 w-full py-2 bg-white text-slate-900 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {isPending ? (
-              <Loader2 className="animate-spin" size={14} />
-            ) : (
-              <Save size={14} />
-            )}
-            {isAdmin ? "Authorize" : "Submit"}
-          </button>
         </div>
+      </div>
+
+      <div className="flex justify-end pb-8">
+        <button
+          type="submit"
+          disabled={isPending || grandTotal < 0.01 || !partyId || !accountId}
+          className={`px-12 py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl transition-all flex items-center gap-3 active:scale-95 ${
+            isAdmin
+              ? "bg-indigo-600 hover:bg-indigo-700"
+              : "bg-slate-900 hover:bg-slate-800"
+          } text-white disabled:opacity-50`}
+        >
+          {isPending ? (
+            <Loader2 className="animate-spin" size={20} />
+          ) : isAdmin ? (
+            <ShieldCheck size={20} />
+          ) : (
+            <Save size={20} />
+          )}
+          {isAdmin ? "Authorize & Post" : "Save Voucher"}
+        </button>
       </div>
     </form>
   );
