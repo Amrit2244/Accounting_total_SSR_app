@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import {
-  Package,
-  Settings,
-  CheckSquare,
-  Square,
-  FileText,
-  Filter,
-} from "lucide-react";
+import { Settings, CheckSquare, Square } from "lucide-react";
 
 export default function LedgerReportTable({
   transactions,
@@ -19,11 +12,15 @@ export default function LedgerReportTable({
   closingBalance,
   openingBalance,
   fromDate,
+  periodQty, // ✅ FIXED: Added missing prop here
 }: any) {
+  // --- STATE: Column Visibility ---
   const [showInventory, setShowInventory] = useState(true);
   const [showNarration, setShowNarration] = useState(true);
   const [showVoucherNo, setShowVoucherNo] = useState(true);
   const [showRunningBalance, setShowRunningBalance] = useState(true);
+
+  // --- STATE: Config Menu Toggle ---
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   const formatMoney = (val: number) =>
@@ -34,15 +31,65 @@ export default function LedgerReportTable({
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col min-h-[600px] relative">
-      {/* --- TABLE HEADER --- */}
+      {/* --- TABLE HEADER & CONFIG --- */}
       <div className="px-6 py-4 border-b border-slate-100 bg-white flex justify-between items-center sticky top-0 z-20">
-        <button
-          onClick={() => setIsConfigOpen(!isConfigOpen)}
-          className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 shadow-sm"
-        >
-          <Settings size={14} className="text-slate-400" />
-          <span>Table Config</span>
-        </button>
+        {/* CONFIG BUTTON & DROPDOWN */}
+        <div className="relative">
+          <button
+            onClick={() => setIsConfigOpen(!isConfigOpen)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border shadow-sm transition-all ${
+              isConfigOpen
+                ? "bg-indigo-50 border-indigo-200 text-indigo-600"
+                : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
+            }`}
+          >
+            <Settings
+              size={14}
+              className={isConfigOpen ? "text-indigo-600" : "text-slate-400"}
+            />
+            <span>Table Config</span>
+          </button>
+
+          {/* DROPDOWN MENU LOGIC */}
+          {isConfigOpen && (
+            <>
+              {/* Invisible Backdrop to close menu on click outside */}
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setIsConfigOpen(false)}
+              />
+
+              <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-20 animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-1">
+                  Column Visibility
+                </div>
+                <div className="space-y-0.5">
+                  <ConfigOption
+                    label="Item Details"
+                    active={showInventory}
+                    onClick={() => setShowInventory(!showInventory)}
+                  />
+                  <ConfigOption
+                    label="Narration"
+                    active={showNarration}
+                    onClick={() => setShowNarration(!showNarration)}
+                  />
+                  <ConfigOption
+                    label="Voucher No"
+                    active={showVoucherNo}
+                    onClick={() => setShowVoucherNo(!showVoucherNo)}
+                  />
+                  <ConfigOption
+                    label="Running Balance"
+                    active={showRunningBalance}
+                    onClick={() => setShowRunningBalance(!showRunningBalance)}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">
           {transactions.length} Transactions Found
         </span>
@@ -84,13 +131,13 @@ export default function LedgerReportTable({
               <td className="px-4 py-3 text-slate-400 pl-6">
                 {format(new Date(fromDate), "dd MMM yy")}
               </td>
+              {/* Dynamic ColSpan based on visible columns */}
               <td
-                colSpan={showVoucherNo ? 3 : 2}
+                colSpan={2 + (showVoucherNo ? 1 : 0) + 2} // TXID + VchNo? + Type + Particulars
                 className="px-4 py-3 text-slate-600 italic"
               >
                 Opening Balance Brought Forward
               </td>
-              <td className="px-4 py-3 border-l border-slate-100"></td>
               {showInventory && (
                 <>
                   <td className="px-4 py-3 border-l border-slate-100"></td>
@@ -98,31 +145,31 @@ export default function LedgerReportTable({
                 </>
               )}
 
-              {/* ✅ OPENING BALANCE LOGIC: Negative is Debit (Dr) */}
+              {/* OPENING BALANCE LOGIC */}
               <td className="px-4 py-3 text-right text-rose-700 bg-rose-50/10 font-mono">
                 {openingBalance <= 0 ? formatMoney(openingBalance) : ""}
               </td>
               <td className="px-4 py-3 text-right text-emerald-700 bg-emerald-50/10 font-mono">
                 {openingBalance > 0 ? formatMoney(openingBalance) : ""}
               </td>
-              <td className="px-4 py-3 text-right font-black text-slate-800 bg-slate-50/50 border-l border-slate-200 pr-6 font-mono">
-                {formatMoney(openingBalance)}
-                <span
-                  className={`ml-1 px-1 rounded text-[9px] ${
-                    openingBalance <= 0
-                      ? "bg-rose-50 text-rose-600"
-                      : "bg-emerald-50 text-emerald-600"
-                  }`}
-                >
-                  {openingBalance <= 0 ? "Dr" : "Cr"}
-                </span>
-              </td>
+
+              {showRunningBalance && (
+                <td className="px-4 py-3 text-right font-black text-slate-800 bg-slate-50/50 border-l border-slate-200 pr-6 font-mono">
+                  {formatMoney(openingBalance)}
+                  <span
+                    className={`ml-1 px-1 rounded text-[9px] ${
+                      openingBalance <= 0
+                        ? "bg-rose-50 text-rose-600"
+                        : "bg-emerald-50 text-emerald-600"
+                    }`}
+                  >
+                    {openingBalance <= 0 ? "Dr" : "Cr"}
+                  </span>
+                </td>
+              )}
             </tr>
 
             {transactions.map((tx: any) => {
-              // ✅ TALLY DATA LOGIC:
-              // Amount is Negative = Debit (Dr)
-              // Amount is Positive = Credit (Cr)
               const displayDebit = tx.amount < 0 ? Math.abs(tx.amount) : 0;
               const displayCredit = tx.amount > 0 ? tx.amount : 0;
 
@@ -162,7 +209,7 @@ export default function LedgerReportTable({
                   {showInventory && (
                     <>
                       <td className="px-4 py-3.5 text-xs border-l border-slate-100 truncate max-w-[180px] text-slate-500">
-                        {tx.itemNames}
+                        {tx.itemName}
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-500">
                         {tx.quantity || "-"}
@@ -170,38 +217,38 @@ export default function LedgerReportTable({
                     </>
                   )}
 
-                  {/* DEBIT COLUMN: Show if amount is negative */}
                   <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-rose-700 bg-rose-50/5 border-l border-rose-100/30">
                     {displayDebit > 0 ? formatMoney(displayDebit) : ""}
                   </td>
 
-                  {/* CREDIT COLUMN: Show if amount is positive */}
                   <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-emerald-700 bg-emerald-50/5 border-l border-emerald-100/30">
                     {displayCredit > 0 ? formatMoney(displayCredit) : ""}
                   </td>
 
-                  {/* RUNNING BALANCE LOGIC */}
-                  <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-slate-800 bg-slate-50/30 border-l border-slate-200 pr-6">
-                    {formatMoney(tx.balance)}
-                    <span
-                      className={`ml-1 px-1 rounded text-[9px] font-black ${
-                        tx.balance <= 0
-                          ? "bg-rose-50 text-rose-600"
-                          : "bg-emerald-50 text-emerald-600"
-                      }`}
-                    >
-                      {tx.balance <= 0 ? "Dr" : "Cr"}
-                    </span>
-                  </td>
+                  {showRunningBalance && (
+                    <td className="px-4 py-3.5 text-right font-mono text-xs font-bold text-slate-800 bg-slate-50/30 border-l border-slate-200 pr-6">
+                      {formatMoney(tx.balance)}
+                      <span
+                        className={`ml-1 px-1 rounded text-[9px] font-black ${
+                          tx.balance <= 0
+                            ? "bg-rose-50 text-rose-600"
+                            : "bg-emerald-50 text-emerald-600"
+                        }`}
+                      >
+                        {tx.balance <= 0 ? "Dr" : "Cr"}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               );
             })}
           </tbody>
+
           {/* --- TABLE FOOTER --- */}
-          <tfoot className="bg-slate-100 font-black text-xs sticky bottom-0 border-t-2 border-slate-300">
+          <tfoot className="bg-slate-100 font-black text-xs sticky bottom-0 border-t-2 border-slate-300 shadow-lg">
             <tr>
               <td
-                colSpan={showVoucherNo ? 5 : 4}
+                colSpan={2 + (showVoucherNo ? 1 : 0) + 2} // Same logic as header
                 className="px-4 py-5 text-right uppercase text-slate-400 pl-6 tracking-widest"
               >
                 Total Period Movement
@@ -210,44 +257,30 @@ export default function LedgerReportTable({
                 <>
                   <td className="px-4 py-5 border-l border-slate-200 bg-slate-200/20"></td>
                   <td className="px-4 py-5 text-right font-mono bg-slate-200/20">
-                    {transactions.reduce(
-                      (sum: number, tx: any) =>
-                        sum + (Number(tx.quantity) || 0),
-                      0
-                    )}
+                    {periodQty}
                   </td>
                 </>
               )}
               <td className="px-4 py-5 text-right text-rose-700 border-l border-slate-200 font-mono">
-                {formatMoney(
-                  transactions.reduce(
-                    (sum: number, tx: any) =>
-                      sum + (tx.amount < 0 ? Math.abs(tx.amount) : 0),
-                    0
-                  )
-                )}
+                {formatMoney(periodDebit)}
               </td>
               <td className="px-4 py-5 text-right text-emerald-700 border-l border-slate-200 font-mono">
-                {formatMoney(
-                  transactions.reduce(
-                    (sum: number, tx: any) =>
-                      sum + (tx.amount > 0 ? tx.amount : 0),
-                    0
-                  )
-                )}
+                {formatMoney(periodCredit)}
               </td>
-              <td className="px-4 py-5 text-right text-slate-900 border-l border-slate-200 pr-6 font-mono bg-slate-200/30">
-                {formatMoney(closingBalance)}
-                <span
-                  className={`ml-1 px-1 rounded text-[10px] ${
-                    closingBalance <= 0
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-emerald-100 text-emerald-700"
-                  }`}
-                >
-                  {closingBalance <= 0 ? "Dr" : "Cr"}
-                </span>
-              </td>
+              {showRunningBalance && (
+                <td className="px-4 py-5 text-right text-slate-900 border-l border-slate-200 pr-6 font-mono bg-slate-200/30">
+                  {formatMoney(closingBalance)}
+                  <span
+                    className={`ml-1 px-1 rounded text-[10px] ${
+                      closingBalance <= 0
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {closingBalance <= 0 ? "Dr" : "Cr"}
+                  </span>
+                </td>
+              )}
             </tr>
           </tfoot>
         </table>
@@ -268,7 +301,10 @@ function ConfigOption({ label, active, onClick }: any) {
       {active ? (
         <CheckSquare size={16} className="text-indigo-600" />
       ) : (
-        <Square size={16} className="text-slate-300" />
+        <Square
+          size={16}
+          className="text-slate-300 group-hover:text-slate-400"
+        />
       )}
     </button>
   );

@@ -1,13 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import LedgerFilters from "@/components/LedgerFilters";
 import LedgerReportTable from "@/components/reports/LedgerReportTable";
+import LedgerPrintButton from "@/components/reports/LedgerPrintButton"; // ✅ Imported New Component
 import {
   Wallet,
   ArrowUpRight,
   ArrowDownLeft,
   History,
   LayoutDashboard,
-  Printer,
   ChevronRight,
   CreditCard,
   Building2,
@@ -34,7 +34,7 @@ export default async function LedgerReportPage({
   if (!fromDateStr && ledgerId) {
     const getEarliest = async (model: any, relation: string) => {
       const rec = await model.findFirst({
-        where: { ledgerId, [relation]: { status: "APPROVED" } }, // Picks up Admin Auto-Verified & Checker Approved
+        where: { ledgerId, [relation]: { status: "APPROVED" } },
         select: { [relation]: { select: { date: true } } },
         orderBy: { [relation]: { date: "asc" } },
       });
@@ -88,10 +88,10 @@ export default async function LedgerReportPage({
   let closingBalance = 0;
   let periodDebit = 0;
   let periodCredit = 0;
-  let periodQty = 0;
+  let periodQty = 0; // ✅ Added for Table compatibility
 
   if (ledgerId && selectedLedger) {
-    // --- 1. Opening Balance Calculation (Strictly APPROVED status) ---
+    // --- 1. Opening Balance Calculation ---
     const historyFilter = { date: { lt: fromDate }, status: "APPROVED" };
 
     const getPrevSum = async (model: any, field: string) => {
@@ -124,7 +124,7 @@ export default async function LedgerReportPage({
       [vKey]: {
         include: {
           ledgerEntries: { include: { ledger: { select: { name: true } } } },
-          verifiedBy: { select: { name: true, role: true } }, // NEW: Include verifier info
+          verifiedBy: { select: { name: true, role: true } },
         },
       },
     });
@@ -133,7 +133,6 @@ export default async function LedgerReportPage({
       [vKey]: {
         include: {
           ledgerEntries: { include: { ledger: { select: { name: true } } } },
-          // ✅ FIX: Ensure inventoryEntries are included to calculate Qty
           inventoryEntries: {
             include: { stockItem: { select: { name: true } } },
           },
@@ -176,7 +175,7 @@ export default async function LedgerReportPage({
       if (!voucher) return null;
 
       const otherEntry = voucher.ledgerEntries?.find(
-        (e: any) => e.ledgerId !== ledgerId
+        (e: any) => e.ledgerId !== ledgerId,
       );
       let particularsName = otherEntry?.ledger?.name;
 
@@ -188,19 +187,17 @@ export default async function LedgerReportPage({
         else particularsName = type;
       }
 
-      // Check if this was an Admin Auto-Verify
       const isAutoVerified =
         voucher.verifiedBy?.role === "ADMIN" &&
         voucher.createdById === voucher.verifiedById;
 
-      // ✅ FIX: Calculate Total Quantity for this Transaction
+      // Calculate Quantity
       const qty =
         voucher.inventoryEntries?.reduce(
           (sum: number, item: any) => sum + (item.quantity || 0),
-          0
+          0,
         ) || 0;
 
-      // Optional: Get first item name for display if needed (e.g. "PLANT + 2 others")
       const firstItem = voucher.inventoryEntries?.[0]?.stockItem?.name;
       const itemCount = voucher.inventoryEntries?.length || 0;
       const itemDisplay =
@@ -214,13 +211,13 @@ export default async function LedgerReportPage({
         txid: voucher.transactionCode,
         particulars: particularsName,
         narration: voucher.narration,
-        isAutoVerified, // Flag for UI
+        isAutoVerified,
         debit: entry.amount < 0 ? Math.abs(entry.amount) : 0,
         credit: entry.amount > 0 ? entry.amount : 0,
         amount: entry.amount,
         voucherId: voucher.id,
-        quantity: qty, // ✅ Passed to Table
-        itemName: itemDisplay, // ✅ Passed to Table
+        quantity: qty,
+        itemName: itemDisplay,
       };
     };
 
@@ -235,7 +232,7 @@ export default async function LedgerReportPage({
       .filter(Boolean)
       .sort(
         (a: any, b: any) =>
-          new Date(a.date).getTime() - new Date(b.date).getTime()
+          new Date(a.date).getTime() - new Date(b.date).getTime(),
       );
 
     let running = openingBalance;
@@ -243,7 +240,7 @@ export default async function LedgerReportPage({
       running += t.amount;
       periodDebit += t.debit;
       periodCredit += t.credit;
-      periodQty += t.quantity || 0; // ✅ Summing up for stats
+      periodQty += t.quantity || 0;
       return { ...t, balance: running };
     });
     closingBalance = running;
@@ -289,14 +286,10 @@ export default async function LedgerReportPage({
               toDate={to}
             />
             {selectedLedger && (
-              <Link
-                href={`/companies/${companyId}/reports/ledger/print?ledgerId=${ledgerId}&from=${fromDateStr}&to=${to}`}
-                target="_blank"
-                className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-600 transition-all h-11"
-              >
-                <Printer size={16} />
-                <span>Print</span>
-              </Link>
+              // ✅ REPLACED: Link with new Client Component for Popup Window
+              <LedgerPrintButton
+                url={`/companies/${companyId}/reports/ledger/print?ledgerId=${ledgerId}&from=${fromDateStr}&to=${to}`}
+              />
             )}
           </div>
         </div>
@@ -313,8 +306,8 @@ export default async function LedgerReportPage({
                   openingBalance < 0
                     ? "debit"
                     : openingBalance > 0
-                    ? "credit"
-                    : "neutral"
+                      ? "credit"
+                      : "neutral"
                 }
                 sub="Brought Forward"
               />
@@ -359,7 +352,6 @@ export default async function LedgerReportPage({
                     </span>
                   </div>
                 </div>
-                {/* Audit Badge */}
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
                   <ShieldCheck size={14} className="text-emerald-600" />
                   <span className="text-[10px] font-bold text-emerald-700 uppercase">
@@ -376,7 +368,6 @@ export default async function LedgerReportPage({
                 closingBalance={closingBalance}
                 openingBalance={openingBalance}
                 fromDate={fromDate}
-                toDate={toDateEnd}
               />
             </div>
           </>
@@ -470,8 +461,8 @@ function StatCard({
                   ? "text-rose-400"
                   : "text-emerald-400"
                 : isDr
-                ? "text-rose-500"
-                : "text-emerald-500"
+                  ? "text-rose-500"
+                  : "text-emerald-500"
             }`}
           >
             {absAmount === 0 ? "" : isDr ? "Dr" : "Cr"}
