@@ -12,10 +12,11 @@ export default function LedgerReportTable({
   closingBalance,
   openingBalance,
   fromDate,
-  periodQty, // ✅ FIXED: Added missing prop here
+  periodQty,
 }: any) {
   // --- STATE: Column Visibility ---
   const [showInventory, setShowInventory] = useState(true);
+  const [showRate, setShowRate] = useState(true); // ✅ New Rate State
   const [showNarration, setShowNarration] = useState(true);
   const [showVoucherNo, setShowVoucherNo] = useState(true);
   const [showRunningBalance, setShowRunningBalance] = useState(true);
@@ -69,6 +70,14 @@ export default function LedgerReportTable({
                     active={showInventory}
                     onClick={() => setShowInventory(!showInventory)}
                   />
+                  {/* Only allow toggling Rate if Inventory is visible */}
+                  {showInventory && (
+                    <ConfigOption
+                      label="Rate / Price"
+                      active={showRate}
+                      onClick={() => setShowRate(!showRate)}
+                    />
+                  )}
                   <ConfigOption
                     label="Narration"
                     active={showNarration}
@@ -110,6 +119,10 @@ export default function LedgerReportTable({
                     Item
                   </th>
                   <th className="px-4 py-4 w-20 text-right">Qty</th>
+                  {/* ✅ RATE HEADER */}
+                  {showRate && (
+                    <th className="px-4 py-4 w-24 text-right">Rate</th>
+                  )}
                 </>
               )}
               <th className="px-4 py-4 text-right w-32 text-rose-700 bg-rose-50/30 border-l border-rose-100/50 uppercase font-black tracking-widest">
@@ -142,6 +155,7 @@ export default function LedgerReportTable({
                 <>
                   <td className="px-4 py-3 border-l border-slate-100"></td>
                   <td className="px-4 py-3"></td>
+                  {showRate && <td className="px-4 py-3"></td>}
                 </>
               )}
 
@@ -172,6 +186,9 @@ export default function LedgerReportTable({
             {transactions.map((tx: any) => {
               const displayDebit = tx.amount < 0 ? Math.abs(tx.amount) : 0;
               const displayCredit = tx.amount > 0 ? tx.amount : 0;
+
+              // ✅ Calculate Rate Dynamically (Amount / Qty)
+              const rate = tx.quantity ? Math.abs(tx.amount) / tx.quantity : 0;
 
               return (
                 <tr
@@ -214,6 +231,12 @@ export default function LedgerReportTable({
                       <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-500">
                         {tx.quantity || "-"}
                       </td>
+                      {/* ✅ RATE COLUMN DATA */}
+                      {showRate && (
+                        <td className="px-4 py-3.5 text-right font-mono text-xs text-slate-400">
+                          {tx.quantity ? formatMoney(rate) : "-"}
+                        </td>
+                      )}
                     </>
                   )}
 
@@ -259,6 +282,8 @@ export default function LedgerReportTable({
                   <td className="px-4 py-5 text-right font-mono bg-slate-200/20">
                     {periodQty}
                   </td>
+                  {/* ✅ Empty cell for Rate column in footer */}
+                  {showRate && <td className="px-4 py-5 bg-slate-200/20"></td>}
                 </>
               )}
               <td className="px-4 py-5 text-right text-rose-700 border-l border-slate-200 font-mono">
