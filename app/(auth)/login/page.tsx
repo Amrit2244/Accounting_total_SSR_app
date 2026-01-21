@@ -83,16 +83,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          <div className="text-center text-[11px] text-slate-500 uppercase tracking-tight">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/register"
-              className="font-bold text-blue-600 hover:underline"
-            >
-              Sign up
-            </Link>
-          </div>
         </div>
       </div>
 
